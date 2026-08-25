@@ -917,7 +917,18 @@
     var levels = all.map(function (h) { return h.level; });
     var secLevel = levels.indexOf(2) >= 0 ? 2 : (levels.indexOf(3) >= 0 ? 3 : (all.length ? Math.min.apply(null, levels) : 0));
     var heads = all.filter(function (h) { return h.level === secLevel; });
-    if (!heads.length) return [{ title: 'Content', body: md.trim() }];
+    if (!heads.length) {
+      // Evaluation reports (modes/oferta) use A–G letter blocks, not # headings.
+      var ag = [], re2 = /^([A-G])\s*[—\-–]\s+(.+)$/gm, m2;
+      while ((m2 = re2.exec(md))) ag.push({ title: m2[1] + ' — ' + m2[2].trim(), start: m2.index, end: m2.index + m2[0].length });
+      if (ag.length >= 2) {
+        var asecs = [];
+        if (ag[0].start > 0) { var apre = md.slice(0, ag[0].start).trim(); if (apre) asecs.push({ title: 'Overview', body: apre }); }
+        for (var ai = 0; ai < ag.length; ai++) asecs.push({ title: ag[ai].title, body: md.slice(ag[ai].end, ai + 1 < ag.length ? ag[ai + 1].start : md.length).trim() });
+        return asecs;
+      }
+      return [{ title: 'Content', body: md.trim() }];
+    }
     var secs = [];
     if (heads[0].start > 0) { var pre = md.slice(0, heads[0].start).trim(); if (pre) secs.push({ title: 'Overview', body: pre }); }
     for (var k = 0; k < heads.length; k++) secs.push({ title: heads[k].title, body: md.slice(heads[k].end, k + 1 < heads.length ? heads[k + 1].start : md.length).trim() });
@@ -941,12 +952,56 @@
       '.lib-toc:hover{color:#16324F;border-left-color:#B08D57 !important}';
     document.head.appendChild(st);
   }
+  // Parse an evaluation report's score (/5→/100), verdict label+tone, and a
+  // 1–2 sentence why. Returns null if there's nothing scorable (tailor/cover).
+  function parseEvalSummary(md) {
+    md = String(md || '');
+    var m = md.match(/(?:overall|global)\s+score\s*[:|]?\s*\*{0,2}\s*([0-5](?:\.\d)?)/i)
+      || md.match(/\bscore\s*[:|]?\s*\*{0,2}\s*([0-5](?:\.\d)?)\s*\/\s*5/i)
+      || md.match(/\b([0-5](?:\.\d)?)\s*\/\s*5\b/);
+    var score = m ? parseFloat(m[1]) : null;
+    var score100 = (score != null && !isNaN(score)) ? Math.round(score / 5 * 100) : null;
+    var vm = md.match(/^\s*(?:F\s*[—\-–]\s*)?Verdict\s*[:\-]\s*(.+)$/mi) || md.match(/\bVerdict\s*[:\-]\s*(.+)/i);
+    var verdictText = vm ? vm[1].trim() : '';
+    var low = (verdictText + ' ' + md.slice(0, 1400)).toLowerCase();
+    var label = '', tone = '';
+    if (/strong match|excellent fit|strong fit/.test(low)) { label = 'Strong match'; tone = 'good'; }
+    else if (/do not apply|don.?t apply|\bpass\b|skip this|not a fit|hard mismatch|do not tailor|fundamental .*mismatch/.test(low)) { label = 'Pass'; tone = 'weak'; }
+    else if (/good fit|good match|solid fit|worth applying/.test(low)) { label = 'Good fit'; tone = 'good'; }
+    if (!label && score100 != null) {
+      if (score100 >= 80) { label = 'Strong match'; tone = 'good'; }
+      else if (score100 >= 60) { label = 'Good fit'; tone = 'good'; }
+      else if (score100 >= 40) { label = 'Fair'; tone = 'medium'; }
+      else { label = 'Weak — pass'; tone = 'weak'; }
+    }
+    if (!label && verdictText) { label = verdictText.slice(0, 40); tone = 'medium'; }
+    var why = '';
+    var bl = md.match(/Bottom line\s*[:\-]\s*(.+)/i); if (bl) why = bl[1].trim();
+    if (!why) { var sm = md.match(/(?:Snapshot|Why it fits|Summary)\s*[:\-]?\s*\n?\s*[-•]?\s*(.+)/i); if (sm) why = sm[1].trim(); }
+    if (!why && verdictText) why = verdictText;
+    why = why.replace(/\s+/g, ' ').replace(/^[-•*\s]+/, '').slice(0, 260);
+    if (score100 == null && !verdictText) return null;
+    return { score100: score100, label: label, tone: tone, why: why };
+  }
+  function evalSummaryCard(s) {
+    var TC = { good: ['#2f6f5b', '#e3efe9'], medium: ['#8a6a3b', '#f6ecd6'], weak: ['#9c5231', '#f4e3db'] };
+    var c = TC[s.tone] || ['#6b6255', '#eee9de'];
+    var scoreHtml = s.score100 != null ? '<div style="text-align:center;flex:0 0 auto"><div style="font-family:var(--serif,Georgia);font-weight:600;font-size:42px;line-height:1;color:#16324F">' + s.score100 + '<span style="font-size:18px;color:#8a8172">/100</span></div><div style="font:11px system-ui;color:#b0a790;margin-top:3px">fit score</div></div>' : '';
+    return '<div style="background:#fff;border:1px solid #ece5d6;border-left:4px solid ' + c[0] + ';border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.05);padding:18px 22px;margin-bottom:18px;display:flex;gap:22px;align-items:center;flex-wrap:wrap">' +
+      scoreHtml +
+      '<div style="flex:1;min-width:220px">' +
+      (s.label ? '<span style="display:inline-block;padding:3px 13px;border-radius:999px;background:' + c[1] + ';color:' + c[0] + ';font:700 12px system-ui;margin-bottom:9px">' + esc(s.label) + '</span>' : '') +
+      (s.why ? '<div style="font:14px/1.55 system-ui;color:#3a3428">' + esc(s.why) + '</div>' : '') +
+      '</div></div>';
+  }
   function renderWorkspace(container, md, type) {
     md = String(md || '');
     if (!md.trim()) { container.innerHTML = '<div style="padding:16px;color:#8a8172;font:14px system-ui">(empty result)</div>'; return; }
     ensureLibStyles();
-    var secs = splitSectionsFull(md);
     container.innerHTML = '';
+    // Evaluations get a prominent summary box at the TOP (score/100 + verdict pill + why).
+    if (type === 'evaluate') { var summ = parseEvalSummary(md); if (summ) { var sc = document.createElement('div'); sc.innerHTML = evalSummaryCard(summ); if (sc.firstChild) container.appendChild(sc.firstChild); } }
+    var secs = splitSectionsFull(md);
     // ── TOP TOOLBAR ROW: horizontal "On this page" (left) + downloads (right) ──
     var bar = el('div', 'display:flex;align-items:center;gap:18px;flex-wrap:wrap;border-bottom:1px solid #ece5d6;padding-bottom:12px;margin-bottom:16px');
     var toc = el('div', 'flex:1 1 auto;min-width:0;font:13.5px/1.7 system-ui;color:#2a3b4d');

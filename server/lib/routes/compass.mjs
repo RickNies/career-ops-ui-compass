@@ -66,6 +66,8 @@ function loadJobs() {
   // A job left 'running'/'queued' by a prior crash can never finish — mark it errored.
   let dirty = false;
   for (const j of jobs.values()) { if (j.status === 'running' || j.status === 'queued') { j.status = 'error'; j.error = 'interrupted (server restart)'; dirty = true; } }
+  // Backfill company/role for older '(unknown)' jobs from their JD / artifact.
+  for (const j of jobs.values()) { if (fillMeta(j)) dirty = true; }
   if (dirty) persistJobs();
 }
 function persistJobs() {
@@ -79,6 +81,39 @@ function persistJobs() {
 async function providerCap() {
   try { const s = await (await fetch(SELF + '/api/status/providers')).json(); return (s && s.activeProvider && s.activeProvider !== 'hermes') ? 3 : 1; }
   catch { return 1; }
+}
+// Resolve a real company/role for a job that came in without them (manual role,
+// JS-thin board). Mine the JD text first, then the AI output (eval/tailor/cover
+// all name the role). Returns {company, role} (either may be '').
+function cleanMeta(s) {
+  return String(s || '').replace(/[|*_`#]+/g, ' ').replace(/\benable JavaScript\b.*$/i, '')
+    .replace(/[\s.,;:–—-]+$/, '').replace(/^[\s.,;:–—-]+/, '').replace(/\s+/g, ' ').trim().slice(0, 90);
+}
+function extractMeta(jd, md) {
+  let company = '', role = '';
+  const firstLine = (String(jd || '').split('\n').map((s) => s.trim()).filter(Boolean)[0]) || '';
+  let m = firstLine.match(/^(.{3,110}?)\s+(?:@|·|\||\bat\b)\s+(.{2,70})$/i);
+  if (m) { role = m[1]; company = m[2]; }
+  const cm = String(jd || '').match(/\bcompany\s*[:\-]\s*([^\n|]{2,70})/i); if (cm && !company) company = cm[1];
+  const rm = String(jd || '').match(/\b(?:role|title|position)\s*[:\-]\s*([^\n|]{2,110})/i); if (rm && !role) role = rm[1];
+  if ((!role || !company) && md) {
+    const he = md.match(/(?:Job )?Evaluation\s*[—\-–]\s*(.+?)\s*\(([^)]{2,70})\)/i); // "Evaluation — Role (Company)"
+    if (he) { role = role || he[1]; company = company || he[2]; }
+    const cl = md.match(/Cover Letter\s*[:\-]\s*(.+)/i); if (cl && !role) role = cl[1];
+    const h1 = md.match(/^#\s+(.+)$/m); if (h1 && !role) role = h1[1]; // tailor "# Role"
+    const rs = md.match(/^\s*[-•]?\s*Role\s*[:\-]\s*(.+)$/mi); if (rs && !role) role = rs[1];
+  }
+  return { company: cleanMeta(company), role: cleanMeta(role) };
+}
+function fillMeta(job) {
+  if (job.company && job.role) return false;
+  let md = '';
+  if (job.artifactPath) { try { md = readFileSync(job.artifactPath, 'utf8'); } catch { /* gone */ } }
+  const e = extractMeta(job.jd, md);
+  let changed = false;
+  if (!job.company && e.company) { job.company = e.company; changed = true; }
+  if (!job.role && e.role) { job.role = e.role; changed = true; }
+  return changed;
 }
 function bodyForJob(job) {
   if (job.type === 'networking') return { company: job.company, role: job.role, jd: job.jd || '', run: true };
@@ -111,6 +146,8 @@ async function runJob(job) {
     const art = ARTIFACT_DIR + '/' + job.id + '.md';
     writeFileSync(art, md);
     job.artifactPath = art; job.bytes = md.length; job.status = 'done'; job.finished = new Date().toISOString();
+    // Resolve company/role from the JD + AI output if they came in empty.
+    if (!job.company || !job.role) { const e = extractMeta(job.jd, md); if (!job.company && e.company) job.company = e.company; if (!job.role && e.role) job.role = e.role; }
   } catch (e) {
     // A cancel aborts the fetch → land here; keep 'cancelled' (set by the cancel
     // endpoint), don't overwrite it with 'error'.
