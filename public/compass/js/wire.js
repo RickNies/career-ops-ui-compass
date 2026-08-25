@@ -97,7 +97,28 @@
     if (window.renderRail) window.renderRail();
     if (window.renderActiveFilters) window.renderActiveFilters();
     if (window.bindCards) window.bindCards();
+    enhanceCards(list);
     if (window.saveFilters) window.saveFilters();
+  }
+
+  // Add a secondary "View job posting ↗" (external, new tab) UNDER the internal
+  // "View" button on each card. Hidden for rows with no url.
+  function enhanceCards(root) {
+    (root || document).querySelectorAll('.card[data-id]').forEach(function (card) {
+      var side = card.querySelector('.side');
+      if (!side || side.querySelector('.compass-ext')) return;
+      var job = (window.JOBS || []).find(function (x) { return x.id === card.getAttribute('data-id'); });
+      if (!job || !job.url) return;
+      var viewBtn = side.querySelector('.view');
+      var a = document.createElement('a');
+      a.className = 'btn btn--outline btn--sm compass-ext';
+      a.href = job.url; a.target = '_blank'; a.rel = 'noopener';
+      a.style.cssText = 'margin-top:8px;white-space:nowrap';
+      a.innerHTML = 'View job posting <span style="font-size:12px">↗</span>';
+      a.addEventListener('click', function (e) { e.stopPropagation(); }); // don't trigger the card→internal nav
+      if (viewBtn && viewBtn.parentNode) viewBtn.parentNode.insertBefore(a, viewBtn.nextSibling);
+      else side.appendChild(a);
+    });
   }
 
   function wireJobs() {
@@ -295,6 +316,7 @@
         return '<div class="srow" data-num="' + esc(r.num) + '" data-url="' + esc(r.url) + '" style="display:flex;align-items:center;gap:14px;background:#fff;border:1px solid #ece5d6;border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.04);padding:14px 16px;margin-bottom:10px;cursor:pointer">' +
           '<span class="logo" style="--mc:' + colorFor(r.company) + ';flex:none" data-mono="' + esc(initials(r.company)) + '"><img src="https://logo.clearbit.com/' + esc(hostFrom(r.url)) + '" onerror="this.parentNode.classList.add(\'failed\');this.remove()"></span>' +
           '<div style="flex:1;min-width:0"><div style="font-weight:600;color:#16324F">' + esc(r.role) + '</div><div style="font-size:13px;color:#8a8172">' + esc(r.company) + ' · ' + esc(r.location || '') + ' · fit ' + scoreToFit(r) + '</div></div>' +
+          (r.url ? '<a class="btn btn--outline btn--sm compass-ext" href="' + esc(r.url) + '" target="_blank" rel="noopener" style="flex:none;white-space:nowrap;margin-right:8px">View posting ↗</a>' : '') +
           '<select class="stage-select" aria-label="Status" style="flex:none;padding:7px 10px;border:1px solid #d8cdb8;border-radius:9px;font:13px system-ui">' + opts + '</select>' +
           '</div>';
       }).join('');
@@ -302,7 +324,7 @@
       document.querySelectorAll('main .srow, main .job-row, main .saved-row, main .card').forEach(function (n) { n.style.display = 'none'; });
       var wrap = document.createElement('section'); wrap.appendChild(host); main.appendChild(wrap);
       host.querySelectorAll('.srow').forEach(function (el, i) {
-        el.addEventListener('click', function (e) { if (e.target.tagName === 'SELECT') return; setCurrentJob(mapRow(mine[i])); location.href = 'job-detail.html'; });
+        el.addEventListener('click', function (e) { if (e.target.tagName === 'SELECT' || (e.target.closest && e.target.closest('.compass-ext'))) return; setCurrentJob(mapRow(mine[i])); location.href = 'job-detail.html'; });
         var sel = el.querySelector('select');
         if (sel) sel.addEventListener('change', function () {
           jPost('/api/compass/tracker/status', { num: mine[i].num, url: mine[i].url, status: sel.value }).then(function (r) {

@@ -171,7 +171,9 @@ async def verify_one(browser, url, title, sem):
             return url, ("unknown", 0, 0)
 
 
-async def run(urls, titles, concurrency):
+async def run(urls, titles, concurrency, store):
+    """Verify URLs and MERGE into `store`, saving incrementally so a long
+    (nightly) run persists progress and can't lose everything on a crash."""
     sem = asyncio.Semaphore(concurrency)
     out = {}
     async with AsyncCamoufox(headless=True) as b:
@@ -179,10 +181,16 @@ async def run(urls, titles, concurrency):
         done = 0
         for coro in asyncio.as_completed(tasks):
             u, (state, st, blen) = await coro
-            out[u] = {"state": state, "http_status": str(st), "checked_at": now(), "method": "browser"}
+            rec = {"state": state, "http_status": str(st), "checked_at": now(), "method": "browser"}
+            out[u] = rec
+            store[u] = rec
             done += 1
             if state == "dead":
                 print(f"  DEAD ({st}, {blen}c): {u}", flush=True)
+            if done % 15 == 0:
+                save_store(store)
+                print(f"  … {done}/{len(urls)} verified (saved)", flush=True)
+    save_store(store)
     return out
 
 
@@ -230,9 +238,7 @@ def main():
         print("nothing to verify")
         return
     print(f"browser-verifying {len(urls)} urls @ concurrency {a.concurrency} …", flush=True)
-    res = asyncio.run(run(urls, titles, a.concurrency))
-    store.update(res)
-    save_store(store)
+    res = asyncio.run(run(urls, titles, a.concurrency, store))  # merges + saves incrementally
     c = Counter(v["state"] for v in res.values())
     print(f"browser-verified {len(res)}: live={c.get('live', 0)} dead={c.get('dead', 0)} unknown={c.get('unknown', 0)}")
     gc = Counter(v["state"] for v in store.values())

@@ -9,5 +9,5 @@ echo "===== liveness run $(date "+%Y-%m-%d %H:%M:%S") ====="
 echo "--- tier 1: HTTP sweep ---"
 ./venv/bin/python liveness.py sweep --concurrency 12
 echo "--- tier 2: browser verify (live set) ---"
-/Users/nick/apps/camoufox-venv/bin/python liveness_browser.py verify --concurrency 5
+/Users/nick/apps/camoufox-venv/bin/python liveness_browser.py verify --concurrency 3
 /Users/nick/apps/camoufox-venv/bin/python liveness_browser.py stats
