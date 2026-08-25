@@ -127,7 +127,7 @@
   .email-head .fld .v{color:var(--ink);font-weight:500}
   .hl{background:var(--sage-soft);border-radius:3px;padding:0 3px}
 
-  /* ---- Iteration 6: Tailor my résumé ---- */
+  /* ---- Iteration 6: Tailor your résumé ---- */
   .tailor-intro{display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px 20px;margin-bottom:16px}
   .tailor-intro .ic{flex:none;width:44px;height:44px;border-radius:11px;background:var(--gold-soft);color:var(--gold-deep);display:grid;place-items:center}
   .tailor-intro .ic svg{width:22px;height:22px}
@@ -198,8 +198,8 @@
     </div>
 
     <div class="tabs" role="tablist" aria-label="Documents">
-      <button class="tab active" id="tabMatch" role="tab" aria-selected="true" aria-controls="panelMatch" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Match to my resume</button>
-      <button class="tab" id="tabTailor" role="tab" aria-selected="false" aria-controls="panelTailor" tabindex="-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h9M4 12h6"/><path d="M15 5l4 4-7 7-4 1 1-4z"/></svg>Tailor my résumé</button>
+      <button class="tab active" id="tabMatch" role="tab" aria-selected="true" aria-controls="panelMatch" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Match to your résumé</button>
+      <button class="tab" id="tabTailor" role="tab" aria-selected="false" aria-controls="panelTailor" tabindex="-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h9M4 12h6"/><path d="M15 5l4 4-7 7-4 1 1-4z"/></svg>Tailor your résumé</button>
       <button class="tab" id="tabCover" role="tab" aria-selected="false" aria-controls="panelCover" tabindex="-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h6"/></svg>Cover letter</button>
       <button class="tab" id="tabEmail" role="tab" aria-selected="false" aria-controls="panelEmail" tabindex="-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16v14H4z"/><path d="M4 6l8 6 8-6"/></svg>Application email</button>
     </div>
@@ -238,7 +238,7 @@
       </div>
     </section>
 
-    <!-- ============ TAB (Iteration 6): TAILOR MY RÉSUMÉ ============ -->
+    <!-- ============ TAB (Iteration 6): TAILOR YOUR RÉSUMÉ ============ -->
     <section id="panelTailor" role="tabpanel" aria-labelledby="tabTailor" tabindex="0" hidden>
       <div class="tailor-intro">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 7h9M4 12h6"/><path d="M15 5l4 4-7 7-4 1 1-4z"/></svg></div>
@@ -395,7 +395,7 @@ function initTabs(tablist, opts){
 }
 var docTabs = initTabs(document.querySelector(".tabs"), {onClass:"active", panels:true});
 
-/* ===== Iteration 6: Tailor my résumé — PDF export (mock) + redo + deep-link ===== */
+/* ===== Iteration 6: Tailor your résumé — PDF export (mock) + redo + deep-link ===== */
 var pdfBtn=document.getElementById("tailorPdf");
 if(pdfBtn){
   pdfBtn.addEventListener("click", function(){ toast("Your tailored résumé PDF is ready", "success"); });
@@ -404,7 +404,7 @@ var tailorRewrite=document.getElementById("tailorRewrite");
 if(tailorRewrite){
   tailorRewrite.addEventListener("click", function(){ toast("Résumé re-tailored for this job", "info"); });
 }
-/* open the Tailor tab when arriving from job-detail's "Tailor my résumé for this job" link */
+/* open the Tailor tab when arriving from job-detail's "Tailor your résumé for this job" link */
 function openTabFromHash(){
   var map={"#tailor":"tabTailor","#cover":"tabCover","#email":"tabEmail","#match":"tabMatch"};
   var id=map[location.hash];

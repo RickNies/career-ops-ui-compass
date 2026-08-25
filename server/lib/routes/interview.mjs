@@ -115,6 +115,7 @@ export function buildInterviewPrompt(ctx, { role, company, jd, history, lang }) 
     'inlined above (CV, profile, two-pager, and story bank if present). Never',
     'fabricate experience the candidate does not have; if their materials are',
     'thin on something the role needs, probe it as a genuine gap.',
+    'VOICE: Address the candidate DIRECTLY in the second person — "you" / "your" — in every question and in all feedback (e.g. "your answer", "you covered…"). Never refer to the candidate in the third person (no "she", "her", "the candidate", or their name).',
     jd ? `\nJOB DESCRIPTION:\n${jd}\n` : '',
     'CONVERSATION SO FAR:',
     transcript,

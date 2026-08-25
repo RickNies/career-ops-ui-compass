@@ -71,6 +71,8 @@ export function buildNetworkingPrompt(ctx, { company, role, jd, lang }) {
     '### Outreach drafts',
     'A short, specific outreach message (3–5 sentences, no fluff) for the top 2',
     'personas, grounded in the candidate\'s real proof points.',
+    '',
+    'VOICE: When the plan describes or advises the reader (the job-seeker), use the second person — "you" / "your" (e.g. "why YOU fit", "your background"). Keep the outreach message DRAFTS in the first person (they are messages you send). Keep all contacts, hiring managers, and personas in the third person. Never call the reader "she"/"her"/"the candidate".',
     jd ? `\nJOB DESCRIPTION:\n${jd}\n` : '',
     lang && lang !== 'en' ? `Respond in the candidate's language (${lang}).` : '',
     '</networking_plan>',

@@ -56,6 +56,7 @@ export function buildOrientationPrompt(ctx, lang) {
   return [
     buildLocaleDirective(lang),
     INSTRUCTIONS,
+    'VOICE: Address the candidate (the person whose materials are provided) DIRECTLY in the second person — "you" / "your". Never refer to them in the third person (no "she", "her", "the candidate", or their name).',
     ctx,
   ].filter((x) => x !== '').join('\n');
 }

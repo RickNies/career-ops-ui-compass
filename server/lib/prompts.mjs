@@ -364,6 +364,8 @@ ${scaffold('readFiles', lang)}
 Then output the full A-G evaluation per modes/oferta.md (Role Summary, CV Match, Risks, Compensation,
 Application Strategy, Verdict, Posting Legitimacy) and a 0-5 score.
 
+VOICE: Address the candidate (the person whose CV/profile is provided) DIRECTLY in the second person — "you" / "your" (e.g. "your CV shows…", "you'd be a strong fit"). Never refer to them in the third person (no "she", "her", "the candidate", or their name).
+
 JD:
 """
 ${jd}

@@ -67,6 +67,8 @@ const INSTRUCTIONS = [
   '',
   'Keep it practical and specific to THEM. Output ONLY the plan (Markdown).',
   '',
+  'VOICE: Write the plan addressing the candidate DIRECTLY in the second person — "you" / "your" (e.g. "your strengths", "you should…"). Never refer to them in the third person (no "she", "her", "the candidate", or their name).',
+  '',
 ].join('\n');
 
 /** Build the full career-plan prompt. Pure; exported for tests. */
