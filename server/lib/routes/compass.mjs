@@ -59,6 +59,28 @@ function readFitMap() {
     _fitCache = map; _fitMtime = st.mtimeMs; return map;
   } catch { return _fitCache || {}; }
 }
+
+// Salary bands (data/salary.jsonl), keyed by url → {min,max,currency} in THOUSANDS
+// (single-figure roles have min==max). Partial + growing; cached by mtime.
+const SALARY_STORE = DATA_ROOT + '/data/salary.jsonl';
+let _salCache = null, _salMtime = -1;
+function readSalaryMap() {
+  try {
+    const st = statSync(SALARY_STORE);
+    if (_salCache && st.mtimeMs === _salMtime) return _salCache;
+    const map = {};
+    readFileSync(SALARY_STORE, 'utf8').trim().split(/\r?\n/).forEach((l) => {
+      if (!l) return;
+      try {
+        const j = JSON.parse(l);
+        if (j && j.url && (j.salary_min != null || j.salary_max != null)) {
+          map[normFitUrl(j.url)] = { min: j.salary_min != null ? j.salary_min : null, max: j.salary_max != null ? j.salary_max : null, currency: j.currency || 'USD', source: j.source || '' };
+        }
+      } catch { /* skip bad line */ }
+    });
+    _salCache = map; _salMtime = st.mtimeMs; return map;
+  } catch { return _salCache || {}; }
+}
 const LIVENESS_STORE = DATA_ROOT + '/data/liveness.tsv';
 const LIVENESS_PY = SCRAPE_DIR + '/liveness.py';
 
@@ -276,6 +298,12 @@ export function registerCompassRoutes(app) {
   // Read the AI fit-analysis, keyed by normalized url. Join to tracker rows client-side.
   app.get('/api/compass/fit', (_req, res) => {
     const map = readFitMap();
+    res.json({ map, count: Object.keys(map).length });
+  });
+
+  // Read the salary bands (thousands), keyed by normalized url.
+  app.get('/api/compass/salary', (_req, res) => {
+    const map = readSalaryMap();
     res.json({ map, count: Object.keys(map).length });
   });
 

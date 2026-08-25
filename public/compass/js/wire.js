@@ -64,26 +64,59 @@
       j.strengths = f.strengths || []; j.gaps = f.gaps || [];
       if (f.why) j.why = f.why;         // richer "why it fits"
     }
+    // Join the real salary band (thousands) when present. Unknown → stays null
+    // (matches() passes it through when "show no-salary" is on; card shows "not listed").
+    var sal = salaryFor(row.url);
+    if (sal) { j.salMin = (sal.min != null ? sal.min : sal.max); j.salMax = (sal.max != null ? sal.max : sal.min); j.salSource = sal.source || ''; }
     return j;
   }
   function setCurrentJob(job) { try { sessionStorage.setItem('compass_current_job', JSON.stringify(job)); } catch (e) {} }
   function getCurrentJob() { try { return JSON.parse(sessionStorage.getItem('compass_current_job') || 'null'); } catch (e) { return null; } }
 
-  // Liveness store (annotate-only): url → live|dead|unknown. Dead rows are hidden.
+  // Liveness store (annotate-only): url → live|dead|unknown. Dead rows are hidden;
+  // for shown jobs the full state drives the "still open?" badge.
   function loadDead() {
     return jGet('/api/compass/liveness').then(function (j) {
-      window.__deadSet = new Set(Object.keys((j && j.map) || {}).filter(function (u) { return j.map[u] === 'dead'; }).map(normUrl));
+      var map = (j && j.map) || {};
+      window.__liveState = {}; Object.keys(map).forEach(function (u) { window.__liveState[normUrl(u)] = map[u]; });
+      window.__deadSet = new Set(Object.keys(map).filter(function (u) { return map[u] === 'dead'; }).map(normUrl));
       window.__liveCounts = (j && j.counts) || {};
       return window.__deadSet;
-    }).catch(function () { window.__deadSet = new Set(); return window.__deadSet; });
+    }).catch(function () { window.__deadSet = new Set(); window.__liveState = {}; return window.__deadSet; });
   }
   function isDead(url) { return window.__deadSet && window.__deadSet.has(normUrl(url)); }
+  // 'live' | 'dead' | 'unknown' | null (not yet checked → treated as unverified).
+  function liveStateFor(url) { return (window.__liveState && window.__liveState[normUrl(url)]) || null; }
 
-  // AI fit-analysis map (url → {score,verdict,why,strengths,gaps}); partial (91 so far).
+  // AI fit-analysis map (url → {score,verdict,why,strengths,gaps}); partial.
   function loadFit() {
     return jGet('/api/compass/fit').then(function (j) { window.__fitMap = (j && j.map) || {}; return window.__fitMap; }).catch(function () { window.__fitMap = {}; return {}; });
   }
   function fitFor(url) { return (window.__fitMap && window.__fitMap[normUrl(url)]) || null; }
+  // Salary bands (thousands), partial + growing.
+  function loadSalary() {
+    return jGet('/api/compass/salary').then(function (j) { window.__salaryMap = (j && j.map) || {}; return window.__salaryMap; }).catch(function () { window.__salaryMap = {}; return {}; });
+  }
+  function salaryFor(url) { return (window.__salaryMap && window.__salaryMap[normUrl(url)]) || null; }
+  function fmtSalary(s) { // {min,max} in K → "$185–225K" or "$260K"
+    if (!s) return '';
+    var lo = s.min, hi = s.max;
+    if (lo == null && hi == null) return '';
+    if (lo != null && hi != null && lo !== hi) return '$' + lo + '–' + hi + 'K';
+    var v = (hi != null ? hi : lo); return '$' + v + 'K';
+  }
+  // still-open badge from liveness state (inline-styled so it's robust across pages):
+  // live → green "Open"; anything else → subtle "Unverified" (never "Open").
+  function openPillHtml(url) {
+    if (liveStateFor(url) === 'live') return '<span class="compass-livebadge" data-live="open" style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:#e3efe9;color:#2f6f5b;font:700 11px system-ui;white-space:nowrap"><span style="width:6px;height:6px;border-radius:50%;background:#2f6f5b"></span>Open</span>';
+    return '<span class="compass-livebadge" data-live="unknown" title="Not yet confirmed live" style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:#eee9de;color:#6b6255;font:700 11px system-ui;white-space:nowrap">Unverified</span>';
+  }
+  function setOpenBadge(el, url) {
+    if (!el) return;
+    if (liveStateFor(url) === 'live') { el.style.cssText = 'display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:#e3efe9;color:#2f6f5b;font:700 11px system-ui'; el.innerHTML = '<span style="width:6px;height:6px;border-radius:50%;background:#2f6f5b"></span>Open'; el.removeAttribute('title'); el.setAttribute('data-live', 'open'); }
+    else { el.style.cssText = 'display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:#eee9de;color:#6b6255;font:700 11px system-ui'; el.innerHTML = 'Unverified'; el.title = 'Not yet confirmed live'; el.setAttribute('data-live', 'unknown'); }
+    el.className = 'compass-livebadge';
+  }
   // Verdict → [textColor, bgColor]. Reuses the evaluation summary-box semantics.
   function verdictColors(v) {
     v = String(v || '').toLowerCase();
@@ -232,6 +265,8 @@
           why.appendChild(det);
         }
       }
+      // Real "still open?" badge from the liveness map (live → Open, else Unverified).
+      setOpenBadge(card.querySelector('.meta [data-live]'), job.url);
     });
   }
 
@@ -282,9 +317,24 @@
       } catch (e) { /* keep default menus */ }
 
       if (typeof window.runQA !== 'undefined') window.runQA = compassRunQA;
+
+      // Salary display: real band where known, "Salary not listed" where unknown.
+      window.fmtSal = function (j) { if (j.salMin == null && j.salMax == null) return 'Salary not listed'; return fmtSalary({ min: j.salMin, max: j.salMax }); };
+      // Setup comp floor (localStorage compass_setup.floor, in K): drop jobs whose
+      // KNOWN max is below the floor; unknown-salary jobs are kept (flagged).
+      var COMP_FLOOR = (function () { try { var s = JSON.parse(localStorage.getItem('compass_setup') || 'null'); return s && s.floor ? +s.floor : 0; } catch (e) { return 0; } })();
+      if (typeof window.matches === 'function' && !window.__compassMatchesWrapped) {
+        var baseMatches = window.matches;
+        // The mockup's own salary slider (state.salLow/High + "show no-salary") runs
+        // inside baseMatches and already passes unknown-salary rows through by default.
+        window.matches = function (j) { if (!baseMatches(j)) return false; if (COMP_FLOOR && j.salMax != null && j.salMax < COMP_FLOOR) return false; return true; };
+        window.__compassMatchesWrapped = true;
+      }
+
       window.render = compassRender;   // paginated render over the full set
       compassRender();
-      banner('Jobs LIVE from /api/tracker — ' + window.JOBS.length + ' shown of ' + loaded + ' rows (' + hidden + ' dead hidden). Search/sort/Status/Function/Level/Location/Work filter the FULL set; display paginates 50 at a time. ✓/✗ → feedback.jsonl. Salary not in tracker (preview).');
+      var knownSal = window.JOBS.filter(function (j) { return j.salMax != null; }).length;
+      banner('Jobs LIVE — ' + window.JOBS.length + ' shown of ' + loaded + ' (' + hidden + ' dead hidden). Salary is REAL where known (' + knownSal + ' with a band, filtered by the slider' + (COMP_FLOOR ? ' + $' + COMP_FLOOR + 'K comp floor' : '') + '); unknown-salary jobs pass through, flagged "not listed". "Open" = liveness-confirmed live, else "Unverified".');
     }).catch(function (e) { banner('Could not load live jobs: ' + e); });
   }
 
@@ -383,6 +433,14 @@
       var logo = document.querySelector('.head .logo'); if (logo) { logo.setAttribute('data-mono', job.mono); logo.style.setProperty('--mc', job.color); var img = logo.querySelector('img'); if (img) { img.src = 'https://logo.clearbit.com/' + job.domain; img.alt = job.company + ' logo'; } }
       var pin = document.querySelector('.meta .pin'); if (pin && pin.lastChild && pin.lastChild.nodeType === 3) pin.lastChild.textContent = (job.loc || 'Location n/a') + ' · ' + job.work;
       var ring = document.querySelector('.match-ring'); if (ring) ring.textContent = job.fit;
+      // Real salary band + still-open badge in the meta.
+      var meta = document.querySelector('.meta');
+      if (meta) {
+        var sal = salaryFor(job.url);
+        var salSpan = Array.prototype.filter.call(meta.querySelectorAll('span'), function (s) { return /\$|salary/i.test(s.textContent) && !s.classList.contains('pin') && !s.classList.contains('badge'); })[0];
+        if (salSpan) salSpan.textContent = sal ? fmtSalary(sal) : 'Salary not listed';
+        setOpenBadge(meta.querySelector('[data-live]'), job.url);
+      }
 
       // AI fit-analysis on job-detail: real /100 score, colored verdict pill, why,
       // and the real strengths/gaps (replacing the demo "How you match" lists).
@@ -464,9 +522,12 @@
         var fitHtml = (f && typeof f.score === 'number')
           ? '<span style="font-family:var(--serif,Georgia);font-weight:600;font-size:16px;color:#16324F">' + f.score + '<span style="font-size:10px;color:#8a8172">/100</span></span>' + (f.verdict ? ' ' + verdictPill(f.verdict) : '')
           : '<span style="font:12px system-ui;color:#8a8172">fit ' + scoreToFit(r) + '</span>';
+        var sal = salaryFor(r.url);
+        var salHtml = '<span style="font:12px system-ui;color:' + (sal ? '#16324F' : '#b0a790') + '">' + (sal ? fmtSalary(sal) : 'not listed') + '</span>';
         return '<div class="c-srow" data-i="' + i + '" style="display:flex;align-items:center;gap:14px;background:#fff;border:1px solid #ece5d6;border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.04);padding:14px 16px;margin-bottom:10px;cursor:pointer">' +
           '<span class="logo" style="--mc:' + colorFor(r.company) + ';flex:none" data-mono="' + esc(initials(r.company)) + '"><img src="https://logo.clearbit.com/' + esc(hostFrom(r.url)) + '" onerror="this.parentNode.classList.add(\'failed\');this.remove()"></span>' +
-          '<div style="flex:1;min-width:0"><div style="font-weight:600;color:#16324F">' + esc(r.role) + '</div><div style="font-size:13px;color:#8a8172;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px"><span>' + esc(r.company) + (r.location ? ' · ' + esc(r.location) : '') + '</span>' + fitHtml + '</div></div>' +
+          '<div style="flex:1;min-width:0"><div style="font-weight:600;color:#16324F">' + esc(r.role) + '</div><div style="font-size:13px;color:#8a8172;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px"><span>' + esc(r.company) + (r.location ? ' · ' + esc(r.location) : '') + '</span>' + salHtml + fitHtml + '</div></div>' +
+          openPillHtml(r.url) +
           savedStagePill(r.status || '') +
           (r.url ? '<a class="btn btn--outline btn--sm compass-ext" href="' + esc(r.url) + '" target="_blank" rel="noopener" style="flex:none;white-space:nowrap">View posting ↗</a>' : '') +
           '<select class="stage-select" aria-label="Status" style="flex:none;padding:7px 10px;border:1px solid #d8cdb8;border-radius:9px;font:13px system-ui">' + optsFor(r.status || '') + '</select>' +
@@ -1483,7 +1544,7 @@
   }
 
   // ======================= dispatch ========================================
-  Promise.all([loadDead(), loadProvider(), loadFit()]).then(function () {
+  Promise.all([loadDead(), loadProvider(), loadFit(), loadSalary()]).then(function () {
     renderNav();
     injectActivity();
     watchJobs(); setInterval(watchJobs, 6000);   // global watcher on every page
