@@ -6,33 +6,37 @@
  * existing express.static). This module adds the small server surface the
  * wired flows need:
  *
- *   POST /api/compass/feedback  → shells out to a COMPASS-LOCAL copy of
- *       feedback.py (feedback.py add <url> <good|bad> --no-eval) so verdicts
- *       persist to THIS instance's data/feedback.jsonl. The copy is repointed
- *       at /Users/nick/apps/career-ops-compass (never the original tree).
+ *   POST /api/compass/feedback  → shells out to the shared feedback.py
+ *       (feedback.py add <url> <good|bad> --no-eval) so verdicts persist to the
+ *       REAL data/feedback.jsonl — the same store the original :8099 uses.
  *
  *   POST /api/compass/setup     → shells out to the shared write_settings.py
- *       with --path pointing at THIS instance's portals.yml (comment-preserving
- *       ruamel writer + validate-portals.mjs). LLM/provider + Anthropic key are
- *       handled by the wire.js front-end via the existing /api/config endpoint
- *       (the same #/config .env path), so they are intentionally NOT here.
+ *       (comment-preserving ruamel writer + validate-portals.mjs) targeting the
+ *       REAL portals.yml. LLM/provider + Anthropic key are NOT here — the
+ *       Compass Setup page links to the full settings view (/spa#/config), which
+ *       POSTs /api/config and writes this instance's .env.
  *
  *   GET  /compass               → 302 to /compass/dashboard.html (landing).
  *
- * Isolation: every path below is under /Users/nick/apps/career-ops-compass.
- * The original /Users/nick/apps/career-ops tree is never read-for-write or
- * written. (write_settings.py + feedback.py default to the original paths;
- * that is exactly why we pass --path / use a repointed copy.)
+ * LIVE-ON-REAL-DATA: this :8100 instance is repointed at /Users/nick/apps/
+ * career-ops via CAREER_OPS_ROOT (plist), so its reads AND writes hit the same
+ * real stores as :8099. "Companies to watch" is still withheld from the setup
+ * writer (mockup entries lack a source key → would wipe tracked_companies).
  */
 import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
 const VENV_PY = '/Users/nick/apps/career-ops-scrape/venv/bin/python';
 const WRITE_SETTINGS = '/Users/nick/apps/career-ops-scrape/write_settings.py';
-const COMPASS_ROOT = '/Users/nick/apps/career-ops-compass';
-const COMPASS_FEEDBACK_PY = COMPASS_ROOT + '/scrape/feedback.py';
-const COMPASS_PORTALS = COMPASS_ROOT + '/portals.yml';
-const COMPASS_FEEDBACK_JSONL = COMPASS_ROOT + '/data/feedback.jsonl';
+// LIVE ON REAL DATA — this :8100 instance is repointed at the real career-ops
+// tree via CAREER_OPS_ROOT in its plist, so feedback + portals writes hit the
+// SAME stores the original :8099 instance uses. We therefore reuse the original
+// (unmodified) tools whose defaults already target the real tree.
+const DATA_ROOT = process.env.CAREER_OPS_ROOT || '/Users/nick/apps/career-ops';
+const FEEDBACK_PY = '/Users/nick/apps/career-ops-scrape/feedback.py'; // APP_DIR = real career-ops
+const SCRAPE_DIR = '/Users/nick/apps/career-ops-scrape';
+const REAL_PORTALS = DATA_ROOT + '/portals.yml';
+const REAL_FEEDBACK_JSONL = DATA_ROOT + '/data/feedback.jsonl';
 
 // launchd starts this server with a minimal PATH, so a spawned Python subprocess
 // (write_settings.py) can't find `node` for its validate-portals.mjs step. Give
@@ -54,12 +58,12 @@ export function registerCompassRoutes(app) {
     if (!url || (verdict !== 'good' && verdict !== 'bad')) {
       return res.status(400).json({ error: 'url and verdict (good|bad) required' });
     }
-    const args = [COMPASS_FEEDBACK_PY, 'add', url, verdict, '--no-eval'];
+    const args = [FEEDBACK_PY, 'add', url, verdict, '--no-eval'];
     if (reason) args.push('--reason', reason);
-    execFile(VENV_PY, args, { timeout: 90000, cwd: COMPASS_ROOT + '/scrape', env: SUBPROC_ENV }, (err, stdout, stderr) => {
+    execFile(VENV_PY, args, { timeout: 90000, cwd: SCRAPE_DIR, env: SUBPROC_ENV }, (err, stdout, stderr) => {
       let lastLine = null;
       try {
-        const lines = readFileSync(COMPASS_FEEDBACK_JSONL, 'utf8').trim().split(/\n/);
+        const lines = readFileSync(REAL_FEEDBACK_JSONL, 'utf8').trim().split(/\n/);
         const raw = lines[lines.length - 1];
         lastLine = raw ? JSON.parse(raw) : null;
       } catch { /* ignore */ }
@@ -83,8 +87,8 @@ export function registerCompassRoutes(app) {
     const args = [
       WRITE_SETTINGS,
       '--json', JSON.stringify(settings),
-      '--path', COMPASS_PORTALS,
-      '--validator-dir', COMPASS_ROOT,
+      '--path', REAL_PORTALS,
+      '--validator-dir', DATA_ROOT,
     ];
     execFile(VENV_PY, args, { timeout: 60000, env: SUBPROC_ENV }, (err, stdout, stderr) => {
       if (err) {
