@@ -51,7 +51,9 @@ const LIVENESS_PY = SCRAPE_DIR + '/liveness.py';
 const JOBS_STORE = DATA_ROOT + '/data/compass-jobs.jsonl';
 const ARTIFACT_DIR = DATA_ROOT + '/data/compass-artifacts';
 const SELF = 'http://127.0.0.1:' + (process.env.PORT || '8100');
-const JOB_ENDPOINT = { tailor: '/api/cv-studio/tailor', cover: '/api/cv-studio/tailor', evaluate: '/api/evaluate', networking: '/api/networking/plan' };
+// cover ≠ résumé: /api/cv-studio/tailor returns a COMBINED tailored-résumé doc, so
+// `cover` routes to the dedicated cover-letter mode (modes/cover.md → just a letter).
+const JOB_ENDPOINT = { tailor: '/api/cv-studio/tailor', cover: '/api/mode/cover', evaluate: '/api/evaluate', networking: '/api/networking/plan' };
 const jobs = new Map();
 const jobQueue = [];
 let jobActive = 0;
@@ -81,7 +83,8 @@ async function providerCap() {
 function bodyForJob(job) {
   if (job.type === 'networking') return { company: job.company, role: job.role, jd: job.jd || '', run: true };
   if (job.type === 'evaluate') return { jd: job.jd || '', save: false };
-  return { jd: job.jd || '', headline: (job.role || '') + (job.type === 'cover' ? ' — cover letter' : ''), run: true }; // tailor/cover
+  if (job.type === 'cover') return { jd: job.jd || '', company: job.company, role: job.role, run: true }; // → /api/mode/cover
+  return { jd: job.jd || '', headline: job.role || '', run: true }; // tailor → /api/cv-studio/tailor
 }
 async function runJob(job) {
   if (job.status === 'cancelled') return; // cancelled while queued → skip entirely
