@@ -124,7 +124,19 @@
     { href: 'library.html', label: 'Library' },
     { href: 'setup.html', label: 'Setup' }
   ];
+  // The header must be PIXEL-STABLE across pages, but each page's .topbar-in has
+  // a different max-width (Jobs 1320 / most 960 / Setup 760), which shifts the
+  // centered brand+nav when navigating. Force ONE header geometry everywhere
+  // (widest = 1320px) so brand/nav x-positions never move. Content .wrap keeps
+  // its own per-page width — only the HEADER is standardized.
+  function ensureHeaderStyles() {
+    if (document.getElementById('compassHeaderStyles')) return;
+    var st = document.createElement('style'); st.id = 'compassHeaderStyles';
+    st.textContent = '.topbar-in{max-width:1320px !important;margin-left:auto !important;margin-right:auto !important;padding-left:22px !important;padding-right:22px !important}';
+    document.head.appendChild(st);
+  }
   function renderNav() {
+    ensureHeaderStyles();
     var nav = document.querySelector('nav.nav') || document.querySelector('.nav');
     if (!nav) return;
     var cur = page || 'dashboard.html';
