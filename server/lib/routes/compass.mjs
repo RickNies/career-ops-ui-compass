@@ -24,7 +24,9 @@
  * writer (mockup entries lack a source key → would wipe tracked_companies).
  */
 import { execFile } from 'node:child_process';
-import { readFileSync, writeFileSync, renameSync } from 'node:fs';
+import { readFileSync, writeFileSync, renameSync, mkdirSync, readdirSync, existsSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { dirname } from 'node:path';
 
 const VENV_PY = '/Users/nick/apps/career-ops-scrape/venv/bin/python';
 const WRITE_SETTINGS = '/Users/nick/apps/career-ops-scrape/write_settings.py';
@@ -40,6 +42,82 @@ const REAL_FEEDBACK_JSONL = DATA_ROOT + '/data/feedback.jsonl';
 const REAL_APPS_MD = DATA_ROOT + '/data/applications.md';
 const LIVENESS_STORE = DATA_ROOT + '/data/liveness.tsv';
 const LIVENESS_PY = SCRAPE_DIR + '/liveness.py';
+
+// ── Background generation job layer ──────────────────────────────────────────
+// LLM generations (tailor/cover/evaluate/networking) run server-side async so
+// they survive navigation. Persisted to data/compass-jobs.jsonl; artifacts to
+// data/compass-artifacts/<id>.md. Work reuses the REAL endpoints via a loopback
+// fetch (exact same prompt/provider logic, no duplication).
+const JOBS_STORE = DATA_ROOT + '/data/compass-jobs.jsonl';
+const ARTIFACT_DIR = DATA_ROOT + '/data/compass-artifacts';
+const SELF = 'http://127.0.0.1:' + (process.env.PORT || '8100');
+const JOB_ENDPOINT = { tailor: '/api/cv-studio/tailor', cover: '/api/cv-studio/tailor', evaluate: '/api/evaluate', networking: '/api/networking/plan' };
+const jobs = new Map();
+const jobQueue = [];
+let jobActive = 0;
+
+function loadJobs() {
+  try {
+    readFileSync(JOBS_STORE, 'utf8').trim().split(/\n/).forEach((l) => { if (l) { const j = JSON.parse(l); jobs.set(j.id, j); } });
+  } catch { /* none yet */ }
+  // A job left 'running'/'queued' by a prior crash can never finish — mark it errored.
+  let dirty = false;
+  for (const j of jobs.values()) { if (j.status === 'running' || j.status === 'queued') { j.status = 'error'; j.error = 'interrupted (server restart)'; dirty = true; } }
+  if (dirty) persistJobs();
+}
+function persistJobs() {
+  try {
+    mkdirSync(dirname(JOBS_STORE), { recursive: true });
+    const tmp = JOBS_STORE + '.tmp';
+    writeFileSync(tmp, [...jobs.values()].map((j) => JSON.stringify(j)).join('\n') + '\n');
+    renameSync(tmp, JOBS_STORE);
+  } catch { /* best-effort */ }
+}
+async function providerCap() {
+  try { const s = await (await fetch(SELF + '/api/status/providers')).json(); return (s && s.activeProvider && s.activeProvider !== 'hermes') ? 3 : 1; }
+  catch { return 1; }
+}
+function bodyForJob(job) {
+  if (job.type === 'networking') return { company: job.company, role: job.role, jd: job.jd || '', run: true };
+  if (job.type === 'evaluate') return { jd: job.jd || '', save: false };
+  return { jd: job.jd || '', headline: (job.role || '') + (job.type === 'cover' ? ' — cover letter' : ''), run: true }; // tailor/cover
+}
+async function runJob(job) {
+  job.status = 'running'; job.started = new Date().toISOString(); persistJobs();
+  try {
+    try { const s = await (await fetch(SELF + '/api/status/providers')).json(); job.provider = s.activeProvider; job.model = s.activeModel; persistJobs(); } catch { /* keep null */ }
+    // Fetch the JD from the posting if we only have a URL.
+    if (!job.jd && job.url) {
+      try { const pv = await (await fetch(SELF + '/api/pipeline/preview?url=' + encodeURIComponent(job.url))).json(); job.jd = (pv && pv.text) || ''; } catch { /* thin */ }
+    }
+    // tailor/cover need a JD floor; synthesize from role/company if the board was JS-thin.
+    if ((job.type === 'tailor' || job.type === 'cover') && (!job.jd || job.jd.length < 40)) {
+      job.jd = (job.role || 'Finance role') + ' at ' + (job.company || 'the company') + '. Responsibilities include FP&A, budgeting, forecasting, and business partnering.';
+    }
+    if (job.type === 'evaluate' && (!job.jd || job.jd.length < 50)) throw new Error('no readable JD to evaluate (JS-rendered board)');
+    const r = await fetch(SELF + JOB_ENDPOINT[job.type], { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bodyForJob(job)) });
+    const j = await r.json();
+    const md = j.markdown || j.report || '';
+    if (!md) throw new Error(j.error || j.message || ('no result (mode ' + (j.mode || '?') + ')'));
+    mkdirSync(ARTIFACT_DIR, { recursive: true });
+    const art = ARTIFACT_DIR + '/' + job.id + '.md';
+    writeFileSync(art, md);
+    job.artifactPath = art; job.bytes = md.length; job.status = 'done'; job.finished = new Date().toISOString();
+  } catch (e) {
+    job.status = 'error'; job.error = String((e && e.message) || e).slice(0, 300); job.finished = new Date().toISOString();
+  }
+  persistJobs();
+}
+async function pumpJobs() {
+  const cap = await providerCap();
+  while (jobActive < cap && jobQueue.length) {
+    const job = jobQueue.shift();
+    jobActive++;
+    runJob(job).finally(() => { jobActive--; pumpJobs(); });
+  }
+}
+function enqueueJob(job) { jobQueue.push(job); pumpJobs(); }
+loadJobs();
 
 // launchd starts this server with a minimal PATH, so a spawned Python subprocess
 // (write_settings.py) can't find `node` for its validate-portals.mjs step. Give
@@ -184,5 +262,36 @@ export function registerCompassRoutes(app) {
     } catch (e) {
       res.status(500).json({ error: 'status update failed', details: String((e && e.message) || e).slice(0, 300) });
     }
+  });
+
+  // ── Background generation: create a job, run async, return jobId now ──
+  app.post('/api/compass/generate', (req, res) => {
+    const b = req.body || {};
+    const type = String(b.type || '').trim();
+    if (!JOB_ENDPOINT[type]) return res.status(400).json({ error: 'type must be one of tailor|cover|evaluate|networking' });
+    const job = {
+      id: randomUUID().slice(0, 8), type,
+      company: String(b.company || '').slice(0, 200), role: String(b.role || '').slice(0, 200),
+      url: String(b.url || '').trim(), jobNum: b.jobNum != null ? String(b.jobNum) : null,
+      jd: b.jd ? String(b.jd).slice(0, 20000) : '',
+      status: 'queued', provider: null, model: null,
+      created: new Date().toISOString(), started: null, finished: null,
+      artifactPath: null, bytes: 0, error: null,
+    };
+    jobs.set(job.id, job); persistJobs(); enqueueJob(job);
+    res.json({ jobId: job.id, status: job.status });
+  });
+
+  app.get('/api/compass/jobs', (_req, res) => {
+    const list = [...jobs.values()].sort((a, b) => String(b.created).localeCompare(String(a.created)));
+    res.json({ jobs: list, inFlight: jobActive, queued: jobQueue.length });
+  });
+
+  app.get('/api/compass/jobs/:id', (req, res) => {
+    const j = jobs.get(req.params.id);
+    if (!j) return res.status(404).json({ error: 'job not found' });
+    let markdown = '';
+    if (j.artifactPath) { try { markdown = readFileSync(j.artifactPath, 'utf8'); } catch { /* gone */ } }
+    res.json(Object.assign({}, j, { markdown }));
   });
 }

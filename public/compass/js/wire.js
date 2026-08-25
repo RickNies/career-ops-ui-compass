@@ -70,7 +70,54 @@
   }
   function isDead(url) { return window.__deadSet && window.__deadSet.has(normUrl(url)); }
 
+  // Active-provider cache (one GET per page load) so LLM progress copy is honest:
+  // Claude/cloud = fast; hermes = local + "can take a few minutes".
+  var PROV = { activeProvider: null, activeModel: null, loaded: false };
+  function loadProvider() {
+    return jGet('/api/status/providers').then(function (s) { PROV.activeProvider = (s && s.activeProvider) || null; PROV.activeModel = (s && s.activeModel) || null; PROV.loaded = true; }).catch(function () { PROV.loaded = false; });
+  }
+  var PROV_NAMES = { anthropic: 'Claude', gemini: 'Gemini', openai: 'OpenAI', qwen: 'Qwen', openrouter: 'OpenRouter', github: 'GitHub Models', hermes: 'the local model' };
+  function provIsLocal() { return PROV.activeProvider === 'hermes' || !PROV.activeProvider; }
+  // Progress line for an in-flight LLM action, e.g. llmProgress('Tailoring').
+  function llmProgress(verb) {
+    if (!PROV.activeProvider) return verb + '…'; // honest neutral fallback (no provider claim)
+    var model = PROV.activeModel ? ' (' + PROV.activeModel + ')' : '';
+    if (PROV.activeProvider === 'hermes') return verb + ' on the local model' + model + ' — can take a few minutes…';
+    return verb + ' with ' + (PROV_NAMES[PROV.activeProvider] || PROV.activeProvider) + model + '…';
+  }
+  // Short descriptor for banners/buttons, e.g. "running on Claude (claude-sonnet-5)".
+  function llmDesc() {
+    if (!PROV.activeProvider) return 'the configured provider';
+    var model = PROV.activeModel ? ' (' + PROV.activeModel + ')' : '';
+    return (PROV.activeProvider === 'hermes' ? 'the local model' + model + ', slow' : PROV_NAMES[PROV.activeProvider] + model + ', fast');
+  }
+
+  // Start a background generation job and poll it to completion.
+  function startJob(payload, cbStarted, cbDone, cbError) {
+    jPost('/api/compass/generate', payload).then(function (r) {
+      var id = r.body && r.body.jobId;
+      if (!id) { cbError('could not start job (' + ((r.body && r.body.error) || r.status) + ')'); return; }
+      if (cbStarted) cbStarted(id);
+      var t = setInterval(function () {
+        jGet('/api/compass/jobs/' + id).then(function (j) {
+          if (j.status === 'done') { clearInterval(t); cbDone(j); }
+          else if (j.status === 'error') { clearInterval(t); cbError(j.error || 'generation failed', j); }
+        }).catch(function () { });
+      }, 3000);
+    }).catch(function (e) { cbError(String(e)); });
+  }
+  function libLink() { return '<a href="library.html" style="color:#2f6f5b;font-weight:600">Generated-content Library</a>'; }
+
   var page = (location.pathname.split('/').pop() || '').toLowerCase();
+
+  // Add a "Library" link to the top nav on every Compass page.
+  function injectNav() {
+    var anchor = document.querySelector('nav a[href="dashboard.html"], .nav a[href="dashboard.html"], a[href="saved.html"]');
+    if (!anchor || !anchor.parentNode || anchor.parentNode.querySelector('a[href="library.html"]')) return;
+    var a = document.createElement('a'); a.href = 'library.html'; a.textContent = 'Library';
+    if (page === 'library.html') a.className = 'active';
+    anchor.parentNode.insertBefore(a, anchor.nextSibling);
+  }
 
   // ======================= JOBS ============================================
   var PAGE_SIZE = 50;
@@ -182,7 +229,7 @@
     set('<h2>Adding your job…</h2><ul class="qa-steps">' +
       '<li id="qsPipe" class="doing">Saving the link to your pipeline…</li>' +
       '<li id="qsPrev">Reading the posting (live fetch)…</li>' +
-      '<li id="qsEval">Scoring your fit — local AI model, can take a few minutes…</li></ul>' +
+      '<li id="qsEval">' + esc(llmProgress('Scoring your fit')) + '</li></ul>' +
       '<div class="qa-actions"><button class="btn btn--outline" id="qaCancel2" type="button">Close</button></div>');
     var c = document.getElementById('qaCancel2'); if (c) c.onclick = function () { if (window.closeModal) window.closeModal(); };
     function done(id) { var el = document.getElementById(id); if (el) { el.classList.remove('doing'); el.classList.add('done'); } }
@@ -196,16 +243,22 @@
       done('qsPrev'); doing('qsEval'); jd = (prev && prev.text) || '';
       var el = document.getElementById('qsPrev'); if (el) el.textContent = jd ? ('Read the posting ✓ (' + jd.length + ' chars)') : 'Posting fetched (thin — JS-rendered board)';
       if (!jd || jd.length < 40) throw new Error('no readable JD text to score (JS-rendered board)');
-      return jPost('/api/evaluate', { jd: jd, save: false });
-    }).then(function (r) {
-      done('qsEval'); var ev = r.body; var md = (ev && (ev.markdown || ev.report)) || '';
-      var m = md.match(/(\d(?:\.\d)?)\s*\/\s*5/) || md.match(/score[^\d]*(\d(?:\.\d)?)/i);
-      var score = m ? Math.round(parseFloat(m[1]) / 5 * 100) : null;
-      set('<div class="qa-ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>Added &amp; scored on the real model</div>' +
-        (score != null ? '<div class="qa-result"><div class="r-ring">' + score + '</div><div><div class="r-t">Fit scored by ' + esc(ev.mode || 'AI') + '</div><div class="r-m">Live evaluation of the posting you added.</div></div></div>' : '') +
-        '<div style="max-height:240px;overflow:auto;background:#faf7f0;border:1px solid #e6ddc9;border-radius:10px;padding:12px;margin-top:12px;font:13px/1.5 system-ui;white-space:pre-wrap">' + esc(md.slice(0, 4000) || '(no evaluation text)') + '</div>' +
-        '<div class="qa-actions" style="margin-top:12px"><button class="btn btn--primary" id="qaDone2" type="button">Done</button></div>');
-      var d = document.getElementById('qaDone2'); if (d) d.onclick = function () { if (window.closeModal) window.closeModal(); };
+      var ev = document.getElementById('qsEval'); if (ev) ev.textContent = llmProgress('Scoring your fit') + ' — background job, also in the Library';
+      // route evaluation through the background job layer
+      startJob({ type: 'evaluate', company: '', role: '', url: url, jd: jd },
+        null,
+        function (j) {
+          done('qsEval'); var md = j.markdown || '';
+          var m = md.match(/(\d(?:\.\d)?)\s*\/\s*5/) || md.match(/score[^\d]*(\d(?:\.\d)?)/i);
+          var score = m ? Math.round(parseFloat(m[1]) / 5 * 100) : null;
+          set('<div class="qa-ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>Added &amp; scored</div>' +
+            (score != null ? '<div class="qa-result"><div class="r-ring">' + score + '</div><div><div class="r-t">Fit scored by ' + esc(j.provider || 'AI') + '</div><div class="r-m">Live evaluation of the posting you added.</div></div></div>' : '') +
+            '<div style="max-height:240px;overflow:auto;background:#faf7f0;border:1px solid #e6ddc9;border-radius:10px;padding:12px;margin-top:12px;font:13px/1.5 system-ui;white-space:pre-wrap">' + esc(md.slice(0, 4000) || '(no evaluation text)') + '</div>' +
+            '<div class="qa-actions" style="margin-top:12px"><button class="btn btn--primary" id="qaDone2" type="button">Done</button></div>');
+          var d = document.getElementById('qaDone2'); if (d) d.onclick = function () { if (window.closeModal) window.closeModal(); };
+        },
+        function (err) { done('qsEval'); set('<div class="qa-ok" style="background:#f3e2da;color:#9c5231">Scoring failed</div><p style="font:13.5px system-ui;color:#6b6255;margin-top:10px">' + esc(err) + '. The link is in your pipeline.</p><div class="qa-actions" style="margin-top:12px"><button class="btn btn--primary" id="qaDone2" type="button">Done</button></div>'); var d2 = document.getElementById('qaDone2'); if (d2) d2.onclick = function () { if (window.closeModal) window.closeModal(); }; });
+      return null;
     }).catch(function (e) {
       done('qsPipe');
       set('<div class="qa-ok" style="background:#f3e2da;color:#9c5231"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg>Saved to pipeline; live scoring unavailable</div>' +
@@ -340,38 +393,40 @@
   // ======================= DOCUMENTS =======================================
   function wireDocs() {
     var job = getCurrentJob();
-    function getJd() {
-      var url = job && job.url;
-      var p = url ? jGet('/api/pipeline/preview?url=' + encodeURIComponent(url)).then(function (r) { return (r && r.text) || ''; }).catch(function () { return ''; }) : Promise.resolve('');
-      return p.then(function (t) { if (t && t.length >= 40) return t; return (job ? (job.title + ' at ' + job.company + '. ' + (job.why || '')) : 'Finance leadership role.') + ' Responsibilities include FP&A, budgeting, forecasting, and business partnering.'; });
-    }
+    // lastMarkdown is set ONLY from a COMPLETED background job's artifact — never
+    // from on-page loading/banner text. This is the .docx-export bug fix: the old
+    // Download fell back to the ".compass-tailor-out" textContent (the "Tailoring…"
+    // placeholder) when no result existed, exporting the banner string.
     var lastMarkdown = '';
-    function runTailor(panelSel, headline) {
+    var pdf = document.getElementById('tailorPdf');
+    function gateDownload(on) { if (pdf) { pdf.disabled = !on; pdf.style.opacity = on ? '' : '.5'; pdf.title = on ? 'Download the generated .docx' : 'Generate first — disabled until the job completes'; } }
+    gateDownload(false);
+    function runTailor(panelSel, type) {
       var panel = document.querySelector(panelSel) || document.body;
       var out = panel.querySelector('.compass-tailor-out');
       if (!out) { out = document.createElement('div'); out.className = 'compass-tailor-out'; out.style.cssText = 'margin-top:14px;background:#faf7f0;border:1px solid #e6ddc9;border-radius:12px;padding:16px;font:13.5px/1.6 system-ui;white-space:pre-wrap;max-height:420px;overflow:auto'; panel.appendChild(out); }
-      out.textContent = 'Tailoring on the real model (local AI, can take a few minutes)…';
-      getJd().then(function (jd) { return jPost('/api/cv-studio/tailor', { jd: jd, headline: headline || (job ? job.title : ''), run: true }); })
-        .then(function (r) { var b = r.body; if (b && b.markdown) { lastMarkdown = b.markdown; out.textContent = b.markdown; toastMsg('Tailored by ' + (b.mode || 'AI'), 'success'); } else if (b && b.prompt && b.mode === 'manual') { out.textContent = 'No live provider — copy this prompt into any LLM:\n\n' + b.prompt; } else { out.textContent = 'Tailoring failed: ' + ((b && b.error) || 'unknown'); } })
-        .catch(function (e) { out.textContent = 'Tailoring error: ' + e; });
+      lastMarkdown = ''; gateDownload(false);
+      out.textContent = 'Started — running in the background (you can leave this page; find it in the Library). ' + llmProgress(type === 'cover' ? 'Writing the cover letter' : 'Tailoring');
+      startJob({ type: type || 'tailor', company: (job ? job.company : ''), role: (job ? job.role || job.title : ''), url: (job ? job.url : '') },
+        null,
+        function (j) { lastMarkdown = j.markdown || ''; out.textContent = lastMarkdown || '(empty result from provider)'; gateDownload(lastMarkdown.length >= 40); toastMsg('Done — generated by ' + (j.provider || 'AI'), 'success'); },
+        function (err) { out.textContent = 'Generation failed: ' + err; toastMsg('Generation failed: ' + err, 'info'); });
     }
-    var tr = document.getElementById('tailorRewrite'); if (tr) tr.addEventListener('click', function (e) { e.preventDefault(); runTailor('#panelTailor', job ? job.title : ''); });
-    var pdf = document.getElementById('tailorPdf');
+    var tr = document.getElementById('tailorRewrite'); if (tr) tr.addEventListener('click', function (e) { e.preventDefault(); runTailor('#panelTailor', 'tailor'); });
     if (pdf) pdf.addEventListener('click', function (e) {
       e.preventDefault();
-      var md = lastMarkdown || ((document.querySelector('#panelTailor .compass-tailor-out') || {}).textContent) || '';
-      if (!md || md.length < 40) { toastMsg('Run "Redo the tailoring" first to generate real content.', 'info'); return; }
-      fetch('/api/export/docx', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ markdown: md, title: (job ? job.company + ' — tailored CV' : 'tailored CV') }) })
+      if (!lastMarkdown || lastMarkdown.length < 40) { toastMsg('Generate first — the download is disabled until the job completes.', 'info'); return; }
+      fetch('/api/export/docx', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ markdown: lastMarkdown, title: (job ? job.company + ' — tailored CV' : 'tailored CV') }) })
         .then(function (r) { return r.blob(); }).then(function (blob) { var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'tailored-cv.docx'; document.body.appendChild(a); a.click(); a.remove(); toastMsg('Downloaded real .docx (/api/export/docx)', 'success'); })
         .catch(function (er) { toastMsg('Export failed: ' + er, 'info'); });
     });
     var coverPanel = document.querySelector('#panelCover');
     if (coverPanel && !coverPanel.querySelector('.compass-cover-btn')) {
-      var cb = document.createElement('button'); cb.className = 'btn btn--primary btn--sm compass-cover-btn'; cb.type = 'button'; cb.textContent = 'Generate with AI (real)'; cb.style.marginBottom = '10px';
+      var cb = document.createElement('button'); cb.className = 'btn btn--primary btn--sm compass-cover-btn'; cb.type = 'button'; cb.textContent = 'Generate cover letter (AI)'; cb.style.marginBottom = '10px';
       coverPanel.insertBefore(cb, coverPanel.firstChild);
-      cb.addEventListener('click', function () { runTailor('#panelCover', (job ? job.title : '') + ' — cover letter'); });
+      cb.addEventListener('click', function () { runTailor('#panelCover', 'cover'); });
     }
-    banner('Documents LIVE — "Redo the tailoring" → /api/cv-studio/tailor (real local model, slow); "Download" → real .docx. Pre-filled sample text is demo until you generate.');
+    banner('Documents LIVE — generation runs in the BACKGROUND via the job layer (survives navigation; see the Library page). Download is gated until the job completes, then exports the REAL result. Running on ' + llmDesc() + '.');
   }
 
   // ======================= SETUP (full native migration) ===================
@@ -523,15 +578,15 @@
   function sectionDocsAssistant(host) {
     var s = details('Docs assistant (#/docs-assistant)', false); host.appendChild(s.d);
     var ta = el('input', INP); ta.placeholder = 'Ask about how career-ops works…'; s.body.appendChild(ta);
-    var btn = el('button', 'margin-top:10px', 'Ask (real LLM, may be slow)'); btn.className = 'btn btn--primary btn--sm'; btn.type = 'button'; s.body.appendChild(btn);
+    var btn = el('button', 'margin-top:10px', 'Ask'); btn.className = 'btn btn--primary btn--sm'; btn.type = 'button'; s.body.appendChild(btn);
     var out = el('div', 'margin-top:12px;white-space:pre-wrap;font:13px/1.6 system-ui;color:#3a3428'); s.body.appendChild(out);
-    btn.onclick = function () { var q = ta.value.trim(); if (!q) return; out.textContent = 'Thinking on the local model…'; jPost('/api/docs-assistant/ask', { question: q, q: q, message: q }).then(function (r) { out.textContent = (r.body && (r.body.answer || r.body.markdown || r.body.text)) || ('(' + JSON.stringify(r.body).slice(0, 400) + ')'); }).catch(function (e) { out.textContent = 'error: ' + e; }); };
+    btn.onclick = function () { var q = ta.value.trim(); if (!q) return; out.textContent = llmProgress('Thinking'); jPost('/api/docs-assistant/ask', { question: q, q: q, message: q }).then(function (r) { out.textContent = (r.body && (r.body.answer || r.body.markdown || r.body.text)) || ('(' + JSON.stringify(r.body).slice(0, 400) + ')'); }).catch(function (e) { out.textContent = 'error: ' + e; }); };
   }
   function sectionOrientation(host) {
     var s = details('Career orientation (#/orientation)', false); host.appendChild(s.d);
-    var btn = el('button', null, 'Generate orientation profile (real LLM, slow)'); btn.className = 'btn btn--primary btn--sm'; btn.type = 'button'; s.body.appendChild(btn);
+    var btn = el('button', null, 'Generate orientation profile'); btn.className = 'btn btn--primary btn--sm'; btn.type = 'button'; s.body.appendChild(btn);
     var out = el('div', 'margin-top:12px;white-space:pre-wrap;font:13px/1.6 system-ui;color:#3a3428'); s.body.appendChild(out);
-    btn.onclick = function () { out.textContent = 'Generating on the local model…'; jPost('/api/orientation/generate', {}).then(function (r) { out.textContent = (r.body && (r.body.markdown || r.body.text || r.body.profile)) || ('(' + JSON.stringify(r.body).slice(0, 400) + ')'); }).catch(function (e) { out.textContent = 'error: ' + e; }); };
+    btn.onclick = function () { out.textContent = llmProgress('Generating'); jPost('/api/orientation/generate', {}).then(function (r) { out.textContent = (r.body && (r.body.markdown || r.body.text || r.body.profile)) || ('(' + JSON.stringify(r.body).slice(0, 400) + ')'); }).catch(function (e) { out.textContent = 'error: ' + e; }); };
   }
   function sectionHelp(host) {
     sectionReadonly(host, 'Help & guides (#/help)', '/api/help/en', function (j) {
@@ -671,7 +726,7 @@
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
       '<label style="' + LBL + '">Company<input id="oCompany" type="text" style="' + INP + '"></label>' +
       '<label style="' + LBL + '">Role (optional)<input id="oRole" type="text" style="' + INP + '"></label></div>' +
-      '<div style="display:flex;gap:8px;align-items:center;margin-top:12px"><button class="btn btn--primary btn--sm" id="oGen" type="button">Build networking plan (real AI — can take a few minutes)</button><span id="oStatus" style="font:12.5px system-ui;color:#6b6255"></span></div>' +
+      '<div style="display:flex;gap:8px;align-items:center;margin-top:12px"><button class="btn btn--primary btn--sm" id="oGen" type="button">Build networking plan</button><span id="oStatus" style="font:12.5px system-ui;color:#6b6255"></span></div>' +
       '</div>' +
       '<div id="oSaveBar" style="display:none;margin-bottom:12px"><button class="btn btn--primary btn--sm" id="oSave" type="button">Save this plan</button> <span id="oSaveMsg" style="font:12px system-ui;color:#2f6f5b"></span></div>' +
       '<div id="oOut"></div>' +
@@ -694,24 +749,13 @@
       var company = document.getElementById('oCompany').value.trim();
       var role = document.getElementById('oRole').value.trim();
       if (!company) { toastMsg('Enter or pick a company first', 'info'); return; }
-      var status = document.getElementById('oStatus'); status.textContent = 'Fetching JD…';
+      var status = document.getElementById('oStatus');
       var url = document.getElementById('oJob').getAttribute('data-url') || '';
-      var jdP = url ? jGet('/api/pipeline/preview?url=' + encodeURIComponent(url)).then(function (r) { return (r && r.text) || ''; }).catch(function () { return ''; }) : Promise.resolve('');
-      jdP.then(function (jd) {
-        status.textContent = 'Building your plan on the local model (this can take a few minutes)…';
-        return jPost('/api/networking/plan', { company: company, role: role, jd: jd, run: true });
-      }).then(function (r) {
-        var b = r.body;
-        if (b && b.markdown) {
-          status.textContent = 'Done ✓ (' + (b.mode || 'AI') + ')';
-          lastPlan = { company: company, role: role, plan: b.markdown };
-          renderPlan(document.getElementById('oOut'), b.markdown);
-          var bar = document.getElementById('oSaveBar'); bar.style.display = 'block';
-        } else if (b && b.prompt && b.mode === 'manual') {
-          status.textContent = 'No live provider — copy the prompt into any LLM:';
-          document.getElementById('oOut').innerHTML = '<div style="' + CARD + ';padding:16px"><div style="white-space:pre-wrap;font:12.5px/1.6 ui-monospace,monospace">' + esc(b.prompt) + '</div></div>';
-        } else { status.textContent = 'Failed: ' + ((b && b.error) || r.status); }
-      }).catch(function (e) { status.textContent = 'Error: ' + e; });
+      status.textContent = 'Started in the background (survives navigation; see the Library). ' + llmProgress('Building your plan');
+      startJob({ type: 'networking', company: company, role: role, url: url },
+        null,
+        function (j) { status.textContent = 'Done ✓ (' + (j.provider || 'AI') + ')'; lastPlan = { company: company, role: role, plan: j.markdown }; renderPlan(document.getElementById('oOut'), j.markdown || ''); document.getElementById('oSaveBar').style.display = 'block'; },
+        function (err) { status.textContent = 'Failed: ' + err; });
     };
     document.getElementById('oSave').onclick = function () {
       if (!lastPlan) return;
@@ -731,12 +775,88 @@
       });
     }
     loadSaved();
-    banner('AI networking plan — who to contact + clickable LinkedIn people-search links + drafted messages, grounded in your CV/profile. It finds the RIGHT PEOPLE TO SEARCH FOR; it does NOT scrape names or emails. Local model is slow (minutes).');
+    banner('AI networking plan — who to contact + clickable LinkedIn people-search links + drafted messages, grounded in your CV/profile. It finds the RIGHT PEOPLE TO SEARCH FOR; it does NOT scrape names or emails. Running on ' + llmDesc() + '.');
+  }
+
+  // ======================= LIBRARY (generated content) =====================
+  var DOC_LABEL = { tailor: 'Tailored CV', cover: 'Cover letter', evaluate: 'Evaluation', networking: 'Networking plan' };
+  function libDownloadDocx(md, type) {
+    fetch('/api/export/docx', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ markdown: md, title: DOC_LABEL[type] || 'document' }) })
+      .then(function (r) { return r.blob(); }).then(function (blob) { var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = (DOC_LABEL[type] || 'document').replace(/\s+/g, '-').toLowerCase() + '.docx'; document.body.appendChild(a); a.click(); a.remove(); toastMsg('Downloaded .docx', 'success'); })
+      .catch(function (e) { toastMsg('Export failed: ' + e, 'info'); });
+  }
+  function libRenderArtifact(body, md, type) {
+    if (!md) { body.textContent = '(empty result)'; return; }
+    body.innerHTML = '';
+    var content = el('div'); body.appendChild(content);
+    if (type === 'networking' && typeof renderPlan === 'function') renderPlan(content, md);
+    else content.innerHTML = '<div style="white-space:pre-wrap;max-height:440px;overflow:auto;background:#faf7f0;border:1px solid #e6ddc9;border-radius:10px;padding:12px">' + esc(md) + '</div>';
+    var dl = el('div', 'margin-top:8px', '<button class="btn btn--primary btn--sm lib-dl" type="button">Download .docx</button>'); body.appendChild(dl);
+    dl.querySelector('.lib-dl').onclick = function () { libDownloadDocx(md, type); };
+  }
+  function libPoll(id, body, type) {
+    var t = setInterval(function () {
+      jGet('/api/compass/jobs/' + id).then(function (j) {
+        if (j.status === 'done') { clearInterval(t); libRenderArtifact(body, j.markdown || '', type); }
+        else if (j.status === 'error') { clearInterval(t); body.innerHTML = '<span style="color:#9c5231">error: ' + esc(j.error || '') + '</span>'; }
+      }).catch(function () { });
+    }, 3000);
+  }
+  function libOpenRole(g) {
+    var det = document.getElementById('libDetail'); if (!det) return;
+    det.innerHTML = '<div style="' + CARD + ';padding:18px 20px"><h2 style="font:600 18px system-ui;color:#16324F;margin:0 0 8px">' + esc(g.company) + (g.role ? ' — ' + esc(g.role) : '') + '</h2><div id="libArts"></div></div>';
+    var arts = det.querySelector('#libArts');
+    g.items.forEach(function (it) {
+      var block = el('div', 'border-top:1px solid #f0ead9;padding:14px 0');
+      block.innerHTML = '<div style="font:600 14px system-ui;color:#16324F;margin-bottom:6px">' + esc(DOC_LABEL[it.type] || it.type) + ' <span style="font:400 12px system-ui;color:#8a8172">· ' + esc(it.status) + (it.provider ? ' · ' + esc(it.provider) + (it.model ? ' ' + esc(it.model) : '') : '') + '</span></div><div class="art-body"></div>';
+      arts.appendChild(block);
+      var body = block.querySelector('.art-body');
+      if (it.kind === 'job') {
+        if (it.status === 'done') jGet('/api/compass/jobs/' + it.id).then(function (j) { libRenderArtifact(body, j.markdown || '', it.type); });
+        else if (it.status === 'error') body.innerHTML = '<span style="color:#9c5231">error: ' + esc(it.error || '') + '</span>';
+        else { body.innerHTML = '<span style="color:#B08D57">' + esc(llmProgress('Generating')) + '</span>'; libPoll(it.id, body, it.type); }
+      } else if (it.kind === 'net') {
+        jGet('/api/networking/plans/' + encodeURIComponent(it.name)).then(function (j) { libRenderArtifact(body, j.markdown || '', 'networking'); });
+      } else if (it.kind === 'report') {
+        jGet('/api/reports/' + encodeURIComponent(it.name)).then(function (j) { libRenderArtifact(body, j.markdown || j.content || '', 'evaluate'); }).catch(function () { body.textContent = '(could not load report)'; });
+      }
+    });
+    var d = document.getElementById('libDetail'); window.scrollTo(0, d.offsetTop - 20);
+  }
+  function wireLibrary() {
+    var root = document.getElementById('libRoot');
+    if (!root) { var m = document.querySelector('main .wrap') || document.querySelector('main') || document.body; root = el('div'); root.id = 'libRoot'; m.appendChild(root); }
+    root.innerHTML = 'Loading…';
+    Promise.all([
+      jGet('/api/compass/jobs').catch(function () { return { jobs: [] }; }),
+      jGet('/api/networking/plans').catch(function () { return { plans: [] }; }),
+      jGet('/api/reports').catch(function () { return { reports: [] }; })
+    ]).then(function (a) {
+      var jobsL = (a[0] && a[0].jobs) || [], plans = (a[1] && a[1].plans) || [], reports = (a[2] && (a[2].reports || a[2])) || [];
+      var groups = {};
+      function grp(company, role) { var k = (company || '').toLowerCase().trim() + '|' + (role || '').toLowerCase().trim(); if (!groups[k]) groups[k] = { company: company || '(unknown)', role: role || '', items: [] }; return groups[k]; }
+      jobsL.forEach(function (j) { grp(j.company, j.role).items.push({ kind: 'job', type: j.type, status: j.status, id: j.id, provider: j.provider, model: j.model, error: j.error }); });
+      plans.forEach(function (p) { grp('Saved networking plans', '').items.push({ kind: 'net', type: 'networking', status: 'done', name: p.name }); });
+      (Array.isArray(reports) ? reports : []).slice(0, 40).forEach(function (r) { var name = r.slug || r.name || r; grp('Saved evaluations (reports/)', '').items.push({ kind: 'report', type: 'evaluate', status: 'done', name: name }); });
+      var keys = Object.keys(groups);
+      if (!keys.length) { root.innerHTML = '<div style="font:14px system-ui;color:#8a8172;padding:20px 0">No generated content yet. Generate a tailored CV, cover letter, evaluation, or networking plan (from Documents / a job / Outreach) and it appears here — even while still running.</div>'; return; }
+      root.innerHTML = keys.map(function (k) {
+        var g = groups[k];
+        var chips = g.items.map(function (it) { var col = it.status === 'done' ? '#2f6f5b' : (it.status === 'error' ? '#9c5231' : '#B08D57'); return '<span style="display:inline-block;margin:2px 6px 2px 0;padding:2px 9px;border-radius:999px;background:#f6f1e6;color:' + col + ';font:600 11.5px system-ui">' + esc(DOC_LABEL[it.type] || it.type) + ' · ' + esc(it.status) + '</span>'; }).join('');
+        return '<div class="lib-role" data-key="' + esc(k) + '" style="' + CARD + ';padding:16px 18px;cursor:pointer;margin-bottom:10px"><div style="font:600 15px system-ui;color:#16324F">' + esc(g.company) + (g.role ? ' — <span style="font-weight:500;color:#6b6255">' + esc(g.role) + '</span>' : '') + '</div><div style="margin-top:8px">' + chips + '</div></div>';
+      }).join('') + '<div id="libDetail" style="margin-top:16px"></div>';
+      root.querySelectorAll('.lib-role').forEach(function (card) { card.onclick = function () { libOpenRole(groups[card.getAttribute('data-key')]); }; });
+      var running = keys.map(function (k) { return groups[k]; }).find(function (g) { return g.items.some(function (i) { return i.status === 'running' || i.status === 'queued'; }); });
+      if (running) libOpenRole(running);
+    });
+    banner('Generated-content Library — roles with AI content (background jobs + saved networking plans + evaluation reports). Click a role to read each artifact; Download exports a .docx of the REAL content; running jobs update live.');
   }
 
   // ======================= dispatch ========================================
-  loadDead().then(function () {
+  Promise.all([loadDead(), loadProvider()]).then(function () {
+    injectNav();
     if (page === 'jobs.html') wireJobs();
+    else if (page === 'library.html') wireLibrary();
     else if (page === 'dashboard.html' || page === '' || page === 'compass') wireDash();
     else if (page === 'job-detail.html') wireDetail();
     else if (page === 'saved.html') wireSaved();
