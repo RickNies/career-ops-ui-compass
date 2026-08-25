@@ -24,7 +24,7 @@
  * writer (mockup entries lack a source key → would wipe tracked_companies).
  */
 import { execFile } from 'node:child_process';
-import { readFileSync, writeFileSync, renameSync, mkdirSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, renameSync, mkdirSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { dirname } from 'node:path';
 
@@ -40,6 +40,25 @@ const SCRAPE_DIR = '/Users/nick/apps/career-ops-scrape';
 const REAL_PORTALS = DATA_ROOT + '/portals.yml';
 const REAL_FEEDBACK_JSONL = DATA_ROOT + '/data/feedback.jsonl';
 const REAL_APPS_MD = DATA_ROOT + '/data/applications.md';
+const FIT_STORE = DATA_ROOT + '/data/fit-analysis.jsonl';
+
+// AI fit-analysis (data/fit-analysis.jsonl), keyed by url → {score 0-100, verdict,
+// why, strengths[], gaps[]}. Cached by mtime; re-read when the file changes (more
+// batches are landing). Jobs without an entry are simply absent from the map.
+let _fitCache = null, _fitMtime = -1;
+function normFitUrl(u) { return String(u || '').split('#')[0].replace(/\/+$/, ''); }
+function readFitMap() {
+  try {
+    const st = statSync(FIT_STORE);
+    if (_fitCache && st.mtimeMs === _fitMtime) return _fitCache;
+    const map = {};
+    readFileSync(FIT_STORE, 'utf8').trim().split(/\r?\n/).forEach((l) => {
+      if (!l) return;
+      try { const j = JSON.parse(l); if (j && j.url) map[normFitUrl(j.url)] = { score: j.score, verdict: j.verdict, why: j.why || '', strengths: Array.isArray(j.strengths) ? j.strengths : [], gaps: Array.isArray(j.gaps) ? j.gaps : [] }; } catch { /* skip bad line */ }
+    });
+    _fitCache = map; _fitMtime = st.mtimeMs; return map;
+  } catch { return _fitCache || {}; }
+}
 const LIVENESS_STORE = DATA_ROOT + '/data/liveness.tsv';
 const LIVENESS_PY = SCRAPE_DIR + '/liveness.py';
 
@@ -252,6 +271,12 @@ export function registerCompassRoutes(app) {
       }
     } catch { /* no store yet → empty map, UI shows everything */ }
     res.json({ map, counts, store: LIVENESS_STORE });
+  });
+
+  // Read the AI fit-analysis, keyed by normalized url. Join to tracker rows client-side.
+  app.get('/api/compass/fit', (_req, res) => {
+    const map = readFitMap();
+    res.json({ map, count: Object.keys(map).length });
   });
 
   // ── Liveness: trigger a bounded sweep (default 100 URLs). The daily launchd

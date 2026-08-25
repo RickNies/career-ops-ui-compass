@@ -46,7 +46,7 @@
 
   function mapRow(row) {
     var title = row.role || '';
-    return {
+    var j = {
       id: 'c' + (row.num || Math.random().toString(36).slice(2)),
       num: row.num, title: title, company: row.company || '', domain: hostFrom(row.url),
       mono: initials(row.company || ''), color: colorFor(row.company || ''),
@@ -54,8 +54,17 @@
       salMin: null, salMax: null, fit: scoreToFit(row), age: 0, isNew: false, saved: false,
       cat: row.status || 'Evaluated', func: funcFor(title), level: levelFor(title),
       why: row.notes || (row.status ? ('Status: ' + row.status) : 'Imported from tracker.'),
-      url: row.url || '', status: row.status || '', score: row.score || ''
+      url: row.url || '', status: row.status || '', score: row.score || '',
+      fitScored: false, verdict: '', strengths: [], gaps: []
     };
+    // Join the AI fit-analysis by url when present (partial store — 91 scored).
+    var f = fitFor(row.url);
+    if (f && typeof f.score === 'number') {
+      j.fit = f.score; j.fitScored = true; j.verdict = f.verdict || '';
+      j.strengths = f.strengths || []; j.gaps = f.gaps || [];
+      if (f.why) j.why = f.why;         // richer "why it fits"
+    }
+    return j;
   }
   function setCurrentJob(job) { try { sessionStorage.setItem('compass_current_job', JSON.stringify(job)); } catch (e) {} }
   function getCurrentJob() { try { return JSON.parse(sessionStorage.getItem('compass_current_job') || 'null'); } catch (e) { return null; } }
@@ -69,6 +78,21 @@
     }).catch(function () { window.__deadSet = new Set(); return window.__deadSet; });
   }
   function isDead(url) { return window.__deadSet && window.__deadSet.has(normUrl(url)); }
+
+  // AI fit-analysis map (url → {score,verdict,why,strengths,gaps}); partial (91 so far).
+  function loadFit() {
+    return jGet('/api/compass/fit').then(function (j) { window.__fitMap = (j && j.map) || {}; return window.__fitMap; }).catch(function () { window.__fitMap = {}; return {}; });
+  }
+  function fitFor(url) { return (window.__fitMap && window.__fitMap[normUrl(url)]) || null; }
+  // Verdict → [textColor, bgColor]. Reuses the evaluation summary-box semantics.
+  function verdictColors(v) {
+    v = String(v || '').toLowerCase();
+    if (/strong|good/.test(v)) return ['#2f6f5b', '#e3efe9'];
+    if (/fair|medium/.test(v)) return ['#8a6a3b', '#f6ecd6'];
+    if (/pass|weak|poor/.test(v)) return ['#9c5231', '#f4e3db'];
+    return ['#6b6255', '#eee9de'];
+  }
+  function verdictPill(v) { var c = verdictColors(v); return '<span style="display:inline-block;padding:2px 10px;border-radius:999px;background:' + c[1] + ';color:' + c[0] + ';font:700 11px system-ui;white-space:nowrap">' + esc(v) + '</span>'; }
 
   // Active-provider cache (one GET per page load) so LLM progress copy is honest:
   // Claude/cloud = fast; hermes = local + "can take a few minutes".
@@ -151,7 +175,8 @@
     if (!window.JOBS || typeof window.matches !== 'function' || typeof window.cardHTML !== 'function') return;
     var all = window.JOBS.filter(window.matches);
     var st = window.state ? window.state.sort : 'best';
-    if (st === 'best') all.sort(function (a, b) { return b.fit - a.fit; });
+    // "best" = AI-scored jobs first (by fit score desc), then the rest.
+    if (st === 'best') all.sort(function (a, b) { var as = a.fitScored ? 1 : 0, bs = b.fitScored ? 1 : 0; if (as !== bs) return bs - as; return (b.fit || 0) - (a.fit || 0); });
     else if (st === 'new') all.sort(function (a, b) { return a.age - b.age; });
     else if (st === 'salary') all.sort(function (a, b) { return (b.salMax || 0) - (a.salMax || 0); });
     window.__compassMatched = all;
@@ -191,6 +216,22 @@
       a.addEventListener('click', function (e) { e.stopPropagation(); }); // don't trigger the card→internal nav
       if (viewBtn && viewBtn.parentNode) viewBtn.parentNode.insertBefore(a, viewBtn.nextSibling);
       else side.appendChild(a);
+      // AI fit-analysis: colored verdict pill (replaces the generic fit label) +
+      // an expandable strengths/gaps. Score /100 is already the ring number.
+      if (job.fitScored) {
+        var lbl = card.querySelector('.fit .lbl');
+        if (lbl && job.verdict) lbl.innerHTML = verdictPill(job.verdict);
+        var why = card.querySelector('.why');
+        if (why && !why.querySelector('.fit-sg') && ((job.strengths && job.strengths.length) || (job.gaps && job.gaps.length))) {
+          var det = document.createElement('details'); det.className = 'fit-sg'; det.style.cssText = 'margin-top:7px';
+          det.addEventListener('click', function (e) { e.stopPropagation(); });
+          det.innerHTML = '<summary style="cursor:pointer;font:600 12px system-ui;color:#2f6f5b">Strengths &amp; gaps</summary>' +
+            '<div style="margin-top:6px;font:12.5px/1.55 system-ui">' +
+            (job.strengths || []).map(function (s) { return '<div style="color:#2f6f5b">✓ ' + esc(s) + '</div>'; }).join('') +
+            (job.gaps || []).map(function (s) { return '<div style="color:#9c5231">△ ' + esc(s) + '</div>'; }).join('') + '</div>';
+          why.appendChild(det);
+        }
+      }
     });
   }
 
@@ -343,6 +384,20 @@
       var pin = document.querySelector('.meta .pin'); if (pin && pin.lastChild && pin.lastChild.nodeType === 3) pin.lastChild.textContent = (job.loc || 'Location n/a') + ' · ' + job.work;
       var ring = document.querySelector('.match-ring'); if (ring) ring.textContent = job.fit;
 
+      // AI fit-analysis on job-detail: real /100 score, colored verdict pill, why,
+      // and the real strengths/gaps (replacing the demo "How you match" lists).
+      var fit = fitFor(job.url) || (job.fitScored ? { score: job.fit, verdict: job.verdict, why: job.why, strengths: job.strengths, gaps: job.gaps } : null);
+      if (fit && typeof fit.score === 'number') {
+        if (ring) ring.textContent = fit.score;
+        var mh = document.querySelector('.match-head .t');
+        if (mh) mh.innerHTML = (fit.verdict ? verdictPill(fit.verdict) + ' ' : '') + esc(fit.why || mh.textContent);
+        var mlists = document.querySelectorAll('.mlist');
+        if (mlists.length && ((fit.strengths && fit.strengths.length) || (fit.gaps && fit.gaps.length))) {
+          if (mlists[0]) mlists[0].innerHTML = (fit.strengths || []).map(function (s) { return '<li><span class="ic ic-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span><span>' + esc(s) + '</span></li>'; }).join('') || '<li><span>—</span></li>';
+          if (mlists[1]) mlists[1].innerHTML = (fit.gaps || []).map(function (s) { return '<li><span class="ic ic-gap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 8v5M12 17h.01"/></svg></span><span>' + esc(s) + '</span></li>'; }).join('') || '<li><span>—</span></li>';
+        }
+      }
+
       // Apply now → open the real posting in a new tab, then offer to mark applied
       var applyBtn = document.querySelector('.btn.apply');
       if (applyBtn) {
@@ -378,7 +433,7 @@
           }
         }).catch(function (e) { jd.innerHTML = '<p>' + esc(job.why) + '</p><p style="color:#8a8172">Could not fetch live posting: ' + esc(String(e)) + '</p>'; });
       }
-      banner('Job detail LIVE — fields from the tracker row; posting body via /api/pipeline/preview. "Apply now" opens the real URL + marks the tracker row Applied. Match strengths/gaps are demo copy.');
+      banner('Job detail LIVE — fields from the tracker row; posting body via /api/pipeline/preview. For AI-scored jobs the fit score /100, verdict pill, why, and strengths/gaps are REAL (from fit-analysis); "Apply now" opens the real URL + marks the tracker row Applied.');
     });
   }
 
@@ -1179,6 +1234,7 @@
         var when = jdates.length ? new Date(jdates[jdates.length - 1]).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
         var note = g.items.some(function (i) { return i.status === 'running' || i.status === 'queued'; }) ? '· generating…' : (g.items.some(function (i) { return i.status === 'error'; }) ? '· needs attention' : '');
         var hasUrl = g.items.some(function (i) { return i.url; });
+        var libFit = null; g.items.forEach(function (i) { if (!libFit && i.url) { var f = fitFor(i.url); if (f && typeof f.score === 'number') libFit = f; } });
         var subs = SUBGROUPS.map(function (sg) {
           var arts = g.items.filter(function (it) { return subGroupOf(it.type) === sg.key; });
           if (!arts.length) return '';
@@ -1204,6 +1260,7 @@
           '<div style="padding:16px 20px 12px;border-bottom:1px solid #f3eee1;display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">' +
           '<div style="flex:1;min-width:0"><div style="font-family:var(--serif,\'Iowan Old Style\',Georgia,serif);font-weight:600;font-size:17px;color:#16324F">' + esc(g.company) + (g.role ? ' <span style="color:#8a8172;font-weight:500">— ' + esc(g.role) + '</span>' : '') + '</div>' +
           '<div style="font:12px system-ui;color:#8a8172;margin-top:3px">' + (when ? esc(when) + ' ' : '') + esc(note) + '</div></div>' +
+          (libFit ? '<div style="flex:none;display:flex;align-items:center;gap:8px;padding-top:1px" title="AI fit">' + '<span style="font-family:var(--serif,Georgia);font-weight:600;font-size:19px;color:#16324F">' + libFit.score + '<span style="font-size:11px;color:#8a8172">/100</span></span>' + (libFit.verdict ? verdictPill(libFit.verdict) : '') + '</div>' : '') +
           '<a class="lib-detail-link" data-key="' + esc(k) + '" href="job-detail.html" title="' + (hasUrl ? 'Open the AI job-detail view for this posting' : 'Open the job-detail view (from the role info)') + '" style="flex:none;font:600 12.5px system-ui;color:#2f6f5b;text-decoration:none;white-space:nowrap;padding-top:2px">View job detail →</a>' +
           '</div>' + subs + '</div>';
       }).join('');
@@ -1384,7 +1441,7 @@
   }
 
   // ======================= dispatch ========================================
-  Promise.all([loadDead(), loadProvider()]).then(function () {
+  Promise.all([loadDead(), loadProvider(), loadFit()]).then(function () {
     renderNav();
     injectActivity();
     watchJobs(); setInterval(watchJobs, 6000);   // global watcher on every page
