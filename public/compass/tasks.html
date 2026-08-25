@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compass — AI tasks</title>
+<style>
+  :root{
+    --bg:#F6F3EC; --surface:#fff; --ink:#16324F; --ink-soft:#2a3b4d; --muted:#8a8172;
+    --line:#ece5d6; --line-soft:#f0ead9; --gold:#B08D57; --gold-deep:#8a6a3b; --sage:#2f6f5b;
+    --serif:'Iowan Old Style','Palatino Linotype',Georgia,serif;
+    --radius:16px; --radius-sm:11px; --shadow:0 1px 3px rgba(0,0,0,.05);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif}
+  /* canonical Compass topbar/nav — IDENTICAL to the other pages */
+  .topbar{position:sticky;top:0;z-index:20;background:rgba(246,243,236,.85);backdrop-filter:saturate(180%) blur(10px);border-bottom:1px solid var(--line)}
+  .topbar-in{max-width:1320px;margin:0 auto;display:flex;align-items:center;gap:28px;padding:14px 22px}
+  .brand{display:flex;align-items:center;gap:9px;font-family:var(--serif);font-size:19px;font-weight:600;color:var(--ink);text-decoration:none}
+  .brand svg{color:var(--gold)}
+  .nav{display:flex;gap:6px;margin-left:6px;flex-wrap:wrap}
+  .nav a{padding:8px 14px;border-radius:999px;color:var(--ink-soft);font-weight:500;font-size:14.5px;text-decoration:none}
+  .nav a:hover{background:var(--line-soft)}
+  .nav a.active{background:var(--ink);color:#fff}
+  .wrap{max-width:1080px;margin:0 auto;padding:26px 24px 90px}
+  h1{font-family:var(--serif);font-weight:600;font-size:27px;line-height:1.15;margin:4px 0 6px}
+  .lede{color:var(--muted);font-size:14px;margin-bottom:18px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;font-family:inherit;font-weight:600;font-size:13.5px;line-height:1.2;border-radius:999px;border:1px solid transparent;padding:9px 15px;cursor:pointer;text-decoration:none;white-space:nowrap}
+  .btn:disabled{opacity:.5;cursor:default}
+  .btn--primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .btn--primary:hover{background:#0f2740}
+  .btn--outline{background:var(--surface);color:var(--ink-soft);border-color:var(--line)}
+  .btn--outline:hover{border-color:var(--gold);color:var(--gold-deep)}
+  .btn--sm{padding:7px 13px;font-size:13px}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px}
+  .toast-wrap{position:fixed;right:18px;bottom:18px;z-index:9998;display:flex;flex-direction:column;gap:8px}
+  .toast{background:var(--ink);color:#fff;padding:10px 14px;border-radius:10px;font-size:13px;box-shadow:0 6px 20px rgba(0,0,0,.2)}
+</style>
+</head>
+<body>
+  <header class="topbar"><div class="topbar-in">
+    <a href="dashboard.html" class="brand" style="text-decoration:none;color:var(--ink)">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><polygon points="15.5 8.5 10.5 10.5 8.5 15.5 13.5 13.5" fill="currentColor" stroke="none"/></svg>
+      <span>Compass</span>
+    </a>
+    <nav class="nav"><!-- filled by wire.js renderNav() (canonical, active by page) --></nav>
+  </div></header>
+  <main class="wrap">
+    <h1>AI tasks</h1>
+    <div class="lede">Everything Compass is generating for you — running now, queued, and recently finished. Tasks keep running if you navigate away.</div>
+    <div id="tasksRoot">Loading…</div>
+  </main>
+  <div id="toastLive" class="toast-wrap" role="status" aria-live="polite"></div>
+  <script>
+  // minimal toast so wire.js toastMsg() works on this standalone page
+  function toast(msg, type){ var w=document.getElementById('toastLive'); if(!w) return; var t=document.createElement('div'); t.className='toast'; t.textContent=msg; w.appendChild(t); setTimeout(function(){ t.remove(); }, 3200); }
+  </script>
+  <script src="js/wire.js"></script>
+</body>
+</html>

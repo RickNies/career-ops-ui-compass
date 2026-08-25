@@ -55,6 +55,7 @@ const JOB_ENDPOINT = { tailor: '/api/cv-studio/tailor', cover: '/api/cv-studio/t
 const jobs = new Map();
 const jobQueue = [];
 let jobActive = 0;
+const jobControllers = new Map(); // job.id → AbortController for the in-flight loopback fetch
 
 function loadJobs() {
   try {
@@ -83,19 +84,23 @@ function bodyForJob(job) {
   return { jd: job.jd || '', headline: (job.role || '') + (job.type === 'cover' ? ' — cover letter' : ''), run: true }; // tailor/cover
 }
 async function runJob(job) {
+  if (job.status === 'cancelled') return; // cancelled while queued → skip entirely
+  const ctrl = new AbortController();
+  jobControllers.set(job.id, ctrl);
+  const opt = { signal: ctrl.signal };
   job.status = 'running'; job.started = new Date().toISOString(); persistJobs();
   try {
-    try { const s = await (await fetch(SELF + '/api/status/providers')).json(); job.provider = s.activeProvider; job.model = s.activeModel; persistJobs(); } catch { /* keep null */ }
+    try { const s = await (await fetch(SELF + '/api/status/providers', opt)).json(); job.provider = s.activeProvider; job.model = s.activeModel; persistJobs(); } catch (e) { if (ctrl.signal.aborted) throw e; /* else keep null */ }
     // Fetch the JD from the posting if we only have a URL.
     if (!job.jd && job.url) {
-      try { const pv = await (await fetch(SELF + '/api/pipeline/preview?url=' + encodeURIComponent(job.url))).json(); job.jd = (pv && pv.text) || ''; } catch { /* thin */ }
+      try { const pv = await (await fetch(SELF + '/api/pipeline/preview?url=' + encodeURIComponent(job.url), opt)).json(); job.jd = (pv && pv.text) || ''; } catch (e) { if (ctrl.signal.aborted) throw e; /* thin */ }
     }
     // tailor/cover need a JD floor; synthesize from role/company if the board was JS-thin.
     if ((job.type === 'tailor' || job.type === 'cover') && (!job.jd || job.jd.length < 40)) {
       job.jd = (job.role || 'Finance role') + ' at ' + (job.company || 'the company') + '. Responsibilities include FP&A, budgeting, forecasting, and business partnering.';
     }
     if (job.type === 'evaluate' && (!job.jd || job.jd.length < 50)) throw new Error('no readable JD to evaluate (JS-rendered board)');
-    const r = await fetch(SELF + JOB_ENDPOINT[job.type], { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bodyForJob(job)) });
+    const r = await fetch(SELF + JOB_ENDPOINT[job.type], { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bodyForJob(job)), signal: ctrl.signal });
     const j = await r.json();
     const md = j.markdown || j.report || '';
     if (!md) throw new Error(j.error || j.message || ('no result (mode ' + (j.mode || '?') + ')'));
@@ -104,7 +109,15 @@ async function runJob(job) {
     writeFileSync(art, md);
     job.artifactPath = art; job.bytes = md.length; job.status = 'done'; job.finished = new Date().toISOString();
   } catch (e) {
-    job.status = 'error'; job.error = String((e && e.message) || e).slice(0, 300); job.finished = new Date().toISOString();
+    // A cancel aborts the fetch → land here; keep 'cancelled' (set by the cancel
+    // endpoint), don't overwrite it with 'error'.
+    if (job.status === 'cancelled' || ctrl.signal.aborted) {
+      if (job.status !== 'cancelled') { job.status = 'cancelled'; job.finished = new Date().toISOString(); }
+    } else {
+      job.status = 'error'; job.error = String((e && e.message) || e).slice(0, 300); job.finished = new Date().toISOString();
+    }
+  } finally {
+    jobControllers.delete(job.id);
   }
   persistJobs();
 }
@@ -112,6 +125,7 @@ async function pumpJobs() {
   const cap = await providerCap();
   while (jobActive < cap && jobQueue.length) {
     const job = jobQueue.shift();
+    if (job.status === 'cancelled') continue; // cancelled while queued → free the slot, skip
     jobActive++;
     runJob(job).finally(() => { jobActive--; pumpJobs(); });
   }
@@ -285,6 +299,21 @@ export function registerCompassRoutes(app) {
   app.get('/api/compass/jobs', (_req, res) => {
     const list = [...jobs.values()].sort((a, b) => String(b.created).localeCompare(String(a.created)));
     res.json({ jobs: list, inFlight: jobActive, queued: jobQueue.length });
+  });
+
+  // Cancel a running OR queued job. Idempotent (no-op on a finished job).
+  app.post('/api/compass/jobs/:id/cancel', (req, res) => {
+    const j = jobs.get(req.params.id);
+    if (!j) return res.status(404).json({ error: 'job not found' });
+    if (j.status === 'done' || j.status === 'error' || j.status === 'cancelled') {
+      return res.json({ ok: true, status: j.status, noop: true });
+    }
+    j.status = 'cancelled'; j.finished = new Date().toISOString(); j.error = null;
+    const ctrl = jobControllers.get(j.id);
+    if (ctrl) { try { ctrl.abort(); } catch { /* ignore */ } } // running → abort the loopback fetch (frees the slot in runJob.finally)
+    const qi = jobQueue.indexOf(j); if (qi >= 0) jobQueue.splice(qi, 1); // queued → drop it
+    persistJobs();
+    res.json({ ok: true, status: 'cancelled' });
   });
 
   app.get('/api/compass/jobs/:id', (req, res) => {

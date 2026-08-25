@@ -958,6 +958,7 @@
         if (container.__t !== token) { clearInterval(t); return; }
         if (j.status === 'done') { clearInterval(t); renderWorkspace(container, j.markdown || '', type); }
         else if (j.status === 'error') { clearInterval(t); container.innerHTML = '<div style="padding:16px;background:#f7ece7;border:1px solid #e6c9bb;border-radius:10px;color:#9c5231;font:13.5px system-ui">Generation failed: ' + esc(j.error || '') + '</div>'; }
+        else if (j.status === 'cancelled') { clearInterval(t); container.innerHTML = '<div style="padding:16px;background:#efeade;border:1px solid #ddd3bf;border-radius:10px;color:#6b6255;font:13.5px system-ui">Task cancelled.</div>'; }
       }).catch(function () { });
     }, 3000);
   }
@@ -986,7 +987,13 @@
           }).catch(function (e) { retry.disabled = false; retry.textContent = 'Retry generation'; toastMsg('Retry error: ' + e, 'info'); });
         };
       }
-      else { container.innerHTML = '<div style="padding:30px;text-align:center;color:#B08D57;font:14px system-ui"><div style="width:26px;height:26px;border:3px solid #eadfca;border-top-color:#B08D57;border-radius:50%;margin:0 auto 12px;animation:libspin .9s linear infinite"></div>' + esc(llmProgress('Generating')) + '<div style="font:12px system-ui;color:#b0a790;margin-top:6px">This keeps running even if you leave the page.</div></div>'; libPoll(it.id, container, it.type, token); }
+      else {
+        container.innerHTML = '<div style="padding:30px 16px;text-align:center;color:#B08D57;font:14px system-ui"><div style="width:26px;height:26px;border:3px solid #eadfca;border-top-color:#B08D57;border-radius:50%;margin:0 auto 12px;animation:libspin .9s linear infinite"></div>' + esc(llmProgress('Generating')) + '<div style="font:12px system-ui;color:#b0a790;margin:6px 0 14px">This keeps running even if you leave the page.</div></div>';
+        var cancelBtn = el('div', 'text-align:center', '<button class="btn btn--outline btn--sm" type="button">Cancel task</button>');
+        container.appendChild(cancelBtn);
+        cancelBtn.querySelector('button').onclick = function () { var bb = this; bb.disabled = true; bb.textContent = 'Cancelling…'; cancelJob(it.id); };
+        libPoll(it.id, container, it.type, token);
+      }
     } else if (it.kind === 'net') { jGet('/api/networking/plans/' + encodeURIComponent(it.name)).then(function (j) { if (fresh()) renderWorkspace(container, j.markdown || '', 'networking'); }); }
     else if (it.kind === 'report') { jGet('/api/reports/' + encodeURIComponent(it.name)).then(function (j) { if (fresh()) renderWorkspace(container, j.markdown || j.content || '', 'evaluate'); }).catch(function () { if (fresh()) container.innerHTML = '<div style="padding:16px;color:#8a8172">(could not load report)</div>'; }); }
   }
@@ -1072,17 +1079,161 @@
           '<div style="font:12px system-ui;color:#8a8172;margin:3px 0 10px">' + (when ? esc(when) + ' ' : '') + esc(note) + '</div></div>' + subs + '</div>';
       }).join('') + '<div id="libDetail" style="margin-top:22px"></div>';
       root.querySelectorAll('.lib-art').forEach(function (btn) { btn.onclick = function () { var g = groups[btn.getAttribute('data-key')]; libOpenRole(g, g.items[+btn.getAttribute('data-idx')]); }; });
+      // Deep-link: library.html?job=<id> (from a completion "View" toast) → open that artifact.
+      var qJob = (location.search.match(/[?&]job=([^&]+)/) || [])[1];
+      if (qJob) {
+        qJob = decodeURIComponent(qJob);
+        var fg = null, fitem = null;
+        order.forEach(function (k) { groups[k].items.forEach(function (it) { if (it.kind === 'job' && it.id === qJob) { fg = groups[k]; fitem = it; } }); });
+        if (fg) { libOpenRole(fg, fitem); return; }
+      }
       var running = order.map(function (k) { return groups[k]; }).find(function (g) { return g.items.some(function (i) { return i.status === 'running' || i.status === 'queued'; }); });
       if (running) libOpenRole(running);
     });
     banner('Generated-content Library — grouped by job. Each card shows that job’s Application materials (CV / cover / networking) and Evaluation together. Click any artifact to open the workspace; running jobs update live and errors offer Retry.');
   }
 
+  // ======================= AI-TASK ACTIVITY SYSTEM =========================
+  // Dismissable rich toast (reuses the page's toast region if present).
+  function toastRegion() {
+    var r = document.getElementById('toastLive') || document.querySelector('.toast-wrap');
+    if (!r) { r = document.createElement('div'); r.id = 'toastLive'; r.className = 'toast-wrap'; r.style.cssText = 'position:fixed;right:18px;bottom:18px;z-index:9998;display:flex;flex-direction:column;gap:8px;max-width:370px'; document.body.appendChild(r); }
+    return r;
+  }
+  function compassToast(o) {
+    var t = document.createElement('div');
+    t.style.cssText = 'background:#16324F;color:#fff;padding:11px 12px 11px 15px;border-radius:11px;font:13px/1.4 system-ui;box-shadow:0 8px 26px rgba(0,0,0,.24);display:flex;align-items:center;gap:10px';
+    if (o.tone === 'error') t.style.background = '#7a3423';
+    if (o.tone === 'muted') t.style.background = '#4a4436';
+    var msg = document.createElement('div'); msg.style.cssText = 'flex:1'; msg.innerHTML = (o.icon ? '<b style="margin-right:6px">' + o.icon + '</b>' : '') + esc(o.text);
+    t.appendChild(msg);
+    if (o.actionLabel) {
+      var a = document.createElement(o.actionHref ? 'a' : 'button'); a.textContent = o.actionLabel;
+      a.style.cssText = 'background:rgba(255,255,255,.18);color:#fff;border:none;border-radius:8px;padding:5px 11px;font:600 12px system-ui;cursor:pointer;text-decoration:none;white-space:nowrap';
+      if (o.actionHref) a.href = o.actionHref;
+      if (o.onAction) a.onclick = function (e) { o.onAction(e); if (o.closeOnAction !== false) t.remove(); };
+      t.appendChild(a);
+    }
+    var x = document.createElement('button'); x.innerHTML = '&times;'; x.setAttribute('aria-label', 'Dismiss');
+    x.style.cssText = 'background:none;border:none;color:rgba(255,255,255,.72);font-size:19px;line-height:1;cursor:pointer;padding:0 2px'; x.onclick = function () { t.remove(); };
+    t.appendChild(x);
+    toastRegion().appendChild(t);
+    if (o.autofade !== false) setTimeout(function () { if (t.parentNode) { t.style.transition = 'opacity .5s'; t.style.opacity = '0'; setTimeout(function () { t.remove(); }, 500); } }, o.autofadeMs || 10000);
+    return t;
+  }
+
+  // Header activity indicator (bell + running-count badge) — on every page.
+  function injectActivity() {
+    var host = document.querySelector('.topbar-in');
+    if (!host || document.getElementById('compassActivity')) return;
+    var a = document.createElement('a'); a.id = 'compassActivity'; a.href = 'tasks.html'; a.title = 'AI tasks'; a.setAttribute('aria-label', 'AI tasks');
+    a.style.cssText = 'margin-left:auto;position:relative;display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:999px;color:#2a3b4d;text-decoration:none';
+    a.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>' +
+      '<span id="compassActivityBadge" style="display:none;position:absolute;top:1px;right:1px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:#B5623B;color:#fff;font:700 10px/16px system-ui;text-align:center;box-sizing:border-box"></span>';
+    if (page === 'tasks.html') { a.style.background = '#16324F'; a.style.color = '#fff'; }
+    else { a.onmouseenter = function () { a.style.background = '#f0ead9'; }; a.onmouseleave = function () { a.style.background = 'none'; }; }
+    host.appendChild(a);
+  }
+  function updateBadge(list) {
+    var n = list.filter(function (j) { return j.status === 'running' || j.status === 'queued'; }).length;
+    var b = document.getElementById('compassActivityBadge'); if (!b) return;
+    if (n > 0) { b.textContent = n; b.style.display = ''; } else b.style.display = 'none';
+  }
+
+  // Global job watcher — runs on EVERY page (wire.js loads everywhere). Polls
+  // GET /api/compass/jobs; updates the badge; fires a dismissable completion
+  // toast when a job first reaches done/error/cancelled. localStorage dedupes
+  // so navigating never double-notifies and a completion that happened on
+  // another page still surfaces on the next tick. NOTE: this is IN-PAGE (any
+  // open Compass tab); true OS push with the tab closed would need a service
+  // worker (out of scope).
+  var NKEY = 'compass_notified';
+  function retryJob(id) {
+    jGet('/api/compass/jobs/' + id).then(function (j) { return jPost('/api/compass/generate', { type: j.type, company: j.company, role: j.role, url: j.url, jd: j.jd }); })
+      .then(function (r) { toastMsg(r.body && r.body.jobId ? 'Retrying…' : ('Retry failed: ' + ((r.body && r.body.error) || r.status)), 'info'); });
+  }
+  function cancelJob(id, cb) {
+    jPost('/api/compass/jobs/' + id + '/cancel', {}).then(function (r) { toastMsg(r.body && r.body.ok ? 'Task cancelled' : 'Cancel failed', r.body && r.body.ok ? 'success' : 'info'); if (cb) cb(r); });
+  }
+  function completionToast(j) {
+    var label = DOC_LABEL[j.type] || j.type; var suffix = j.company ? ' for ' + j.company : '';
+    if (j.status === 'done') compassToast({ icon: '✓', text: label + suffix + ' is ready', actionLabel: 'View', actionHref: 'library.html?job=' + encodeURIComponent(j.id) });
+    else if (j.status === 'error') compassToast({ tone: 'error', icon: '✕', text: label + suffix + ' failed', actionLabel: 'Retry', onAction: function () { retryJob(j.id); } });
+    else if (j.status === 'cancelled') compassToast({ tone: 'muted', icon: '⊘', text: label + suffix + ' — cancelled' });
+  }
+  function watchJobs() {
+    return jGet('/api/compass/jobs').then(function (d) {
+      var list = (d && d.jobs) || [];
+      updateBadge(list);
+      if (typeof window.__compassOnJobs === 'function') window.__compassOnJobs(list); // tasks page live hook
+      var notified; try { notified = JSON.parse(localStorage.getItem(NKEY) || 'null'); } catch (e) { notified = null; }
+      var firstRun = (notified === null); if (firstRun) notified = {};
+      var TERM = { done: 1, error: 1, cancelled: 1 };
+      list.forEach(function (j) {
+        if (!TERM[j.status]) return;
+        if (firstRun) { notified[j.id] = 1; return; }   // seed silently on the first-ever tick
+        if (notified[j.id]) return;
+        notified[j.id] = 1; completionToast(j);
+      });
+      try { localStorage.setItem(NKEY, JSON.stringify(notified)); } catch (e) { }
+      return list;
+    }).catch(function () { return []; });
+  }
+
+  // ======================= TASKS PAGE ======================================
+  var STATUS_STYLE = { queued: ['#8a8172', '#f0ead9'], running: ['#8a6a3b', '#f6ecd6'], done: ['#2f6f5b', '#e3efe9'], error: ['#9c5231', '#f4e3db'], cancelled: ['#6b6255', '#eee9de'] };
+  function fmtElapsed(ms) { if (ms < 0) ms = 0; var s = Math.round(ms / 1000); if (s < 60) return s + 's'; var m = Math.floor(s / 60); var r = s % 60; if (m < 60) return m + 'm ' + r + 's'; var h = Math.floor(m / 60); return h + 'h ' + (m % 60) + 'm'; }
+  function renderTasks(list) {
+    var root = document.getElementById('tasksRoot'); if (!root) return;
+    var active = list.filter(function (j) { return j.status === 'running' || j.status === 'queued'; });
+    var doneish = list.filter(function (j) { return j.status === 'done' || j.status === 'error' || j.status === 'cancelled'; });
+    active.sort(function (a, b) { return String(a.created).localeCompare(String(b.created)); });
+    doneish.sort(function (a, b) { return String(b.finished || b.created).localeCompare(String(a.finished || a.created)); });
+    var rows = active.concat(doneish);
+    if (!rows.length) { root.innerHTML = '<div style="padding:40px 0;text-align:center;color:#8a8172;font:15px system-ui">No AI tasks running. Start a tailored CV, cover letter, evaluation, or networking plan and it will appear here.</div>'; return; }
+    var now = Date.now();
+    function rowHtml(j) {
+      var st = STATUS_STYLE[j.status] || ['#6b6255', '#eee9de'];
+      var pill = '<span style="display:inline-block;padding:2px 10px;border-radius:999px;background:' + st[1] + ';color:' + st[0] + ';font:700 11px system-ui;text-transform:capitalize">' + esc(j.status) + '</span>';
+      var pm = j.provider ? (esc(j.provider) + (j.model ? ' · ' + esc(j.model) : '')) : '—';
+      var startTs = j.started || j.created;
+      var elapsed = j.status === 'running' ? fmtElapsed(now - new Date(startTs).getTime()) : ((j.finished && j.started) ? fmtElapsed(new Date(j.finished).getTime() - new Date(j.started).getTime()) : '—');
+      var startedStr = startTs ? new Date(startTs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '—';
+      var acts = '';
+      if (j.status === 'running' || j.status === 'queued') acts = '<button class="btn btn--outline btn--sm task-cancel" data-id="' + j.id + '" type="button" style="font-size:12px">Cancel</button>';
+      else if (j.status === 'done') acts = '<a class="btn btn--outline btn--sm" href="library.html?job=' + encodeURIComponent(j.id) + '" style="font-size:12px">View</a>';
+      else if (j.status === 'error') acts = '<button class="btn btn--primary btn--sm task-retry" data-id="' + j.id + '" type="button" style="font-size:12px">Retry</button>';
+      else if (j.status === 'cancelled') acts = '<button class="btn btn--outline btn--sm task-retry" data-id="' + j.id + '" type="button" style="font-size:12px">Re-run</button>';
+      return '<div style="display:flex;align-items:center;gap:14px;padding:13px 4px;border-bottom:1px solid #f0ead9">' +
+        '<div style="flex:1.4;min-width:0"><div style="font-weight:600;color:#16324F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(j.company || '(unknown)') + (j.role ? ' <span style="color:#8a8172;font-weight:500">· ' + esc(j.role) + '</span>' : '') + '</div><div style="font:12px system-ui;color:#8a8172">' + esc(DOC_LABEL[j.type] || j.type) + '</div></div>' +
+        '<div style="flex:0 0 92px">' + pill + '</div>' +
+        '<div style="flex:1;font:12px system-ui;color:#8a8172;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + pm + '</div>' +
+        '<div style="flex:0 0 130px;font:12px system-ui;color:#8a8172">' + startedStr + ' · ' + elapsed + '</div>' +
+        '<div style="flex:0 0 92px;text-align:right">' + acts + '</div></div>';
+    }
+    var html = '';
+    if (active.length) html += '<div style="font:700 11px system-ui;letter-spacing:.05em;text-transform:uppercase;color:#B08D57;margin:6px 0 4px">In progress (' + active.length + ')</div>' + active.map(rowHtml).join('');
+    if (doneish.length) html += '<div style="font:700 11px system-ui;letter-spacing:.05em;text-transform:uppercase;color:#b0a790;margin:' + (active.length ? '20px' : '6px') + ' 0 4px">Recent</div>' + doneish.slice(0, 40).map(rowHtml).join('');
+    root.innerHTML = html;
+    root.querySelectorAll('.task-cancel').forEach(function (b) { b.onclick = function () { b.disabled = true; b.textContent = 'Cancelling…'; cancelJob(b.getAttribute('data-id'), function () { watchJobs(); }); }; });
+    root.querySelectorAll('.task-retry').forEach(function (b) { b.onclick = function () { retryJob(b.getAttribute('data-id')); setTimeout(watchJobs, 400); }; });
+  }
+  function wireTasks() {
+    var root = document.getElementById('tasksRoot');
+    if (!root) { var m = document.querySelector('main .wrap') || document.querySelector('main') || document.body; root = el('div'); root.id = 'tasksRoot'; m.appendChild(root); }
+    window.__compassOnJobs = renderTasks;      // watchJobs (6s) refreshes it too
+    watchJobs();                                // immediate
+    setInterval(function () { watchJobs(); }, 5000);
+  }
+
   // ======================= dispatch ========================================
   Promise.all([loadDead(), loadProvider()]).then(function () {
     renderNav();
+    injectActivity();
+    watchJobs(); setInterval(watchJobs, 6000);   // global watcher on every page
     if (page === 'jobs.html') wireJobs();
     else if (page === 'library.html') wireLibrary();
+    else if (page === 'tasks.html') wireTasks();
     else if (page === 'dashboard.html' || page === '' || page === 'compass') wireDash();
     else if (page === 'job-detail.html') wireDetail();
     else if (page === 'saved.html') wireSaved();
