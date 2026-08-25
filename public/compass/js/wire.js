@@ -890,20 +890,27 @@
     ensureLibStyles();
     var secs = splitSectionsFull(md);
     container.innerHTML = '';
-    var wrap = el('div', 'display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap');
-    var toc = el('nav', 'flex:0 0 186px;position:sticky;top:74px;max-height:calc(100vh - 100px);overflow:auto');
-    toc.innerHTML = '<div style="font:700 10.5px system-ui;letter-spacing:.06em;text-transform:uppercase;color:#b0a790;margin-bottom:8px">On this page</div>' +
-      secs.map(function (s, idx) { return '<a href="#" data-sec="' + idx + '" class="lib-toc" style="display:block;padding:4px 0 4px 10px;color:#2a3b4d;text-decoration:none;border-left:2px solid #ece5d6;font:13px/1.4 system-ui">' + esc(s.title || ('Section ' + (idx + 1))) + '</a>'; }).join('');
-    var col = el('div', 'flex:1 1 460px;min-width:0;max-width:72ch');
-    var tools = el('div', 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px');
-    tools.innerHTML = '<button class="btn btn--primary btn--sm" data-a="copyall" type="button">Copy all</button><span style="flex:1"></span><span style="font:11px system-ui;color:#b0a790">download</span><button class="btn btn--outline btn--sm" data-a="docx" type="button" style="font-size:12px">.docx</button><button class="btn btn--outline btn--sm" data-a="md" type="button" style="font-size:12px">.md</button>';
-    col.appendChild(tools);
+    // ── TOP TOOLBAR ROW: horizontal "On this page" (left) + downloads (right) ──
+    var bar = el('div', 'display:flex;align-items:center;gap:18px;flex-wrap:wrap;border-bottom:1px solid #ece5d6;padding-bottom:12px;margin-bottom:16px');
+    var toc = el('div', 'flex:1 1 auto;min-width:0;font:13.5px/1.7 system-ui;color:#2a3b4d');
+    toc.innerHTML = '<span style="font:700 10.5px system-ui;letter-spacing:.06em;text-transform:uppercase;color:#b0a790;margin-right:9px">On this page:</span>' +
+      secs.map(function (s, idx) { return '<a href="#" data-sec="' + idx + '" class="lib-toc" style="color:#2f6f5b;text-decoration:none;font-weight:600;white-space:nowrap">' + esc(s.title || ('Section ' + (idx + 1))) + '</a>'; }).join('<span style="color:#c9bfa8;margin:0 9px">·</span>');
+    var dls = el('div', 'flex:0 0 auto;display:flex;gap:8px;align-items:center');
+    dls.innerHTML = '<button class="btn btn--outline btn--sm" data-a="docx" type="button" style="font-size:12px">Download .docx</button><button class="btn btn--outline btn--sm" data-a="md" type="button" style="font-size:12px">Download markdown</button>';
+    bar.appendChild(toc); bar.appendChild(dls);
+    container.appendChild(bar);
+    // ── FULL-WIDTH CONTENT below: Copy all, then the sections ──
+    var copyRow = el('div', 'margin-bottom:14px');
+    copyRow.innerHTML = '<button class="btn btn--primary btn--sm" data-a="copyall" type="button">Copy all</button>';
+    container.appendChild(copyRow);
+    var col = el('div', 'max-width:100%');
     var api = [];
     secs.forEach(function (s, idx) {
-      var card = el('section', 'background:#fff;border:1px solid #ece5d6;border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.04);padding:16px 20px;margin-bottom:14px'); card.id = 'libsec-' + idx;
+      var card = el('section', 'background:#fff;border:1px solid #ece5d6;border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.04);padding:18px 24px;margin-bottom:14px'); card.id = 'libsec-' + idx;
       var head = el('div', 'display:flex;align-items:center;gap:8px;margin-bottom:8px');
       head.innerHTML = '<h3 class="lib-h" style="flex:1;margin:0">' + esc(s.title || ('Section ' + (idx + 1))) + '</h3><button class="btn btn--outline btn--sm sc-copy" type="button" style="font-size:11.5px;padding:5px 10px">Copy</button><button class="btn btn--outline btn--sm sc-edit" type="button" style="font-size:11.5px;padding:5px 10px">Edit</button>';
-      var rich = el('div', '', '<div class="lib-md">' + mdToHtml(s.body) + '</div>');
+      // comfortable reading measure inside the now-full-width card
+      var rich = el('div', 'max-width:74ch', '<div class="lib-md">' + mdToHtml(s.body) + '</div>');
       var ta = el('textarea'); ta.value = mdToText(s.body); ta.style.cssText = 'display:none;width:100%;min-height:150px;border:1px solid #d8cdb8;border-radius:10px;padding:12px;font:14px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace;box-sizing:border-box;color:#2a3b4d;background:#fffdf8';
       card.appendChild(head); card.appendChild(rich); card.appendChild(ta);
       var editing = false;
@@ -912,28 +919,50 @@
       col.appendChild(card);
       api.push({ title: s.title, get: function () { return ta.value; } });
     });
-    wrap.appendChild(toc); wrap.appendChild(col); container.appendChild(wrap);
+    container.appendChild(col);
     toc.querySelectorAll('[data-sec]').forEach(function (a) { a.onclick = function (e) { e.preventDefault(); var t = document.getElementById('libsec-' + a.getAttribute('data-sec')); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }; });
-    tools.querySelector('[data-a=copyall]').onclick = function () { var all = api.map(function (s) { return (s.title ? s.title + '\n' + '-'.repeat(Math.min(44, (s.title || '').length || 3)) + '\n' : '') + s.get(); }).join('\n\n'); copyText(all, this); };
-    tools.querySelector('[data-a=docx]').onclick = function () { libDownloadDocx(md, type); };
-    tools.querySelector('[data-a=md]').onclick = function () { downloadText(md, (DOC_LABEL[type] || 'document').replace(/\s+/g, '-').toLowerCase() + '.md', 'text/markdown'); };
+    copyRow.querySelector('[data-a=copyall]').onclick = function () { var all = api.map(function (s) { return (s.title ? s.title + '\n' + '-'.repeat(Math.min(44, (s.title || '').length || 3)) + '\n' : '') + s.get(); }).join('\n\n'); copyText(all, this); };
+    dls.querySelector('[data-a=docx]').onclick = function () { libDownloadDocx(md, type); };
+    dls.querySelector('[data-a=md]').onclick = function () { downloadText(md, (DOC_LABEL[type] || 'document').replace(/\s+/g, '-').toLowerCase() + '.md', 'text/markdown'); };
   }
-  function libPoll(id, container, type) {
+  function libPoll(id, container, type, token) {
     var t = setInterval(function () {
+      if (container.__t !== token) { clearInterval(t); return; } // a newer tab render took over
       jGet('/api/compass/jobs/' + id).then(function (j) {
+        if (container.__t !== token) { clearInterval(t); return; }
         if (j.status === 'done') { clearInterval(t); renderWorkspace(container, j.markdown || '', type); }
         else if (j.status === 'error') { clearInterval(t); container.innerHTML = '<div style="padding:16px;background:#f7ece7;border:1px solid #e6c9bb;border-radius:10px;color:#9c5231;font:13.5px system-ui">Generation failed: ' + esc(j.error || '') + '</div>'; }
       }).catch(function () { });
     }, 3000);
   }
   function renderItemInto(it, container) {
+    // Freshness token: switching tabs invalidates any in-flight async render for
+    // the previous tab so a slow fetch can't clobber the newly-selected content.
+    var token = (container.__t = (container.__t || 0) + 1);
+    function fresh() { return container.__t === token; }
     container.innerHTML = '<div style="padding:18px 0;color:#8a8172;font:13px system-ui">Loading…</div>';
     if (it.kind === 'job') {
-      if (it.status === 'done') jGet('/api/compass/jobs/' + it.id).then(function (j) { renderWorkspace(container, j.markdown || '', it.type); });
-      else if (it.status === 'error') container.innerHTML = '<div style="padding:16px;background:#f7ece7;border:1px solid #e6c9bb;border-radius:10px;color:#9c5231;font:13.5px system-ui">This generation failed: ' + esc(it.error || 'unknown') + '. Regenerate it from the source page.</div>';
-      else { container.innerHTML = '<div style="padding:30px;text-align:center;color:#B08D57;font:14px system-ui"><div style="width:26px;height:26px;border:3px solid #eadfca;border-top-color:#B08D57;border-radius:50%;margin:0 auto 12px;animation:libspin .9s linear infinite"></div>' + esc(llmProgress('Generating')) + '<div style="font:12px system-ui;color:#b0a790;margin-top:6px">This keeps running even if you leave the page.</div></div>'; libPoll(it.id, container, it.type); }
-    } else if (it.kind === 'net') { jGet('/api/networking/plans/' + encodeURIComponent(it.name)).then(function (j) { renderWorkspace(container, j.markdown || '', 'networking'); }); }
-    else if (it.kind === 'report') { jGet('/api/reports/' + encodeURIComponent(it.name)).then(function (j) { renderWorkspace(container, j.markdown || j.content || '', 'evaluate'); }).catch(function () { container.innerHTML = '<div style="padding:16px;color:#8a8172">(could not load report)</div>'; }); }
+      if (it.status === 'done') jGet('/api/compass/jobs/' + it.id).then(function (j) { if (fresh()) renderWorkspace(container, j.markdown || '', it.type); });
+      else if (it.status === 'error') {
+        if (!fresh()) return;
+        container.innerHTML = '<div style="padding:16px;background:#f7ece7;border:1px solid #e6c9bb;border-radius:10px;color:#9c5231;font:13.5px system-ui">This generation failed: ' + esc(it.error || 'unknown') + '.</div>';
+        var retry = el('button', 'margin-top:12px', 'Retry generation'); retry.className = 'btn btn--primary btn--sm'; retry.type = 'button';
+        container.appendChild(retry);
+        retry.onclick = function () {
+          retry.disabled = true; retry.textContent = 'Restarting…';
+          jGet('/api/compass/jobs/' + it.id).then(function (j) {
+            return jPost('/api/compass/generate', { type: j.type, company: j.company, role: j.role, url: j.url, jd: j.jd });
+          }).then(function (r) {
+            var nid = r.body && r.body.jobId;
+            if (!nid) { retry.disabled = false; retry.textContent = 'Retry generation'; toastMsg('Could not restart: ' + ((r.body && r.body.error) || r.status), 'info'); return; }
+            it.id = nid; it.status = 'running'; it.error = null;   // re-run in place; poll the new job
+            renderItemInto(it, container);
+          }).catch(function (e) { retry.disabled = false; retry.textContent = 'Retry generation'; toastMsg('Retry error: ' + e, 'info'); });
+        };
+      }
+      else { container.innerHTML = '<div style="padding:30px;text-align:center;color:#B08D57;font:14px system-ui"><div style="width:26px;height:26px;border:3px solid #eadfca;border-top-color:#B08D57;border-radius:50%;margin:0 auto 12px;animation:libspin .9s linear infinite"></div>' + esc(llmProgress('Generating')) + '<div style="font:12px system-ui;color:#b0a790;margin-top:6px">This keeps running even if you leave the page.</div></div>'; libPoll(it.id, container, it.type, token); }
+    } else if (it.kind === 'net') { jGet('/api/networking/plans/' + encodeURIComponent(it.name)).then(function (j) { if (fresh()) renderWorkspace(container, j.markdown || '', 'networking'); }); }
+    else if (it.kind === 'report') { jGet('/api/reports/' + encodeURIComponent(it.name)).then(function (j) { if (fresh()) renderWorkspace(container, j.markdown || j.content || '', 'evaluate'); }).catch(function () { if (fresh()) container.innerHTML = '<div style="padding:16px;color:#8a8172">(could not load report)</div>'; }); }
   }
   function libOpenRole(g) {
     var det = document.getElementById('libDetail'); if (!det) return;
@@ -941,12 +970,15 @@
     var dates = g.items.map(function (i) { return i.created; }).filter(Boolean).sort();
     var when = dates.length ? new Date(dates[dates.length - 1]).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
     var typesLine = g.items.map(function (i) { return DOC_LABEL[i.type] || i.type; }).filter(function (v, idx, arr) { return arr.indexOf(v) === idx; }).join(' · ');
-    det.innerHTML = '<div style="' + CARD + ';padding:22px 26px">' +
-      '<div style="font:700 11px system-ui;letter-spacing:.05em;text-transform:uppercase;color:#B08D57;margin-bottom:5px">Workspace</div>' +
+    det.innerHTML =
+      // 1) BREADCRUMBS at the very top
+      '<div style="font:13px system-ui;color:#8a8172;margin:2px 0 12px"><a href="#" id="libCrumbHome" style="color:#2f6f5b;text-decoration:none;font-weight:600">Library</a> <span style="color:#c9bfa8;margin:0 6px">›</span> <span style="color:#16324F;font-weight:600">' + esc(g.company) + '</span>' + (g.role ? ' <span style="color:#8a8172">· ' + esc(g.role) + '</span>' : '') + '</div>' +
+      '<div style="' + CARD + ';padding:22px 26px">' +
       '<h2 style="font-family:var(--serif,\'Iowan Old Style\',Georgia,serif);font-weight:600;font-size:24px;color:#16324F;margin:0 0 3px;line-height:1.15">' + esc(g.company) + (g.role ? ' <span style="color:#8a8172;font-weight:500">— ' + esc(g.role) + '</span>' : '') + '</h2>' +
       '<div style="font:12.5px system-ui;color:#8a8172;margin-bottom:16px">' + esc(typesLine) + (when ? ' · ' + esc(when) : '') + '</div>' +
       '<div id="libTabs" style="display:flex;gap:7px;flex-wrap:wrap;border-bottom:1px solid #ece5d6;padding-bottom:14px;margin-bottom:16px"></div>' +
       '<div id="libArt"></div></div>';
+    var home = det.querySelector('#libCrumbHome'); if (home) home.onclick = function (e) { e.preventDefault(); var root = document.getElementById('libRoot'); window.scrollTo({ top: root ? root.offsetTop - 20 : 0, behavior: 'smooth' }); };
     var tabsEl = det.querySelector('#libTabs'), artEl = det.querySelector('#libArt');
     g.items.forEach(function (it) {
       var b = el('button'); b.type = 'button'; b.className = 'lib-tab';
