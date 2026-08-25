@@ -36,6 +36,9 @@ export const KNOWN_KEYS = [
   // ── Server runtime ──
   'PORT',
   'HOST',
+  // COMPASS FORK — surfaced so the native Compass Setup panel (and the SPA
+  // config view) can set the LLM request timeout live via POST /api/config.
+  'LLM_TIMEOUT_MS',
 ];
 
 /**
@@ -124,6 +127,7 @@ export const KEY_GROUPS = {
   HERMES_MODEL: 'core',
   PORT: 'runtime',
   HOST: 'runtime',
+  LLM_TIMEOUT_MS: 'runtime',
 };
 
 /** Keys whose values are secret and must never be returned in plain text. */
@@ -305,6 +309,9 @@ export function validateConfig(body) {
     }
     if (k === 'PORT' && /^\d{1,5}$/.test(v) && (Number(v) < 1 || Number(v) > 65535)) {
       errors.push(`PORT: must be 1-65535 — ${v} is outside the valid TCP port range.`);
+    }
+    if (k === 'LLM_TIMEOUT_MS' && (!/^\d{3,7}$/.test(v) || Number(v) < 1000)) {
+      errors.push(`LLM_TIMEOUT_MS: must be milliseconds — a whole number ≥ 1000 (e.g. 600000 for 10 min); ${showVal(k, v)}.`);
     }
     if (k === 'HOST' && !/^[a-zA-Z0-9.:_-]+$/.test(v)) {
       errors.push(`HOST: invalid hostname/ip — only letters, digits and the characters . : - _ are allowed (e.g. 127.0.0.1 for loopback, or 0.0.0.0 to expose on your LAN); ${showVal(k, v)}.`);
