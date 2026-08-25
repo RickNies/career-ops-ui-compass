@@ -110,13 +110,27 @@
 
   var page = (location.pathname.split('/').pop() || '').toLowerCase();
 
-  // Add a "Library" link to the top nav on every Compass page.
-  function injectNav() {
-    var anchor = document.querySelector('nav a[href="dashboard.html"], .nav a[href="dashboard.html"], a[href="saved.html"]');
-    if (!anchor || !anchor.parentNode || anchor.parentNode.querySelector('a[href="library.html"]')) return;
-    var a = document.createElement('a'); a.href = 'library.html'; a.textContent = 'Library';
-    if (page === 'library.html') a.className = 'active';
-    anchor.parentNode.insertBefore(a, anchor.nextSibling);
+  // CANONICAL nav — rebuilt identically on EVERY Compass page so the item set,
+  // order, styling and active-highlight are consistent (fixes per-page drift +
+  // the JS-injected Library link that missed the active state). Active is driven
+  // by the current page. Uses the mockups' `.nav a.active{background:ink;color:#fff}`
+  // blue-button style, which every page's CSS already defines.
+  var NAV_ITEMS = [
+    { href: 'dashboard.html', label: 'Dashboard' },
+    { href: 'jobs.html', label: 'Jobs' },
+    { href: 'saved.html', label: 'My Jobs' },
+    { href: 'documents.html', label: 'Documents' },
+    { href: 'outreach.html', label: 'Outreach' },
+    { href: 'library.html', label: 'Library' },
+    { href: 'setup.html', label: 'Setup' }
+  ];
+  function renderNav() {
+    var nav = document.querySelector('nav.nav') || document.querySelector('.nav');
+    if (!nav) return;
+    var cur = page || 'dashboard.html';
+    nav.innerHTML = NAV_ITEMS.map(function (n) { return '<a href="' + n.href + '"' + (n.href === cur ? ' class="active"' : '') + '>' + esc(n.label) + '</a>'; }).join('');
+    // Setup is now a first-class nav item — hide the redundant gear icon if present.
+    var gear = document.querySelector('.gear'); if (gear) gear.style.display = 'none';
   }
 
   // ======================= JOBS ============================================
@@ -964,33 +978,46 @@
     } else if (it.kind === 'net') { jGet('/api/networking/plans/' + encodeURIComponent(it.name)).then(function (j) { if (fresh()) renderWorkspace(container, j.markdown || '', 'networking'); }); }
     else if (it.kind === 'report') { jGet('/api/reports/' + encodeURIComponent(it.name)).then(function (j) { if (fresh()) renderWorkspace(container, j.markdown || j.content || '', 'evaluate'); }).catch(function () { if (fresh()) container.innerHTML = '<div style="padding:16px;color:#8a8172">(could not load report)</div>'; }); }
   }
-  function libOpenRole(g) {
+  // Every job's generations grouped together; evaluations are their own labeled sub-group.
+  var SUBGROUPS = [{ key: 'application', label: 'Application materials' }, { key: 'evaluation', label: 'Evaluation' }];
+  function subGroupOf(type) { return type === 'evaluate' ? 'evaluation' : 'application'; }
+  function statusDot(st) { return st === 'done' ? '#2f6f5b' : (st === 'error' ? '#9c5231' : '#B08D57'); }
+  function libOpenRole(g, focusItem) {
     var det = document.getElementById('libDetail'); if (!det) return;
     ensureLibStyles();
     var dates = g.items.map(function (i) { return i.created; }).filter(Boolean).sort();
     var when = dates.length ? new Date(dates[dates.length - 1]).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
-    var typesLine = g.items.map(function (i) { return DOC_LABEL[i.type] || i.type; }).filter(function (v, idx, arr) { return arr.indexOf(v) === idx; }).join(' · ');
     det.innerHTML =
-      // 1) BREADCRUMBS at the very top
       '<div style="font:13px system-ui;color:#8a8172;margin:2px 0 12px"><a href="#" id="libCrumbHome" style="color:#2f6f5b;text-decoration:none;font-weight:600">Library</a> <span style="color:#c9bfa8;margin:0 6px">›</span> <span style="color:#16324F;font-weight:600">' + esc(g.company) + '</span>' + (g.role ? ' <span style="color:#8a8172">· ' + esc(g.role) + '</span>' : '') + '</div>' +
       '<div style="' + CARD + ';padding:22px 26px">' +
       '<h2 style="font-family:var(--serif,\'Iowan Old Style\',Georgia,serif);font-weight:600;font-size:24px;color:#16324F;margin:0 0 3px;line-height:1.15">' + esc(g.company) + (g.role ? ' <span style="color:#8a8172;font-weight:500">— ' + esc(g.role) + '</span>' : '') + '</h2>' +
-      '<div style="font:12.5px system-ui;color:#8a8172;margin-bottom:16px">' + esc(typesLine) + (when ? ' · ' + esc(when) : '') + '</div>' +
-      '<div id="libTabs" style="display:flex;gap:7px;flex-wrap:wrap;border-bottom:1px solid #ece5d6;padding-bottom:14px;margin-bottom:16px"></div>' +
+      '<div style="font:12.5px system-ui;color:#8a8172;margin-bottom:16px">' + (when ? esc(when) : '') + '</div>' +
+      '<div id="libTabs" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-bottom:1px solid #ece5d6;padding-bottom:14px;margin-bottom:16px"></div>' +
       '<div id="libArt"></div></div>';
     var home = det.querySelector('#libCrumbHome'); if (home) home.onclick = function (e) { e.preventDefault(); var root = document.getElementById('libRoot'); window.scrollTo({ top: root ? root.offsetTop - 20 : 0, behavior: 'smooth' }); };
     var tabsEl = det.querySelector('#libTabs'), artEl = det.querySelector('#libArt');
-    g.items.forEach(function (it) {
-      var b = el('button'); b.type = 'button'; b.className = 'lib-tab';
-      var dot = it.status === 'done' ? '#2f6f5b' : (it.status === 'error' ? '#9c5231' : '#B08D57');
-      b.innerHTML = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:' + dot + ';margin-right:7px;vertical-align:middle"></span>' + esc(DOC_LABEL[it.type] || it.type);
-      b.style.cssText = 'border:1px solid #e6ddc9;background:#fff;color:#2a3b4d;border-radius:999px;padding:7px 14px;font:600 12.5px system-ui;cursor:pointer';
-      b.onclick = function () { tabsEl.querySelectorAll('.lib-tab').forEach(function (x) { x.style.background = '#fff'; x.style.color = '#2a3b4d'; x.style.borderColor = '#e6ddc9'; }); b.style.background = '#16324F'; b.style.color = '#fff'; b.style.borderColor = '#16324F'; renderItemInto(it, artEl); };
-      tabsEl.appendChild(b);
+    var tabButtons = [];
+    function setActive(btn) { tabsEl.querySelectorAll('.lib-tab').forEach(function (x) { x.style.background = '#fff'; x.style.color = '#2a3b4d'; x.style.borderColor = '#e6ddc9'; }); btn.style.background = '#16324F'; btn.style.color = '#fff'; btn.style.borderColor = '#16324F'; }
+    // tabs grouped by sub-group, with a small label before each cluster (consistent with the list)
+    SUBGROUPS.forEach(function (sg) {
+      var arts = g.items.filter(function (it) { return subGroupOf(it.type) === sg.key; });
+      if (!arts.length) return;
+      var lbl = el('span', 'font:700 10px system-ui;letter-spacing:.05em;text-transform:uppercase;color:#b0a790;margin:0 4px 0 2px'); lbl.textContent = sg.label;
+      tabsEl.appendChild(lbl);
+      arts.forEach(function (it) {
+        var b = el('button'); b.type = 'button'; b.className = 'lib-tab';
+        b.innerHTML = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:' + statusDot(it.status) + ';margin-right:7px;vertical-align:middle"></span>' + esc(DOC_LABEL[it.type] || it.type);
+        b.style.cssText = 'border:1px solid #e6ddc9;background:#fff;color:#2a3b4d;border-radius:999px;padding:7px 14px;font:600 12.5px system-ui;cursor:pointer';
+        b.onclick = function () { setActive(b); renderItemInto(it, artEl); };
+        tabsEl.appendChild(b);
+        tabButtons.push({ item: it, btn: b });
+      });
     });
-    var def = g.items.find(function (i) { return i.status === 'done'; }) || g.items.find(function (i) { return i.status === 'running' || i.status === 'queued'; }) || g.items[0];
-    var defBtn = tabsEl.querySelectorAll('.lib-tab')[g.items.indexOf(def)];
-    if (defBtn) defBtn.click();
+    var target = (focusItem && tabButtons.find(function (t) { return t.item === focusItem; }))
+      || tabButtons.find(function (t) { return t.item.status === 'done'; })
+      || tabButtons.find(function (t) { return t.item.status === 'running' || t.item.status === 'queued'; })
+      || tabButtons[0];
+    if (target) target.btn.click();
     try { window.scrollTo({ top: det.offsetTop - 20, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, det.offsetTop - 20); }
   }
   function wireLibrary() {
@@ -1003,28 +1030,45 @@
       jGet('/api/reports').catch(function () { return { reports: [] }; })
     ]).then(function (a) {
       var jobsL = (a[0] && a[0].jobs) || [], plans = (a[1] && a[1].plans) || [], reports = (a[2] && (a[2].reports || a[2])) || [];
-      var groups = {};
-      function grp(company, role) { var k = (company || '').toLowerCase().trim() + '|' + (role || '').toLowerCase().trim(); if (!groups[k]) groups[k] = { company: company || '(unknown)', role: role || '', items: [] }; return groups[k]; }
+      var groups = {}, order = [];
+      function grp(company, role) { var k = (company || '').toLowerCase().trim() + '|' + (role || '').toLowerCase().trim(); if (!groups[k]) { groups[k] = { key: k, company: company || '(unknown)', role: role || '', items: [] }; order.push(k); } return groups[k]; }
       jobsL.forEach(function (j) { grp(j.company, j.role).items.push({ kind: 'job', type: j.type, status: j.status, id: j.id, provider: j.provider, model: j.model, error: j.error, created: j.created }); });
       plans.forEach(function (p) { grp('Saved networking plans', '').items.push({ kind: 'net', type: 'networking', status: 'done', name: p.name }); });
-      (Array.isArray(reports) ? reports : []).slice(0, 40).forEach(function (r) { var name = r.slug || r.name || r; grp('Saved evaluations (reports/)', '').items.push({ kind: 'report', type: 'evaluate', status: 'done', name: name }); });
-      var keys = Object.keys(groups);
-      if (!keys.length) { root.innerHTML = '<div style="font:14px system-ui;color:#8a8172;padding:20px 0">No generated content yet. Generate a tailored CV, cover letter, evaluation, or networking plan (from Documents / a job / Outreach) and it appears here — even while still running.</div>'; return; }
-      root.innerHTML = keys.map(function (k) {
+      (Array.isArray(reports) ? reports : []).slice(0, 40).forEach(function (r) { var name = r.slug || r.name || r; grp('Saved evaluations', '').items.push({ kind: 'report', type: 'evaluate', status: 'done', name: name }); });
+      if (!order.length) { root.innerHTML = '<div style="font:14px system-ui;color:#8a8172;padding:20px 0">No generated content yet. Generate a tailored CV, cover letter, evaluation, or networking plan (from Documents, a job, or Outreach) and it appears here — even while still running.</div>'; return; }
+      // ── per-JOB card: header (Company — Role · date/status) + labeled sub-groups ──
+      root.innerHTML = order.map(function (k) {
         var g = groups[k];
-        var chips = g.items.map(function (it) { var col = it.status === 'done' ? '#2f6f5b' : (it.status === 'error' ? '#9c5231' : '#B08D57'); return '<span style="display:inline-block;margin:2px 6px 2px 0;padding:2px 9px;border-radius:999px;background:#f6f1e6;color:' + col + ';font:600 11.5px system-ui">' + esc(DOC_LABEL[it.type] || it.type) + ' · ' + esc(it.status) + '</span>'; }).join('');
-        return '<div class="lib-role" data-key="' + esc(k) + '" style="' + CARD + ';padding:16px 18px;cursor:pointer;margin-bottom:10px"><div style="font:600 15px system-ui;color:#16324F">' + esc(g.company) + (g.role ? ' — <span style="font-weight:500;color:#6b6255">' + esc(g.role) + '</span>' : '') + '</div><div style="margin-top:8px">' + chips + '</div></div>';
-      }).join('') + '<div id="libDetail" style="margin-top:16px"></div>';
-      root.querySelectorAll('.lib-role').forEach(function (card) { card.onclick = function () { libOpenRole(groups[card.getAttribute('data-key')]); }; });
-      var running = keys.map(function (k) { return groups[k]; }).find(function (g) { return g.items.some(function (i) { return i.status === 'running' || i.status === 'queued'; }); });
+        var jdates = g.items.map(function (i) { return i.created; }).filter(Boolean).sort();
+        var when = jdates.length ? new Date(jdates[jdates.length - 1]).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+        var note = g.items.some(function (i) { return i.status === 'running' || i.status === 'queued'; }) ? '· generating…' : (g.items.some(function (i) { return i.status === 'error'; }) ? '· needs attention' : '');
+        var subs = SUBGROUPS.map(function (sg) {
+          var arts = g.items.map(function (it, idx) { return { it: it, idx: idx }; }).filter(function (x) { return subGroupOf(x.it.type) === sg.key; });
+          if (!arts.length) return '';
+          return '<div style="padding:2px 20px 14px">' +
+            '<div style="font:700 10.5px system-ui;letter-spacing:.05em;text-transform:uppercase;color:#b0a790;margin:6px 0 9px">' + esc(sg.label) + '</div>' +
+            '<div style="display:flex;flex-wrap:wrap;gap:9px">' + arts.map(function (x) {
+              var it = x.it;
+              return '<button class="lib-art" type="button" data-key="' + esc(k) + '" data-idx="' + x.idx + '" style="border:1px solid #e6ddc9;background:#fff;color:#16324F;border-radius:11px;padding:9px 14px;font:600 13px system-ui;cursor:pointer;display:inline-flex;align-items:center;gap:8px">' +
+                '<span style="width:7px;height:7px;border-radius:50%;background:' + statusDot(it.status) + '"></span>' + esc(DOC_LABEL[it.type] || it.type) +
+                (it.status !== 'done' ? ' <span style="font-weight:500;color:#8a8172">· ' + esc(it.status) + '</span>' : '') + '</button>';
+            }).join('') + '</div></div>';
+        }).join('');
+        return '<div class="lib-job" style="' + CARD + ';padding:0;margin-bottom:14px;overflow:hidden">' +
+          '<div style="padding:16px 20px 4px;border-bottom:1px solid #f3eee1">' +
+          '<div style="font-family:var(--serif,\'Iowan Old Style\',Georgia,serif);font-weight:600;font-size:17px;color:#16324F">' + esc(g.company) + (g.role ? ' <span style="color:#8a8172;font-weight:500">— ' + esc(g.role) + '</span>' : '') + '</div>' +
+          '<div style="font:12px system-ui;color:#8a8172;margin:3px 0 10px">' + (when ? esc(when) + ' ' : '') + esc(note) + '</div></div>' + subs + '</div>';
+      }).join('') + '<div id="libDetail" style="margin-top:22px"></div>';
+      root.querySelectorAll('.lib-art').forEach(function (btn) { btn.onclick = function () { var g = groups[btn.getAttribute('data-key')]; libOpenRole(g, g.items[+btn.getAttribute('data-idx')]); }; });
+      var running = order.map(function (k) { return groups[k]; }).find(function (g) { return g.items.some(function (i) { return i.status === 'running' || i.status === 'queued'; }); });
       if (running) libOpenRole(running);
     });
-    banner('Generated-content Library — roles with AI content (background jobs + saved networking plans + evaluation reports). Click a role to read each artifact; Download exports a .docx of the REAL content; running jobs update live.');
+    banner('Generated-content Library — grouped by job. Each card shows that job’s Application materials (CV / cover / networking) and Evaluation together. Click any artifact to open the workspace; running jobs update live and errors offer Retry.');
   }
 
   // ======================= dispatch ========================================
   Promise.all([loadDead(), loadProvider()]).then(function () {
-    injectNav();
+    renderNav();
     if (page === 'jobs.html') wireJobs();
     else if (page === 'library.html') wireLibrary();
     else if (page === 'dashboard.html' || page === '' || page === 'compass') wireDash();

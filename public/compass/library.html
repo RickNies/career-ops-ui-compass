@@ -13,12 +13,14 @@
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif}
+  /* canonical Compass topbar/nav — IDENTICAL to the other pages */
   .topbar{position:sticky;top:0;z-index:20;background:rgba(246,243,236,.85);backdrop-filter:saturate(180%) blur(10px);border-bottom:1px solid var(--line)}
-  nav{max-width:1080px;margin:0 auto;display:flex;align-items:center;gap:20px;padding:13px 24px}
-  nav .brand{font-family:var(--serif);font-weight:600;font-size:18px;color:var(--ink);margin-right:8px}
-  nav a{color:var(--ink-soft);text-decoration:none;font-size:14px;font-weight:500;padding:4px 2px;border-bottom:2px solid transparent}
-  nav a:hover{color:var(--ink)}
-  nav a.active{color:var(--ink);border-bottom-color:var(--gold)}
+  .topbar-in{max-width:1080px;margin:0 auto;display:flex;align-items:center;gap:28px;padding:14px 22px}
+  .brand{display:flex;align-items:center;gap:8px;font-family:var(--serif);font-weight:600;font-size:18px;color:var(--ink);text-decoration:none}
+  .nav{display:flex;gap:6px;margin-left:6px;flex-wrap:wrap}
+  .nav a{padding:8px 14px;border-radius:999px;color:var(--ink-soft);font-weight:500;font-size:14.5px;text-decoration:none}
+  .nav a:hover{background:var(--line-soft)}
+  .nav a.active{background:var(--ink);color:#fff}
   .wrap{max-width:1080px;margin:0 auto;padding:26px 24px 90px}
   h1{font-family:var(--serif);font-weight:600;font-size:27px;line-height:1.15;margin:4px 0 6px}
   .lede{color:var(--muted);font-size:14px;margin-bottom:18px}
@@ -35,15 +37,10 @@
 </style>
 </head>
 <body>
-  <div class="topbar"><nav>
-    <span class="brand">Compass</span>
-    <a href="dashboard.html">Home</a>
-    <a href="jobs.html">Jobs</a>
-    <a href="saved.html">My Jobs</a>
-    <a href="documents.html">Documents</a>
-    <a href="outreach.html">Outreach</a>
-    <a href="setup.html">Setup</a>
-  </nav></div>
+  <header class="topbar"><div class="topbar-in">
+    <a href="dashboard.html" class="brand">Compass</a>
+    <nav class="nav"><!-- filled by wire.js renderNav() (canonical, active by page) --></nav>
+  </div></header>
   <main class="wrap">
     <h1>Generated content</h1>
     <div class="lede">Every AI generation — tailored CVs, cover letters, evaluations, networking plans — grouped by role. Jobs run in the background and keep going if you navigate away.</div>
