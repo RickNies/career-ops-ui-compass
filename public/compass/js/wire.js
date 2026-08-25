@@ -778,50 +778,188 @@
     banner('AI networking plan — who to contact + clickable LinkedIn people-search links + drafted messages, grounded in your CV/profile. It finds the RIGHT PEOPLE TO SEARCH FOR; it does NOT scrape names or emails. Running on ' + llmDesc() + '.');
   }
 
-  // ======================= LIBRARY (generated content) =====================
+  // ======================= LIBRARY (generated-content workspace) ===========
   var DOC_LABEL = { tailor: 'Tailored CV', cover: 'Cover letter', evaluate: 'Evaluation', networking: 'Networking plan' };
   function libDownloadDocx(md, type) {
     fetch('/api/export/docx', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ markdown: md, title: DOC_LABEL[type] || 'document' }) })
-      .then(function (r) { return r.blob(); }).then(function (blob) { var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = (DOC_LABEL[type] || 'document').replace(/\s+/g, '-').toLowerCase() + '.docx'; document.body.appendChild(a); a.click(); a.remove(); toastMsg('Downloaded .docx', 'success'); })
+      .then(function (r) { return r.blob(); }).then(function (blob) { downloadBlob(blob, (DOC_LABEL[type] || 'document').replace(/\s+/g, '-').toLowerCase() + '.docx'); toastMsg('Downloaded .docx', 'success'); })
       .catch(function (e) { toastMsg('Export failed: ' + e, 'info'); });
   }
-  function libRenderArtifact(body, md, type) {
-    if (!md) { body.textContent = '(empty result)'; return; }
-    body.innerHTML = '';
-    var content = el('div'); body.appendChild(content);
-    if (type === 'networking' && typeof renderPlan === 'function') renderPlan(content, md);
-    else content.innerHTML = '<div style="white-space:pre-wrap;max-height:440px;overflow:auto;background:#faf7f0;border:1px solid #e6ddc9;border-radius:10px;padding:12px">' + esc(md) + '</div>';
-    var dl = el('div', 'margin-top:8px', '<button class="btn btn--primary btn--sm lib-dl" type="button">Download .docx</button>'); body.appendChild(dl);
-    dl.querySelector('.lib-dl').onclick = function () { libDownloadDocx(md, type); };
+  function downloadBlob(blob, name) { var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
+  function downloadText(text, name, mime) { downloadBlob(new Blob([text], { type: mime || 'text/plain' }), name); }
+  function copyText(text, btn) {
+    function ok() { if (btn) { var o = btn.textContent; btn.textContent = 'Copied ✓'; setTimeout(function () { btn.textContent = o; }, 1400); } toastMsg('Copied to clipboard', 'success'); }
+    function fb() { try { var ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;left:-9999px;top:0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); ok(); } catch (e) { toastMsg('Copy failed — select the text manually', 'info'); } }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(ok, fb); else fb();
   }
-  function libPoll(id, body, type) {
+
+  // ---- CSP-safe markdown → rich HTML (escape-first; no external libs) ----
+  function mdInlineRich(s) {
+    s = esc(s);
+    s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+    s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
+    s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    return s;
+  }
+  function libRenderTable(rows) {
+    var clean = rows.map(function (r) { return r.trim().replace(/^\|/, '').replace(/\|$/, ''); });
+    var header = clean[0].split('|').map(function (c) { return c.trim(); });
+    var body = clean.slice(2).map(function (r) { return r.split('|').map(function (c) { return c.trim(); }); });
+    function cellHtml(c) {
+      var h = mdInlineRich(c);
+      if (/site:linkedin|linkedin\.com\/in|"[^"]+"\s+AND/i.test(c) && typeof linkedinUrl === 'function') h += ' <a href="' + linkedinUrl(cleanSearch(c)) + '" target="_blank" rel="noopener" title="Search on LinkedIn" style="white-space:nowrap;color:#2f6f5b;font-weight:700;text-decoration:none">🔎</a>';
+      return h;
+    }
+    return '<div class="tbl-wrap"><table><thead><tr>' + header.map(function (c) { return '<th>' + mdInlineRich(c) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      body.map(function (cells) { return '<tr>' + cells.map(function (c) { return '<td>' + cellHtml(c) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>';
+  }
+  function mdToHtml(md) {
+    var lines = String(md || '').replace(/\r/g, '').split('\n'), html = '', i = 0, listType = null, buf = [];
+    function closeList() { if (listType) { html += '<' + listType + '>' + buf.join('') + '</' + listType + '>'; listType = null; buf = []; } }
+    while (i < lines.length) {
+      var t = lines[i].replace(/\s+$/, '');
+      if (/^\s*\|.*\|?\s*$/.test(t) && i + 1 < lines.length && /^[\s|:\-]+$/.test(lines[i + 1]) && lines[i + 1].indexOf('-') >= 0) {
+        closeList(); var rows = []; while (i < lines.length && /^\s*\|/.test(lines[i])) { rows.push(lines[i]); i++; } html += libRenderTable(rows); continue;
+      }
+      if (/^\s*#{1,6}\s+/.test(t)) { closeList(); var lvl = t.match(/^\s*#+/)[0].trim().length; var tag = lvl <= 1 ? 'h2' : (lvl === 2 ? 'h3' : 'h4'); html += '<' + tag + '>' + mdInlineRich(t.replace(/^\s*#{1,6}\s+/, '')) + '</' + tag + '>'; i++; continue; }
+      if (/^\s*[-*+]\s+/.test(t)) { if (listType !== 'ul') { closeList(); listType = 'ul'; } buf.push('<li>' + mdInlineRich(t.replace(/^\s*[-*+]\s+/, '')) + '</li>'); i++; continue; }
+      if (/^\s*\d+\.\s+/.test(t)) { if (listType !== 'ol') { closeList(); listType = 'ol'; } buf.push('<li>' + mdInlineRich(t.replace(/^\s*\d+\.\s+/, '')) + '</li>'); i++; continue; }
+      if (/^\s*>\s?/.test(t)) { closeList(); html += '<blockquote>' + mdInlineRich(t.replace(/^\s*>\s?/, '')) + '</blockquote>'; i++; continue; }
+      if (/^\s*(---+|\*\*\*+|___+)\s*$/.test(t)) { closeList(); html += '<hr>'; i++; continue; }
+      if (t.trim() === '') { closeList(); i++; continue; }
+      closeList(); var para = [t]; i++;
+      while (i < lines.length && lines[i].trim() !== '' && !/^\s*(#{1,6}\s|[-*+]\s|\d+\.\s|>|\|)/.test(lines[i]) && !/^\s*(---+|\*\*\*+|___+)\s*$/.test(lines[i])) { para.push(lines[i].replace(/\s+$/, '')); i++; }
+      html += '<p>' + mdInlineRich(para.join(' ')) + '</p>';
+    }
+    closeList(); return html;
+  }
+  function textInline(s) { return String(s).replace(/`([^`]+)`/g, '$1').replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*([^*\n]+)\*/g, '$1').replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '$1 ($2)'); }
+  function mdToText(md) {
+    var lines = String(md || '').replace(/\r/g, '').split('\n'), out = [], i = 0;
+    while (i < lines.length) {
+      var t = lines[i];
+      if (/^\s*\|/.test(t) && i + 1 < lines.length && /^[\s|:\-]+$/.test(lines[i + 1]) && lines[i + 1].indexOf('-') >= 0) {
+        var rows = []; while (i < lines.length && /^\s*\|/.test(lines[i])) { rows.push(lines[i]); i++; }
+        rows.forEach(function (r, idx) { if (idx === 1) return; var cells = r.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(function (c) { return textInline(c.trim()); }).filter(function (x) { return x !== ''; }); if (cells.length) out.push(cells.join('  ·  ')); });
+        continue;
+      }
+      if (/^\s*#{1,6}\s+/.test(t)) { out.push(textInline(t.replace(/^\s*#{1,6}\s+/, ''))); i++; continue; }
+      if (/^\s*[-*+]\s+/.test(t)) { out.push('• ' + textInline(t.replace(/^\s*[-*+]\s+/, ''))); i++; continue; }
+      if (/^\s*\d+\.\s+/.test(t)) { out.push(textInline(t.trim())); i++; continue; }
+      if (/^\s*>\s?/.test(t)) { out.push(textInline(t.replace(/^\s*>\s?/, ''))); i++; continue; }
+      if (/^\s*(---+|\*\*\*+|___+)\s*$/.test(t)) { out.push(''); i++; continue; }
+      out.push(textInline(t)); i++;
+    }
+    return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+  function splitSectionsFull(md) {
+    md = String(md || '').replace(/\r/g, '');
+    var all = [], re = /^(#{1,6})\s+(.+)$/gm, m;
+    while ((m = re.exec(md))) all.push({ level: m[1].length, title: m[2].trim(), start: m.index, end: m.index + m[0].length });
+    var levels = all.map(function (h) { return h.level; });
+    var secLevel = levels.indexOf(2) >= 0 ? 2 : (levels.indexOf(3) >= 0 ? 3 : (all.length ? Math.min.apply(null, levels) : 0));
+    var heads = all.filter(function (h) { return h.level === secLevel; });
+    if (!heads.length) return [{ title: 'Content', body: md.trim() }];
+    var secs = [];
+    if (heads[0].start > 0) { var pre = md.slice(0, heads[0].start).trim(); if (pre) secs.push({ title: 'Overview', body: pre }); }
+    for (var k = 0; k < heads.length; k++) secs.push({ title: heads[k].title, body: md.slice(heads[k].end, k + 1 < heads.length ? heads[k + 1].start : md.length).trim() });
+    return secs;
+  }
+  function ensureLibStyles() {
+    if (document.getElementById('compassLibStyles')) return;
+    var st = document.createElement('style'); st.id = 'compassLibStyles';
+    st.textContent = '@keyframes libspin{to{transform:rotate(360deg)}}' +
+      '.lib-md{font:15px/1.72 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:#2a3b4d;word-wrap:break-word}' +
+      '.lib-md h2{font-family:var(--serif,"Iowan Old Style",Georgia,serif);font-weight:600;font-size:20px;color:#16324F;margin:18px 0 8px;line-height:1.25}' +
+      '.lib-md h3,.lib-md h4{font-family:var(--serif,"Iowan Old Style",Georgia,serif);font-weight:600;color:#16324F;margin:14px 0 6px;font-size:16px}' +
+      '.lib-md p{margin:9px 0}.lib-md ul,.lib-md ol{margin:9px 0;padding-left:22px}.lib-md li{margin:4px 0}' +
+      '.lib-md strong{color:#16324F;font-weight:650}.lib-md a{color:#2f6f5b}' +
+      '.lib-md blockquote{border-left:3px solid #d8cdb8;margin:10px 0;padding:2px 14px;color:#6b6255}' +
+      '.lib-md code{background:#f6f1e6;padding:1px 5px;border-radius:5px;font-size:13px}' +
+      '.lib-md hr{border:none;border-top:1px solid #ece5d6;margin:16px 0}' +
+      '.lib-md .tbl-wrap{overflow-x:auto;margin:11px 0}.lib-md table{border-collapse:collapse;font-size:13.5px;width:100%}' +
+      '.lib-md th,.lib-md td{border:1px solid #e6ddc9;padding:6px 10px;text-align:left;vertical-align:top}.lib-md th{background:#faf7f0;color:#16324F}' +
+      '.lib-h{font-family:var(--serif,"Iowan Old Style",Georgia,serif);font-weight:600;font-size:17px;color:#16324F}' +
+      '.lib-toc:hover{color:#16324F;border-left-color:#B08D57 !important}';
+    document.head.appendChild(st);
+  }
+  function renderWorkspace(container, md, type) {
+    md = String(md || '');
+    if (!md.trim()) { container.innerHTML = '<div style="padding:16px;color:#8a8172;font:14px system-ui">(empty result)</div>'; return; }
+    ensureLibStyles();
+    var secs = splitSectionsFull(md);
+    container.innerHTML = '';
+    var wrap = el('div', 'display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap');
+    var toc = el('nav', 'flex:0 0 186px;position:sticky;top:74px;max-height:calc(100vh - 100px);overflow:auto');
+    toc.innerHTML = '<div style="font:700 10.5px system-ui;letter-spacing:.06em;text-transform:uppercase;color:#b0a790;margin-bottom:8px">On this page</div>' +
+      secs.map(function (s, idx) { return '<a href="#" data-sec="' + idx + '" class="lib-toc" style="display:block;padding:4px 0 4px 10px;color:#2a3b4d;text-decoration:none;border-left:2px solid #ece5d6;font:13px/1.4 system-ui">' + esc(s.title || ('Section ' + (idx + 1))) + '</a>'; }).join('');
+    var col = el('div', 'flex:1 1 460px;min-width:0;max-width:72ch');
+    var tools = el('div', 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px');
+    tools.innerHTML = '<button class="btn btn--primary btn--sm" data-a="copyall" type="button">Copy all</button><span style="flex:1"></span><span style="font:11px system-ui;color:#b0a790">download</span><button class="btn btn--outline btn--sm" data-a="docx" type="button" style="font-size:12px">.docx</button><button class="btn btn--outline btn--sm" data-a="md" type="button" style="font-size:12px">.md</button>';
+    col.appendChild(tools);
+    var api = [];
+    secs.forEach(function (s, idx) {
+      var card = el('section', 'background:#fff;border:1px solid #ece5d6;border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.04);padding:16px 20px;margin-bottom:14px'); card.id = 'libsec-' + idx;
+      var head = el('div', 'display:flex;align-items:center;gap:8px;margin-bottom:8px');
+      head.innerHTML = '<h3 class="lib-h" style="flex:1;margin:0">' + esc(s.title || ('Section ' + (idx + 1))) + '</h3><button class="btn btn--outline btn--sm sc-copy" type="button" style="font-size:11.5px;padding:5px 10px">Copy</button><button class="btn btn--outline btn--sm sc-edit" type="button" style="font-size:11.5px;padding:5px 10px">Edit</button>';
+      var rich = el('div', '', '<div class="lib-md">' + mdToHtml(s.body) + '</div>');
+      var ta = el('textarea'); ta.value = mdToText(s.body); ta.style.cssText = 'display:none;width:100%;min-height:150px;border:1px solid #d8cdb8;border-radius:10px;padding:12px;font:14px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace;box-sizing:border-box;color:#2a3b4d;background:#fffdf8';
+      card.appendChild(head); card.appendChild(rich); card.appendChild(ta);
+      var editing = false;
+      head.querySelector('.sc-edit').onclick = function () { editing = !editing; rich.style.display = editing ? 'none' : ''; ta.style.display = editing ? 'block' : 'none'; this.textContent = editing ? 'Done' : 'Edit'; if (editing) ta.focus(); };
+      head.querySelector('.sc-copy').onclick = function () { copyText(ta.value, this); };
+      col.appendChild(card);
+      api.push({ title: s.title, get: function () { return ta.value; } });
+    });
+    wrap.appendChild(toc); wrap.appendChild(col); container.appendChild(wrap);
+    toc.querySelectorAll('[data-sec]').forEach(function (a) { a.onclick = function (e) { e.preventDefault(); var t = document.getElementById('libsec-' + a.getAttribute('data-sec')); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }; });
+    tools.querySelector('[data-a=copyall]').onclick = function () { var all = api.map(function (s) { return (s.title ? s.title + '\n' + '-'.repeat(Math.min(44, (s.title || '').length || 3)) + '\n' : '') + s.get(); }).join('\n\n'); copyText(all, this); };
+    tools.querySelector('[data-a=docx]').onclick = function () { libDownloadDocx(md, type); };
+    tools.querySelector('[data-a=md]').onclick = function () { downloadText(md, (DOC_LABEL[type] || 'document').replace(/\s+/g, '-').toLowerCase() + '.md', 'text/markdown'); };
+  }
+  function libPoll(id, container, type) {
     var t = setInterval(function () {
       jGet('/api/compass/jobs/' + id).then(function (j) {
-        if (j.status === 'done') { clearInterval(t); libRenderArtifact(body, j.markdown || '', type); }
-        else if (j.status === 'error') { clearInterval(t); body.innerHTML = '<span style="color:#9c5231">error: ' + esc(j.error || '') + '</span>'; }
+        if (j.status === 'done') { clearInterval(t); renderWorkspace(container, j.markdown || '', type); }
+        else if (j.status === 'error') { clearInterval(t); container.innerHTML = '<div style="padding:16px;background:#f7ece7;border:1px solid #e6c9bb;border-radius:10px;color:#9c5231;font:13.5px system-ui">Generation failed: ' + esc(j.error || '') + '</div>'; }
       }).catch(function () { });
     }, 3000);
   }
+  function renderItemInto(it, container) {
+    container.innerHTML = '<div style="padding:18px 0;color:#8a8172;font:13px system-ui">Loading…</div>';
+    if (it.kind === 'job') {
+      if (it.status === 'done') jGet('/api/compass/jobs/' + it.id).then(function (j) { renderWorkspace(container, j.markdown || '', it.type); });
+      else if (it.status === 'error') container.innerHTML = '<div style="padding:16px;background:#f7ece7;border:1px solid #e6c9bb;border-radius:10px;color:#9c5231;font:13.5px system-ui">This generation failed: ' + esc(it.error || 'unknown') + '. Regenerate it from the source page.</div>';
+      else { container.innerHTML = '<div style="padding:30px;text-align:center;color:#B08D57;font:14px system-ui"><div style="width:26px;height:26px;border:3px solid #eadfca;border-top-color:#B08D57;border-radius:50%;margin:0 auto 12px;animation:libspin .9s linear infinite"></div>' + esc(llmProgress('Generating')) + '<div style="font:12px system-ui;color:#b0a790;margin-top:6px">This keeps running even if you leave the page.</div></div>'; libPoll(it.id, container, it.type); }
+    } else if (it.kind === 'net') { jGet('/api/networking/plans/' + encodeURIComponent(it.name)).then(function (j) { renderWorkspace(container, j.markdown || '', 'networking'); }); }
+    else if (it.kind === 'report') { jGet('/api/reports/' + encodeURIComponent(it.name)).then(function (j) { renderWorkspace(container, j.markdown || j.content || '', 'evaluate'); }).catch(function () { container.innerHTML = '<div style="padding:16px;color:#8a8172">(could not load report)</div>'; }); }
+  }
   function libOpenRole(g) {
     var det = document.getElementById('libDetail'); if (!det) return;
-    det.innerHTML = '<div style="' + CARD + ';padding:18px 20px"><h2 style="font:600 18px system-ui;color:#16324F;margin:0 0 8px">' + esc(g.company) + (g.role ? ' — ' + esc(g.role) : '') + '</h2><div id="libArts"></div></div>';
-    var arts = det.querySelector('#libArts');
+    ensureLibStyles();
+    var dates = g.items.map(function (i) { return i.created; }).filter(Boolean).sort();
+    var when = dates.length ? new Date(dates[dates.length - 1]).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+    var typesLine = g.items.map(function (i) { return DOC_LABEL[i.type] || i.type; }).filter(function (v, idx, arr) { return arr.indexOf(v) === idx; }).join(' · ');
+    det.innerHTML = '<div style="' + CARD + ';padding:22px 26px">' +
+      '<div style="font:700 11px system-ui;letter-spacing:.05em;text-transform:uppercase;color:#B08D57;margin-bottom:5px">Workspace</div>' +
+      '<h2 style="font-family:var(--serif,\'Iowan Old Style\',Georgia,serif);font-weight:600;font-size:24px;color:#16324F;margin:0 0 3px;line-height:1.15">' + esc(g.company) + (g.role ? ' <span style="color:#8a8172;font-weight:500">— ' + esc(g.role) + '</span>' : '') + '</h2>' +
+      '<div style="font:12.5px system-ui;color:#8a8172;margin-bottom:16px">' + esc(typesLine) + (when ? ' · ' + esc(when) : '') + '</div>' +
+      '<div id="libTabs" style="display:flex;gap:7px;flex-wrap:wrap;border-bottom:1px solid #ece5d6;padding-bottom:14px;margin-bottom:16px"></div>' +
+      '<div id="libArt"></div></div>';
+    var tabsEl = det.querySelector('#libTabs'), artEl = det.querySelector('#libArt');
     g.items.forEach(function (it) {
-      var block = el('div', 'border-top:1px solid #f0ead9;padding:14px 0');
-      block.innerHTML = '<div style="font:600 14px system-ui;color:#16324F;margin-bottom:6px">' + esc(DOC_LABEL[it.type] || it.type) + ' <span style="font:400 12px system-ui;color:#8a8172">· ' + esc(it.status) + (it.provider ? ' · ' + esc(it.provider) + (it.model ? ' ' + esc(it.model) : '') : '') + '</span></div><div class="art-body"></div>';
-      arts.appendChild(block);
-      var body = block.querySelector('.art-body');
-      if (it.kind === 'job') {
-        if (it.status === 'done') jGet('/api/compass/jobs/' + it.id).then(function (j) { libRenderArtifact(body, j.markdown || '', it.type); });
-        else if (it.status === 'error') body.innerHTML = '<span style="color:#9c5231">error: ' + esc(it.error || '') + '</span>';
-        else { body.innerHTML = '<span style="color:#B08D57">' + esc(llmProgress('Generating')) + '</span>'; libPoll(it.id, body, it.type); }
-      } else if (it.kind === 'net') {
-        jGet('/api/networking/plans/' + encodeURIComponent(it.name)).then(function (j) { libRenderArtifact(body, j.markdown || '', 'networking'); });
-      } else if (it.kind === 'report') {
-        jGet('/api/reports/' + encodeURIComponent(it.name)).then(function (j) { libRenderArtifact(body, j.markdown || j.content || '', 'evaluate'); }).catch(function () { body.textContent = '(could not load report)'; });
-      }
+      var b = el('button'); b.type = 'button'; b.className = 'lib-tab';
+      var dot = it.status === 'done' ? '#2f6f5b' : (it.status === 'error' ? '#9c5231' : '#B08D57');
+      b.innerHTML = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:' + dot + ';margin-right:7px;vertical-align:middle"></span>' + esc(DOC_LABEL[it.type] || it.type);
+      b.style.cssText = 'border:1px solid #e6ddc9;background:#fff;color:#2a3b4d;border-radius:999px;padding:7px 14px;font:600 12.5px system-ui;cursor:pointer';
+      b.onclick = function () { tabsEl.querySelectorAll('.lib-tab').forEach(function (x) { x.style.background = '#fff'; x.style.color = '#2a3b4d'; x.style.borderColor = '#e6ddc9'; }); b.style.background = '#16324F'; b.style.color = '#fff'; b.style.borderColor = '#16324F'; renderItemInto(it, artEl); };
+      tabsEl.appendChild(b);
     });
-    var d = document.getElementById('libDetail'); window.scrollTo(0, d.offsetTop - 20);
+    var def = g.items.find(function (i) { return i.status === 'done'; }) || g.items.find(function (i) { return i.status === 'running' || i.status === 'queued'; }) || g.items[0];
+    var defBtn = tabsEl.querySelectorAll('.lib-tab')[g.items.indexOf(def)];
+    if (defBtn) defBtn.click();
+    try { window.scrollTo({ top: det.offsetTop - 20, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, det.offsetTop - 20); }
   }
   function wireLibrary() {
     var root = document.getElementById('libRoot');
@@ -835,7 +973,7 @@
       var jobsL = (a[0] && a[0].jobs) || [], plans = (a[1] && a[1].plans) || [], reports = (a[2] && (a[2].reports || a[2])) || [];
       var groups = {};
       function grp(company, role) { var k = (company || '').toLowerCase().trim() + '|' + (role || '').toLowerCase().trim(); if (!groups[k]) groups[k] = { company: company || '(unknown)', role: role || '', items: [] }; return groups[k]; }
-      jobsL.forEach(function (j) { grp(j.company, j.role).items.push({ kind: 'job', type: j.type, status: j.status, id: j.id, provider: j.provider, model: j.model, error: j.error }); });
+      jobsL.forEach(function (j) { grp(j.company, j.role).items.push({ kind: 'job', type: j.type, status: j.status, id: j.id, provider: j.provider, model: j.model, error: j.error, created: j.created }); });
       plans.forEach(function (p) { grp('Saved networking plans', '').items.push({ kind: 'net', type: 'networking', status: 'done', name: p.name }); });
       (Array.isArray(reports) ? reports : []).slice(0, 40).forEach(function (r) { var name = r.slug || r.name || r; grp('Saved evaluations (reports/)', '').items.push({ kind: 'report', type: 'evaluate', status: 'done', name: name }); });
       var keys = Object.keys(groups);
