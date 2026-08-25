@@ -1125,6 +1125,37 @@
     if (target) target.btn.click();
     try { window.scrollTo({ top: det.offsetTop - 20, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, det.offsetTop - 20); }
   }
+  // Inline accordion content for one artifact TYPE: a version switcher (v1..vN)
+  // + the selected version's rich workspace (renderItemInto handles done →
+  // renderWorkspace incl. the evaluation summary box, running → spinner+cancel,
+  // error → retry, net/report → workspace).
+  function renderAccordionContent(body, type, items) {
+    ensureLibStyles();
+    items = items.slice().sort(function (a, b) { return String(a.created || '').localeCompare(String(b.created || '')); });
+    var selIdx = items.length - 1;
+    for (var q = items.length - 1; q >= 0; q--) { if (items[q].status === 'done') { selIdx = q; break; } }
+    var sw = items.length > 1 ? ('<div role="tablist" aria-label="Versions" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:4px 0 12px">' +
+      '<span style="font:700 10px system-ui;letter-spacing:.05em;text-transform:uppercase;color:#b0a790;margin-right:4px">Versions</span>' +
+      items.map(function (v, i) { var cur = i === items.length - 1; return '<button class="acc-ver" data-i="' + i + '" type="button" style="border:1px solid #e6ddc9;border-radius:999px;padding:5px 11px;font:600 11.5px system-ui;cursor:pointer;background:#fff;color:#2a3b4d">v' + (i + 1) + (cur ? ' · newest' : '') + '</button>'; }).join('') +
+      '</div>') : '';
+    body.innerHTML = sw + '<div class="acc-render"></div>';
+    var render = body.querySelector('.acc-render');
+    var vbtns = body.querySelectorAll('.acc-ver');
+    function show(i) {
+      vbtns.forEach(function (b) { var on = +b.getAttribute('data-i') === i; b.style.background = on ? '#16324F' : '#fff'; b.style.color = on ? '#fff' : '#2a3b4d'; b.style.borderColor = on ? '#16324F' : '#e6ddc9'; });
+      renderItemInto(items[i], render);
+    }
+    vbtns.forEach(function (b) { b.onclick = function () { show(+b.getAttribute('data-i')); }; });
+    show(selIdx);
+    return { show: show, versionOf: function (id) { return items.findIndex(function (x) { return x.id === id; }); } };
+  }
+  // Open the internal AI job-detail page for a Library job — same mechanism as
+  // the Jobs feed (sessionStorage 'compass_current_job' → job-detail.html).
+  function libViewJobDetail(g) {
+    var url = g.items.map(function (i) { return i.url; }).find(Boolean) || '';
+    setCurrentJob({ id: 'lib-' + g.key, title: g.role || g.company, role: g.role || '', company: g.company || '', url: url, mono: initials(g.company), color: colorFor(g.company), domain: hostFrom(url), loc: '', work: '', fit: '', why: '', open: true });
+    location.href = 'job-detail.html';
+  }
   function wireLibrary() {
     var root = document.getElementById('libRoot');
     if (!root) { var m = document.querySelector('main .wrap') || document.querySelector('main') || document.body; root = el('div'); root.id = 'libRoot'; m.appendChild(root); }
@@ -1137,46 +1168,86 @@
       var jobsL = (a[0] && a[0].jobs) || [], plans = (a[1] && a[1].plans) || [], reports = (a[2] && (a[2].reports || a[2])) || [];
       var groups = {}, order = [];
       function grp(company, role) { var k = (company || '').toLowerCase().trim() + '|' + (role || '').toLowerCase().trim(); if (!groups[k]) { groups[k] = { key: k, company: company || '(unknown)', role: role || '', items: [] }; order.push(k); } return groups[k]; }
-      jobsL.forEach(function (j) { grp(j.company, j.role).items.push({ kind: 'job', type: j.type, status: j.status, id: j.id, provider: j.provider, model: j.model, error: j.error, created: j.created }); });
+      jobsL.forEach(function (j) { grp(j.company, j.role).items.push({ kind: 'job', type: j.type, status: j.status, id: j.id, provider: j.provider, model: j.model, error: j.error, created: j.created, url: j.url }); });
       plans.forEach(function (p) { grp('Saved networking plans', '').items.push({ kind: 'net', type: 'networking', status: 'done', name: p.name }); });
       (Array.isArray(reports) ? reports : []).slice(0, 40).forEach(function (r) { var name = r.slug || r.name || r; grp('Saved evaluations', '').items.push({ kind: 'report', type: 'evaluate', status: 'done', name: name }); });
       if (!order.length) { root.innerHTML = '<div style="font:14px system-ui;color:#8a8172;padding:20px 0">No generated content yet. Generate a tailored CV, cover letter, evaluation, or networking plan (from Documents, a job, or Outreach) and it appears here — even while still running.</div>'; return; }
-      // ── per-JOB card: header (Company — Role · date/status) + labeled sub-groups ──
+      // ── per-JOB card: header (+ View job detail) + labeled sub-groups of ACCORDIONS ──
       root.innerHTML = order.map(function (k) {
         var g = groups[k];
         var jdates = g.items.map(function (i) { return i.created; }).filter(Boolean).sort();
         var when = jdates.length ? new Date(jdates[jdates.length - 1]).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
         var note = g.items.some(function (i) { return i.status === 'running' || i.status === 'queued'; }) ? '· generating…' : (g.items.some(function (i) { return i.status === 'error'; }) ? '· needs attention' : '');
+        var hasUrl = g.items.some(function (i) { return i.url; });
         var subs = SUBGROUPS.map(function (sg) {
-          var arts = g.items.map(function (it, idx) { return { it: it, idx: idx }; }).filter(function (x) { return subGroupOf(x.it.type) === sg.key; });
+          var arts = g.items.filter(function (it) { return subGroupOf(it.type) === sg.key; });
           if (!arts.length) return '';
-          return '<div style="padding:2px 20px 14px">' +
-            '<div style="font:700 10.5px system-ui;letter-spacing:.05em;text-transform:uppercase;color:#b0a790;margin:6px 0 9px">' + esc(sg.label) + '</div>' +
-            '<div style="display:flex;flex-wrap:wrap;gap:9px">' + arts.map(function (x) {
-              var it = x.it;
-              return '<button class="lib-art" type="button" data-key="' + esc(k) + '" data-idx="' + x.idx + '" style="border:1px solid #e6ddc9;background:#fff;color:#16324F;border-radius:11px;padding:9px 14px;font:600 13px system-ui;cursor:pointer;display:inline-flex;align-items:center;gap:8px">' +
-                '<span style="width:7px;height:7px;border-radius:50%;background:' + statusDot(it.status) + '"></span>' + esc(DOC_LABEL[it.type] || it.type) +
-                (it.status !== 'done' ? ' <span style="font-weight:500;color:#8a8172">· ' + esc(it.status) + '</span>' : '') + '</button>';
-            }).join('') + '</div></div>';
+          var byType = {}, torder = [];
+          arts.forEach(function (it) { if (!byType[it.type]) { byType[it.type] = []; torder.push(it.type); } byType[it.type].push(it); });
+          return '<div style="padding:2px 20px 12px">' +
+            '<div style="font:700 10.5px system-ui;letter-spacing:.05em;text-transform:uppercase;color:#b0a790;margin:8px 0 8px">' + esc(sg.label) + '</div>' +
+            torder.map(function (t) {
+              var items = byType[t];
+              var anyRun = items.some(function (i) { return i.status === 'running' || i.status === 'queued'; });
+              var anyDone = items.some(function (i) { return i.status === 'done'; });
+              var st = anyRun ? 'running' : (anyDone ? 'done' : 'error');
+              var meta = items.length > 1 ? ' <span style="font-weight:500;color:#8a8172">· ' + items.length + ' versions</span>' : (st !== 'done' ? ' <span style="font-weight:500;color:#8a8172">· ' + esc(st) + '</span>' : '');
+              return '<div class="lib-acc" data-key="' + esc(k) + '" data-type="' + esc(t) + '" style="border:1px solid #e6ddc9;border-radius:12px;margin-bottom:9px;overflow:hidden;background:#fff">' +
+                '<button class="lib-acc-btn" type="button" aria-expanded="false" style="width:100%;display:flex;align-items:center;gap:10px;padding:11px 14px;background:none;border:none;cursor:pointer;font:600 13.5px system-ui;color:#16324F;text-align:left">' +
+                '<span class="chev" style="display:inline-block;transition:transform .18s;color:#b0a790;font-size:11px">▶</span>' +
+                '<span style="width:8px;height:8px;border-radius:50%;background:' + statusDot(st) + ';flex:none"></span>' +
+                '<span style="flex:1">' + esc(DOC_LABEL[t] || t) + meta + '</span></button>' +
+                '<div class="lib-acc-body" hidden style="padding:4px 16px 16px;border-top:1px solid #f3eee1"></div></div>';
+            }).join('') + '</div>';
         }).join('');
         return '<div class="lib-job" style="' + CARD + ';padding:0;margin-bottom:14px;overflow:hidden">' +
-          '<div style="padding:16px 20px 4px;border-bottom:1px solid #f3eee1">' +
-          '<div style="font-family:var(--serif,\'Iowan Old Style\',Georgia,serif);font-weight:600;font-size:17px;color:#16324F">' + esc(g.company) + (g.role ? ' <span style="color:#8a8172;font-weight:500">— ' + esc(g.role) + '</span>' : '') + '</div>' +
-          '<div style="font:12px system-ui;color:#8a8172;margin:3px 0 10px">' + (when ? esc(when) + ' ' : '') + esc(note) + '</div></div>' + subs + '</div>';
-      }).join('') + '<div id="libDetail" style="margin-top:22px"></div>';
-      root.querySelectorAll('.lib-art').forEach(function (btn) { btn.onclick = function () { var g = groups[btn.getAttribute('data-key')]; libOpenRole(g, g.items[+btn.getAttribute('data-idx')]); }; });
-      // Deep-link: library.html?job=<id> (from a completion "View" toast) → open that artifact.
+          '<div style="padding:16px 20px 12px;border-bottom:1px solid #f3eee1;display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">' +
+          '<div style="flex:1;min-width:0"><div style="font-family:var(--serif,\'Iowan Old Style\',Georgia,serif);font-weight:600;font-size:17px;color:#16324F">' + esc(g.company) + (g.role ? ' <span style="color:#8a8172;font-weight:500">— ' + esc(g.role) + '</span>' : '') + '</div>' +
+          '<div style="font:12px system-ui;color:#8a8172;margin-top:3px">' + (when ? esc(when) + ' ' : '') + esc(note) + '</div></div>' +
+          '<a class="lib-detail-link" data-key="' + esc(k) + '" href="job-detail.html" title="' + (hasUrl ? 'Open the AI job-detail view for this posting' : 'Open the job-detail view (from the role info)') + '" style="flex:none;font:600 12.5px system-ui;color:#2f6f5b;text-decoration:none;white-space:nowrap;padding-top:2px">View job detail →</a>' +
+          '</div>' + subs + '</div>';
+      }).join('');
+
+      // View job detail links
+      root.querySelectorAll('.lib-detail-link').forEach(function (a2) { a2.onclick = function (e) { e.preventDefault(); libViewJobDetail(groups[a2.getAttribute('data-key')]); }; });
+
+      // Accordion toggles — expand INLINE under the button, collapse in place.
+      var accIndex = {};
+      root.querySelectorAll('.lib-acc').forEach(function (acc) {
+        var btn = acc.querySelector('.lib-acc-btn'), body = acc.querySelector('.lib-acc-body'), chev = acc.querySelector('.chev');
+        var key = acc.getAttribute('data-key'), type = acc.getAttribute('data-type');
+        var loaded = false, ctrl = null;
+        function expand() { if (!body.hasAttribute('hidden')) return ctrl; body.removeAttribute('hidden'); btn.setAttribute('aria-expanded', 'true'); chev.style.transform = 'rotate(90deg)'; if (!loaded) { loaded = true; ctrl = renderAccordionContent(body, type, groups[key].items.filter(function (i) { return i.type === type; })); } return ctrl; }
+        function collapse() { body.setAttribute('hidden', ''); btn.setAttribute('aria-expanded', 'false'); chev.style.transform = 'rotate(0deg)'; }
+        btn.onclick = function () { if (body.hasAttribute('hidden')) expand(); else collapse(); };  // independent multi-open
+        accIndex[key + '||' + type] = { expand: expand, el: acc };
+      });
+
+      // Deep-link: library.html?job=<id> → expand that artifact's accordion + select the version.
       var qJob = (location.search.match(/[?&]job=([^&]+)/) || [])[1];
       if (qJob) {
         qJob = decodeURIComponent(qJob);
-        var fg = null, fitem = null;
-        order.forEach(function (k) { groups[k].items.forEach(function (it) { if (it.kind === 'job' && it.id === qJob) { fg = groups[k]; fitem = it; } }); });
-        if (fg) { libOpenRole(fg, fitem); return; }
+        order.some(function (k) {
+          return groups[k].items.some(function (it) {
+            if (it.kind === 'job' && it.id === qJob) {
+              var entry = accIndex[k + '||' + it.type];
+              if (entry) { var c = entry.expand(); if (c && c.versionOf) { var vi = c.versionOf(qJob); if (vi >= 0) c.show(vi); } setTimeout(function () { entry.el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 60); }
+              return true;
+            }
+            return false;
+          });
+        });
+        return;
       }
-      var running = order.map(function (k) { return groups[k]; }).find(function (g) { return g.items.some(function (i) { return i.status === 'running' || i.status === 'queued'; }); });
-      if (running) libOpenRole(running);
+      // else auto-expand the first running/queued artifact
+      order.some(function (k) {
+        return groups[k].items.some(function (it) {
+          if (it.status === 'running' || it.status === 'queued') { var entry = accIndex[k + '||' + it.type]; if (entry) entry.expand(); return true; }
+          return false;
+        });
+      });
     });
-    banner('Generated-content Library — grouped by job. Each card shows that job’s Application materials (CV / cover / networking) and Evaluation together. Click any artifact to open the workspace; running jobs update live and errors offer Retry.');
+    banner('Generated-content Library — grouped by job. Each artifact is an accordion: click to expand its rich workspace INLINE under the button (versions v1/v2, per-section Copy, Edit, downloads, evaluation summary); click again to collapse. “View job detail →” opens the AI job-detail page for that job.');
   }
 
   // ======================= AI-TASK ACTIVITY SYSTEM =========================
