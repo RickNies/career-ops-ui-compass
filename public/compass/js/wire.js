@@ -438,36 +438,78 @@
   }
 
   // ======================= SAVED (My Jobs) =================================
+  var SAVED_APP_STAGE = /appl|respond|interview|offer|hired|reject/i; // real application stages
+  function savedStagePill(s) { var c = /offer|hired/i.test(s) ? ['#2f6f5b', '#e3efe9'] : (/interview|respond/i.test(s) ? ['#8a6a3b', '#f6ecd6'] : (/reject/i.test(s) ? ['#9c5231', '#f4e3db'] : ['#2e5c8a', '#e4edf6'])); return '<span style="padding:2px 10px;border-radius:999px;background:' + c[1] + ';color:' + c[0] + ';font:700 11px system-ui;white-space:nowrap">' + esc(s) + '</span>'; }
   function wireSaved() {
     Promise.all([jGet('/api/tracker'), jGet('/api/tracker/stages')]).then(function (arr) {
       var rows = ((arr[0] && arr[0].rows) || []).filter(function (r) { return !isDead(r.url); });
-      var stages = (arr[1] && arr[1].stages) || ['Evaluated', 'Applied', 'Responded', 'Interview', 'Offer', 'Rejected'];
-      var mine = rows.filter(function (r) { return /appl|respond|interview|offer|hired|reject/i.test(r.status || ''); });
-      if (mine.length < 3) mine = rows.slice(0, 25);
-      var host = document.createElement('div');
-      host.innerHTML = mine.map(function (r) {
-        var opts = stages.map(function (s) { return '<option' + ((r.status || '') === s ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('');
-        return '<div class="srow" data-num="' + esc(r.num) + '" data-url="' + esc(r.url) + '" style="display:flex;align-items:center;gap:14px;background:#fff;border:1px solid #ece5d6;border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.04);padding:14px 16px;margin-bottom:10px;cursor:pointer">' +
-          '<span class="logo" style="--mc:' + colorFor(r.company) + ';flex:none" data-mono="' + esc(initials(r.company)) + '"><img src="https://logo.clearbit.com/' + esc(hostFrom(r.url)) + '" onerror="this.parentNode.classList.add(\'failed\');this.remove()"></span>' +
-          '<div style="flex:1;min-width:0"><div style="font-weight:600;color:#16324F">' + esc(r.role) + '</div><div style="font-size:13px;color:#8a8172">' + esc(r.company) + ' · ' + esc(r.location || '') + ' · fit ' + scoreToFit(r) + '</div></div>' +
-          (r.url ? '<a class="btn btn--outline btn--sm compass-ext" href="' + esc(r.url) + '" target="_blank" rel="noopener" style="flex:none;white-space:nowrap;margin-right:8px">View posting ↗</a>' : '') +
-          '<select class="stage-select" aria-label="Status" style="flex:none;padding:7px 10px;border:1px solid #d8cdb8;border-radius:9px;font:13px system-ui">' + opts + '</select>' +
-          '</div>';
-      }).join('');
+      var stageList = (arr[1] && arr[1].stages) || ['Applied', 'Responded', 'Interview', 'Offer', 'Rejected', 'Hired', 'Scanned', 'Evaluated'];
+      // ONLY real application-stage rows — NO "newest scanned" fallback.
+      var mine = rows.filter(function (r) { return SAVED_APP_STAGE.test(r.status || ''); });
       var main = document.querySelector('main .wrap') || document.querySelector('main') || document.body;
-      document.querySelectorAll('main .srow, main .job-row, main .saved-row, main .card').forEach(function (n) { n.style.display = 'none'; });
-      var wrap = document.createElement('section'); wrap.appendChild(host); main.appendChild(wrap);
-      host.querySelectorAll('.srow').forEach(function (el, i) {
-        el.addEventListener('click', function (e) { if (e.target.tagName === 'SELECT' || (e.target.closest && e.target.closest('.compass-ext'))) return; setCurrentJob(mapRow(mine[i])); location.href = 'job-detail.html'; });
-        var sel = el.querySelector('select');
-        if (sel) sel.addEventListener('change', function () {
-          jPost('/api/compass/tracker/status', { num: mine[i].num, url: mine[i].url, status: sel.value }).then(function (r) {
-            toastMsg(r.body && r.body.ok ? ('Status → ' + sel.value + ' saved to tracker ✓') : ('Status update failed: ' + ((r.body && r.body.error) || r.status)), r.body && r.body.ok ? 'success' : 'info');
-          }).catch(function (er) { toastMsg('Status update error: ' + er, 'info'); });
+      // Hide EVERY hardcoded mockup element: demo rows (.row), column heads,
+      // the summary stat cards, and any legacy row classes.
+      main.querySelectorAll('.summary, .col-head, .row, .cols, .srow, .job-row, .saved-row, .card, .rows').forEach(function (n) { n.style.display = 'none'; });
+      var wrap = document.getElementById('compassSavedList'); if (wrap) wrap.remove();
+      wrap = document.createElement('section'); wrap.id = 'compassSavedList'; main.appendChild(wrap);
+
+      function optsFor(cur) {
+        var set = []; stageList.forEach(function (s) { if (set.indexOf(s) < 0) set.push(s); });
+        if (cur && set.indexOf(cur) < 0) set.unshift(cur);
+        if (set.indexOf('Scanned') < 0) set.push('Scanned');
+        return set.map(function (s) { return '<option' + (cur === s ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('');
+      }
+      function rowHtml(r, i) {
+        var f = fitFor(r.url);
+        var fitHtml = (f && typeof f.score === 'number')
+          ? '<span style="font-family:var(--serif,Georgia);font-weight:600;font-size:16px;color:#16324F">' + f.score + '<span style="font-size:10px;color:#8a8172">/100</span></span>' + (f.verdict ? ' ' + verdictPill(f.verdict) : '')
+          : '<span style="font:12px system-ui;color:#8a8172">fit ' + scoreToFit(r) + '</span>';
+        return '<div class="c-srow" data-i="' + i + '" style="display:flex;align-items:center;gap:14px;background:#fff;border:1px solid #ece5d6;border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.04);padding:14px 16px;margin-bottom:10px;cursor:pointer">' +
+          '<span class="logo" style="--mc:' + colorFor(r.company) + ';flex:none" data-mono="' + esc(initials(r.company)) + '"><img src="https://logo.clearbit.com/' + esc(hostFrom(r.url)) + '" onerror="this.parentNode.classList.add(\'failed\');this.remove()"></span>' +
+          '<div style="flex:1;min-width:0"><div style="font-weight:600;color:#16324F">' + esc(r.role) + '</div><div style="font-size:13px;color:#8a8172;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px"><span>' + esc(r.company) + (r.location ? ' · ' + esc(r.location) : '') + '</span>' + fitHtml + '</div></div>' +
+          savedStagePill(r.status || '') +
+          (r.url ? '<a class="btn btn--outline btn--sm compass-ext" href="' + esc(r.url) + '" target="_blank" rel="noopener" style="flex:none;white-space:nowrap">View posting ↗</a>' : '') +
+          '<select class="stage-select" aria-label="Status" style="flex:none;padding:7px 10px;border:1px solid #d8cdb8;border-radius:9px;font:13px system-ui">' + optsFor(r.status || '') + '</select>' +
+          '<button class="c-srow-remove btn btn--outline btn--sm" type="button" title="Remove from My Jobs (resets status to Scanned)" style="flex:none;color:#9c5231">Remove</button>' +
+          '</div>';
+      }
+      function render() {
+        if (!mine.length) {
+          wrap.innerHTML = '<div style="' + CARD + ';padding:36px 24px;text-align:center;margin-top:6px">' +
+            '<div style="font-family:var(--serif,\'Iowan Old Style\',Georgia,serif);font-weight:600;font-size:20px;color:#16324F;margin-bottom:7px">No applications yet</div>' +
+            '<div style="font:14px/1.6 system-ui;color:#8a8172;max-width:54ch;margin:0 auto">Mark a job as <b>Applied</b> from the Jobs page or the Apply flow, and it will show up here. My Jobs tracks only the roles you have applied to or are interviewing for.</div></div>';
+          banner('My Jobs — no application-stage jobs yet (empty state). Mark a job Applied from Jobs/Apply and it appears here.');
+          return;
+        }
+        wrap.innerHTML = mine.map(rowHtml).join('');
+        bindRows();
+        banner('My Jobs LIVE — ' + mine.length + ' real application(s). Status dropdown + Remove persist via POST /api/compass/tracker/status. Demo rows removed.');
+      }
+      function persist(r, status, okMsg, onDone) {
+        jPost('/api/compass/tracker/status', { num: r.num, url: r.url, status: status }).then(function (rr) {
+          if (rr.body && rr.body.ok) { onDone(); toastMsg(okMsg, 'success'); }
+          else toastMsg('Update failed: ' + ((rr.body && rr.body.error) || rr.status), 'info');
+        }).catch(function (er) { toastMsg('Update error: ' + er, 'info'); });
+      }
+      function bindRows() {
+        wrap.querySelectorAll('.c-srow').forEach(function (el) {
+          var i = +el.getAttribute('data-i'); var r = mine[i];
+          el.addEventListener('click', function (e) { if (e.target.tagName === 'SELECT' || (e.target.closest && (e.target.closest('.compass-ext') || e.target.closest('.c-srow-remove')))) return; setCurrentJob(mapRow(r)); location.href = 'job-detail.html'; });
+          var sel = el.querySelector('select');
+          if (sel) sel.addEventListener('change', function () {
+            var v = sel.value;
+            persist(r, v, (SAVED_APP_STAGE.test(v) ? 'Status → ' + v + ' ✓' : 'Moved out of My Jobs (' + v + ')'), function () {
+              r.status = v; if (!SAVED_APP_STAGE.test(v)) mine.splice(mine.indexOf(r), 1); render();
+            });
+          });
+          var rm = el.querySelector('.c-srow-remove');
+          if (rm) rm.addEventListener('click', function (e) {
+            e.stopPropagation(); rm.disabled = true;
+            persist(r, 'Scanned', 'Removed from My Jobs', function () { mine.splice(mine.indexOf(r), 1); render(); });
+          });
         });
-      });
-      var n0 = document.querySelector('.stat .n'); if (n0) n0.textContent = mine.length;
-      banner('My Jobs LIVE — ' + mine.length + ' real tracker rows (dead hidden). The Status dropdown PERSISTS via POST /api/compass/tracker/status (rewrites applications.md).');
+      }
+      render();
     }).catch(function (e) { banner('Could not load saved/tracker: ' + e); });
   }
 
