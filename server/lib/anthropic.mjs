@@ -32,8 +32,8 @@ export async function runAnthropic(prompt, opts = {}) {
     return { markdown: '', usage: null, error: 'ANTHROPIC_API_KEY not set' };
   }
   const model = opts.model || envKey('ANTHROPIC_MODEL') || 'claude-sonnet-4-6';
-  const maxTokens = Math.min(Math.max(opts.maxTokens || 8192, 256), 16384);
-  const timeoutMs = opts.timeoutMs || 180_000;
+  const maxTokens = Math.min(Math.max(opts.maxTokens || 16384, 256), 32000);
+  const timeoutMs = opts.timeoutMs || Number(process.env.LLM_TIMEOUT_MS) || 180_000;
   const fetchImpl = opts.fetchImpl || fetch;
 
   const ctrl = new AbortController();
