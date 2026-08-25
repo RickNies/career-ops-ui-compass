@@ -58,6 +58,8 @@ import { registerStatsRoutes } from './lib/routes/stats.mjs';
 import { registerMarketRoutes } from './lib/routes/market.mjs';
 import { registerTrackerRoutes } from './lib/routes/tracker.mjs';
 import { registerCvSyncRoutes } from './lib/routes/cv-sync.mjs';
+// COMPASS FORK — extra routes for the simplified Compass UI (this :8100 fork only).
+import { registerCompassRoutes } from './lib/routes/compass.mjs';
 
 // Re-exports preserved for backward compatibility — earlier tests
 // (and any external consumers) imported these from server/index.mjs.
@@ -101,8 +103,19 @@ export function createApp() {
     "frame-ancestors 'none'",
     "form-action 'self'",
   ].join('; ');
+  // COMPASS FORK — the self-contained Compass mockups (public/compass/*.html)
+  // keep their JS in inline <script> blocks + one inline onerror handler, which
+  // the strict `script-src 'self'` would block. Relax script-src to allow
+  // 'unsafe-inline' for /compass paths ONLY (tailnet-only preview instance);
+  // every other route keeps the original hardened CSP. connect-src stays 'self'
+  // (Compass fetch()es same-origin /api/* only).
+  const CSP_COMPASS = CSP.replace("script-src 'self'", "script-src 'self' 'unsafe-inline'");
   app.use((req, res, next) => {
-    res.setHeader('Content-Security-Policy', CSP);
+    // COMPASS FORK — make Compass the DEFAULT landing UI of this instance.
+    // Bare root → Compass dashboard. The original SPA stays fully reachable at
+    // any other path (e.g. /spa or any #/hash route) via the catch-all below.
+    if (req.path === '/') return res.redirect(302, '/compass/dashboard.html');
+    res.setHeader('Content-Security-Policy', req.path.startsWith('/compass') ? CSP_COMPASS : CSP);
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'same-origin');
@@ -194,6 +207,7 @@ export function createApp() {
   registerOutcomeRoutes(app);         // POST /api/outcome (dryRun preview + explicit write) — record an application outcome via outcome.mjs (archives artifacts + syncs tracker)
   registerFundedRoutes(app);          // v1.133.0 — GET /api/company-funded (funded-company discovery relay; read-only, --dry-run)
   registerLivenessRoutes(app);        // GET /api/liveness?url= (ATS "still live?" check; zero-token/zero-browser, SSRF-safe)
+  registerCompassRoutes(app);         // COMPASS FORK — /compass landing + POST /api/compass/{feedback,setup}
   // ───────────────────────────── Catch-all → SPA ─────────────────────────────
 
   // NEW-F1 (v1.59.5) — the previous `app.get('/api/*', …)` was GET-only,

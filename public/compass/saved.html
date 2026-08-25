@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>My Jobs · Compass</title>
+<style>
+  :root{
+    --bg:#F6F3EC; --surface:#FFFFFF; --surface-2:#FBF9F4;
+    --ink:#16324F; --ink-soft:#3A4A5A; --muted:#6B7480;
+    --line:#E7E1D5; --line-soft:#F0ECE2;
+    --gold:#B4894C; --gold-deep:#96702F; --gold-soft:#F4EBD9;
+    --sage:#2F6F5B; --sage-soft:#E4EFE9;
+    --terra:#B5623B; --terra-soft:#F6E7DE;
+    --blue:#2E5C8A; --blue-soft:#E4EDF6;
+    --shadow:0 1px 2px rgba(22,50,79,.04), 0 8px 24px rgba(22,50,79,.06);
+    --shadow-sm:0 1px 2px rgba(22,50,79,.06);
+    --radius:14px; --radius-sm:10px;
+    --ring:var(--gold);
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  a{color:inherit;text-decoration:none}
+  h1,h2,h3{font-family:var(--serif);font-weight:600;letter-spacing:-.01em;margin:0}
+  button{font-family:inherit;cursor:pointer}
+
+  /* ===== Iteration 5 — shared interaction kit (accessibility + consistency) ===== */
+  :focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+  :focus:not(:focus-visible){outline:none}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;font-family:inherit;font-weight:600;font-size:13.5px;line-height:1.2;border-radius:999px;border:1px solid transparent;padding:9px 15px;cursor:pointer;text-decoration:none;white-space:nowrap;transition:background .12s ease,border-color .12s ease,color .12s ease,transform .08s ease}
+  .btn svg{width:15px;height:15px;flex:none}
+  .btn:disabled{opacity:.6;cursor:default}
+  .btn--primary{background:var(--ink);color:#fff;border-color:var(--ink);box-shadow:var(--shadow-sm)}
+  .btn--primary:hover{background:#0f2740}
+  .btn--outline{background:var(--surface);color:var(--ink-soft);border-color:var(--line);box-shadow:var(--shadow-sm)}
+  .btn--outline:hover{border-color:var(--gold);color:var(--gold-deep)}
+  .btn--ghost{background:transparent;border-color:transparent;color:var(--ink-soft)}
+  .btn--ghost:hover{background:var(--line-soft)}
+  .btn--sage{background:var(--sage);color:#fff;border-color:var(--sage)}
+  .btn--sage:hover{background:#255a49}
+  .btn--terra{background:var(--terra);color:#fff;border-color:var(--terra)}
+  .btn--terra:hover{background:#9c5231}
+  .btn--sm{padding:8px 14px;font-size:13px}
+  .btn--icon{padding:0;width:38px;height:38px}
+  .badge{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;line-height:1.4;border-radius:999px;padding:3px 11px;border:1px solid transparent}
+  .badge svg{width:12px;height:12px;flex:none}
+  .badge .tk{width:6px;height:6px;border-radius:999px;flex:none}
+  .badge--cat{background:var(--gold-soft);color:var(--gold-deep)} .badge--cat .tk{background:var(--gold)}
+  .badge--func{background:var(--blue-soft);color:var(--blue)} .badge--func .tk{background:var(--blue)}
+  .badge--lvl{background:var(--sage-soft);color:var(--sage)} .badge--lvl .tk{background:var(--sage)}
+  .badge--warm{background:var(--sage-soft);color:var(--sage)}
+  .badge--cool{background:var(--gold-soft);color:var(--gold-deep)}
+  .badge--outline{background:var(--line-soft);color:var(--ink-soft)}
+  /* Iteration 6 — "still open?" liveness badges */
+  .badge--live{background:var(--sage-soft);color:var(--sage)} .badge--live .tk{background:var(--sage)}
+  .badge--closed{background:var(--terra-soft);color:var(--terra)} .badge--closed .tk{background:var(--terra)}
+  /* shared toast */
+  .toast-wrap{position:fixed;z-index:120;left:50%;bottom:24px;transform:translateX(-50%);display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
+  .toast{display:inline-flex;align-items:center;gap:9px;background:var(--ink);color:#fff;border-radius:999px;padding:11px 18px;font-size:13.5px;font-weight:600;box-shadow:0 10px 30px rgba(22,50,79,.25);pointer-events:auto;max-width:92vw;animation:toastin .2s ease}
+  .toast svg{width:16px;height:16px;flex:none}
+  .toast--success{background:var(--sage)} .toast--info{background:var(--ink)} .toast--error{background:var(--terra)}
+  @keyframes toastin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  @media(prefers-reduced-motion:reduce){ .toast,.btn{animation:none;transition:none} }
+  /* closed-listing affordance on a saved row */
+  .row.is-closed{background:var(--surface-2)}
+  .closed-actions{display:flex;align-items:center;gap:8px;flex:none}
+
+  .topbar{position:sticky;top:0;z-index:20;background:rgba(246,243,236,.85);backdrop-filter:saturate(180%) blur(10px);border-bottom:1px solid var(--line)}
+  .topbar-in{max-width:960px;margin:0 auto;display:flex;align-items:center;gap:28px;padding:14px 22px}
+  .brand{display:flex;align-items:center;gap:9px;font-family:var(--serif);font-size:19px;font-weight:600}
+  .brand svg{color:var(--gold)}
+  .nav{display:flex;gap:6px;margin-left:6px}
+  .nav a{padding:8px 14px;border-radius:999px;color:var(--ink-soft);font-weight:500;font-size:14.5px}
+  .nav a:hover{background:var(--line-soft)}
+  .nav a.active{background:var(--ink);color:#fff}
+  .spacer{flex:1}
+  .gear{width:34px;height:34px;border-radius:999px;background:var(--surface);border:1px solid var(--line);color:var(--ink-soft);display:grid;place-items:center;margin-right:2px}
+  .gear:hover{border-color:var(--gold);color:var(--gold-deep)}
+  .gear svg{width:17px;height:17px}
+  .avatar{width:34px;height:34px;border-radius:999px;background:var(--gold-soft);color:var(--gold-deep);display:grid;place-items:center;font-weight:600;font-size:13px;border:1px solid var(--line)}
+
+  .wrap{max-width:960px;margin:0 auto;padding:28px 22px 60px}
+  .page-head h1{font-size:29px}
+  .page-head .sub{color:var(--muted);font-size:14.5px;margin-top:4px}
+
+  /* summary strip */
+  .summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:22px 0 26px}
+  .stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px}
+  .stat .n{font-family:var(--serif);font-size:30px;font-weight:600;line-height:1}
+  .stat .l{color:var(--muted);font-size:13px;margin-top:6px;display:flex;align-items:center;gap:7px}
+  .stat .dot{width:9px;height:9px;border-radius:999px;display:inline-block}
+  .d-saved{background:var(--gold)} .d-applied{background:var(--blue)} .d-int{background:var(--sage)}
+
+  .col-head{display:flex;align-items:center;gap:10px;margin:26px 0 12px}
+  .col-head h2{font-size:18px}
+  .col-head .badge{padding:2px 9px}   /* count chips use the shared .badge vocabulary */
+  .col-head .hint{color:var(--muted);font-size:13px;margin-left:auto}
+
+  .row{display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:14px 16px;margin-bottom:10px}
+  .row:hover{box-shadow:var(--shadow)}
+  .fitmini{flex:none;width:44px;height:44px;border-radius:999px;display:grid;place-items:center;font-family:var(--serif);font-size:16px;font-weight:600}
+  .fm-strong{background:var(--sage-soft);color:var(--sage);border:1.5px solid #B9D8CB}
+  .fm-good{background:var(--gold-soft);color:var(--gold-deep);border:1.5px solid #E7D3A8}
+  .fm-fair{background:#EEF0F2;color:var(--muted);border:1.5px solid #DFE3E7}
+  .logo{flex:none;width:42px;height:42px;border-radius:10px;overflow:hidden;background:var(--surface-2);border:1px solid var(--line);display:grid;place-items:center;position:relative}
+  .logo img{width:100%;height:100%;object-fit:contain;display:block;padding:5px;background:#fff}
+  .logo.failed{background:var(--mc,#16324F);border-color:transparent}
+  .logo.failed::after{content:attr(data-mono);color:#fff;font-family:var(--serif);font-weight:600;font-size:13px}
+  .rinfo{flex:1;min-width:0}
+  .rinfo .t{font-family:var(--serif);font-size:16px;font-weight:600}
+  .rinfo .t a:hover{color:var(--gold-deep)}
+  .rinfo .m{color:var(--muted);font-size:13px;margin-top:3px;display:flex;flex-wrap:wrap;gap:4px 12px}
+  .rmeta{flex:none;text-align:right;color:var(--muted);font-size:12.5px}
+  .stage-select{appearance:none;background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:7px 30px 7px 13px;font-size:13px;font-weight:600;color:var(--ink-soft);font-family:inherit;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7480' stroke-width='2.5'><path d='M6 9l6 6 6-6'/></svg>");background-repeat:no-repeat;background-position:right 11px center}
+  .next{flex:none;color:var(--gold-deep);font-size:12.5px;font-weight:600;background:var(--gold-soft);border-radius:8px;padding:5px 10px;white-space:nowrap}
+
+  @media(max-width:700px){
+    .summary{grid-template-columns:1fr}
+    .brand span{display:none}
+    .row{flex-wrap:wrap}
+    .rmeta,.next{width:100%;text-align:left}
+  }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-in">
+      <a href="dashboard.html" class="brand" style="text-decoration:none;color:var(--ink)">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><polygon points="15.5 8.5 10.5 10.5 8.5 15.5 13.5 13.5" fill="currentColor" stroke="none"/></svg>
+        <span>Compass</span>
+      </a>
+      <nav class="nav">
+        <a href="dashboard.html">Dashboard</a>
+        <a href="jobs.html">Jobs</a>
+        <a class="active" href="saved.html">My Jobs</a>
+        <a href="documents.html">Documents</a>
+      </nav>
+      <div class="spacer"></div>
+      <a class="gear" href="setup.html" title="Setup &amp; preferences" aria-label="Setup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-2.9-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.2-2.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></a>
+      <div class="avatar" title="Nicole Doan, CPA">ND</div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="page-head">
+      <h1>My Jobs</h1>
+      <div class="sub">Everything you've saved and where each one stands. Change a status anytime.</div>
+    </div>
+
+    <div class="summary">
+      <div class="stat"><div class="n">4</div><div class="l"><span class="dot d-saved"></span>Saved to review</div></div>
+      <div class="stat"><div class="n">3</div><div class="l"><span class="dot d-applied"></span>Applied</div></div>
+      <div class="stat"><div class="n">1</div><div class="l"><span class="dot d-int"></span>Interviewing</div></div>
+    </div>
+
+    <!-- Interviewing -->
+    <div class="col-head"><h2>Interviewing</h2><span class="badge badge--warm">1</span><span class="hint">Furthest along — keep the momentum</span></div>
+
+    <div class="row">
+      <div class="fitmini fm-strong">91</div>
+      <span class="logo" style="--mc:#96702F" data-mono="N"><img src="https://logo.clearbit.com/netflix.com" alt="Netflix logo" onerror="this.parentNode.classList.add('failed');this.remove()"></span>
+      <div class="rinfo">
+        <div class="t"><a href="job-detail.html">Senior Manager, Content Finance</a></div>
+        <div class="m"><span>Netflix</span><span>New York, NY · Hybrid</span></div>
+      </div>
+      <div class="next">Next: 2nd round · Sep 2</div>
+      <select class="stage-select" aria-label="Status">
+        <option>Saved</option><option>Applied</option><option selected>Interviewing</option><option>Offer</option><option>Passed</option>
+      </select>
+    </div>
+
+    <!-- Applied -->
+    <div class="col-head"><h2>Applied</h2><span class="badge badge--func">3</span><span class="hint">Waiting to hear back</span></div>
+
+    <div class="row">
+      <div class="fitmini fm-strong">94</div>
+      <span class="logo" style="--mc:#B5623B" data-mono="HM"><img src="https://logo.clearbit.com/horizonmedia.com" alt="Horizon Media logo" onerror="this.parentNode.classList.add('failed');this.remove()"></span>
+      <div class="rinfo">
+        <div class="t"><a href="job-detail.html">Director, Finance Business Manager</a></div>
+        <div class="m"><span>Horizon Media</span><span>New York, NY · On-site</span></div>
+      </div>
+      <div class="rmeta">Applied Aug 21<br>Cover letter sent</div>
+      <select class="stage-select" aria-label="Status">
+        <option>Saved</option><option selected>Applied</option><option>Interviewing</option><option>Offer</option><option>Passed</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <div class="fitmini fm-good">82</div>
+      <span class="logo" style="--mc:#2F6F5B" data-mono="S"><img src="https://logo.clearbit.com/spotify.com" alt="Spotify logo" onerror="this.parentNode.classList.add('failed');this.remove()"></span>
+      <div class="rinfo">
+        <div class="t"><a href="job-detail.html">Senior Manager, Content &amp; Licensing Finance</a></div>
+        <div class="m"><span>Spotify</span><span>New York, NY · Hybrid</span></div>
+      </div>
+      <div class="rmeta">Applied Aug 19<br>via referral</div>
+      <select class="stage-select" aria-label="Status">
+        <option>Saved</option><option selected>Applied</option><option>Interviewing</option><option>Offer</option><option>Passed</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <div class="fitmini fm-good">85</div>
+      <span class="logo" style="--mc:#16324F" data-mono="P"><img src="https://logo.clearbit.com/paramount.com" alt="Paramount logo" onerror="this.parentNode.classList.add('failed');this.remove()"></span>
+      <div class="rinfo">
+        <div class="t"><a href="job-detail.html">Director, FP&amp;A — Streaming</a></div>
+        <div class="m"><span>Paramount</span><span>New York, NY · Hybrid</span></div>
+      </div>
+      <div class="rmeta">Applied Aug 15</div>
+      <select class="stage-select" aria-label="Status">
+        <option>Saved</option><option selected>Applied</option><option>Interviewing</option><option>Offer</option><option>Passed</option>
+      </select>
+    </div>
+
+    <!-- Saved -->
+    <div class="col-head"><h2>Saved to review</h2><span class="badge badge--cool">4</span><span class="hint">Not applied yet</span></div>
+
+    <div class="row">
+      <div class="fitmini fm-strong">87</div>
+      <span class="logo" style="--mc:#96702F" data-mono="A"><img src="https://logo.clearbit.com/amazon.com" alt="Amazon MGM Studios logo" onerror="this.parentNode.classList.add('failed');this.remove()"></span>
+      <div class="rinfo">
+        <div class="t"><a href="job-detail.html">Finance Manager, FP&amp;A</a></div>
+        <div class="m"><span>MGM / Amazon Studios</span><span>Culver City, CA · Remote OK</span><span class="badge badge--live" data-live="open"><span class="tk"></span>Open</span></div>
+      </div>
+      <div class="rmeta">Saved Aug 23</div>
+      <select class="stage-select" aria-label="Status">
+        <option selected>Saved</option><option>Applied</option><option>Interviewing</option><option>Offer</option><option>Passed</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <div class="fitmini fm-good">76</div>
+      <span class="logo" style="--mc:#6B4E8A" data-mono="WMG"><img src="https://logo.clearbit.com/wmg.com" alt="Warner Music Group logo" onerror="this.parentNode.classList.add('failed');this.remove()"></span>
+      <div class="rinfo">
+        <div class="t"><a href="job-detail.html">Director, Financial Planning</a></div>
+        <div class="m"><span>Warner Music Group</span><span>New York, NY · Hybrid</span><span class="badge badge--live" data-live="open"><span class="tk"></span>Open</span></div>
+      </div>
+      <div class="rmeta">Saved Aug 22</div>
+      <select class="stage-select" aria-label="Status">
+        <option selected>Saved</option><option>Applied</option><option>Interviewing</option><option>Offer</option><option>Passed</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <div class="fitmini fm-good">79</div>
+      <span class="logo" style="--mc:#2E5C8A" data-mono="NBC"><img src="https://logo.clearbit.com/nbcuni.com" alt="NBCUniversal logo" onerror="this.parentNode.classList.add('failed');this.remove()"></span>
+      <div class="rinfo">
+        <div class="t"><a href="job-detail.html">Manager, Content Finance</a></div>
+        <div class="m"><span>NBCUniversal</span><span>New York, NY · On-site</span><span class="badge badge--live" data-live="open"><span class="tk"></span>Open</span></div>
+      </div>
+      <div class="rmeta">Saved Aug 20</div>
+      <select class="stage-select" aria-label="Status">
+        <option selected>Saved</option><option>Applied</option><option>Interviewing</option><option>Offer</option><option>Passed</option>
+      </select>
+    </div>
+
+    <div class="row is-closed">
+      <div class="fitmini fm-fair">71</div>
+      <span class="logo" style="--mc:#6B4E8A" data-mono="R"><img src="https://logo.clearbit.com/roku.com" alt="Roku logo" onerror="this.parentNode.classList.add('failed');this.remove()"></span>
+      <div class="rinfo">
+        <div class="t"><a href="job-detail.html">FP&amp;A Manager, Media</a></div>
+        <div class="m"><span>Roku</span><span>Remote (US)</span><span class="badge badge--closed" data-live="closed"><span class="tk"></span>Closed — no longer accepting</span></div>
+      </div>
+      <div class="closed-actions">
+        <a class="btn btn--outline btn--sm" href="jobs.html?func=FP%26A"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>Find similar</a>
+        <button class="btn btn--ghost btn--sm removeRow" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>Remove</button>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- shared toast: screen-reader announced, non-blocking -->
+  <div id="toastLive" class="toast-wrap" role="status" aria-live="polite" aria-atomic="false"></div>
+
+<script>
+/* ===== Iteration 5 shared kit: toast ===== */
+function toast(msg, type){
+  var w=document.getElementById("toastLive"); if(!w) return;
+  var t=document.createElement("div"); t.className="toast toast--"+(type||"info");
+  if(type==="success"){ t.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>'; }
+  var s=document.createElement("span"); s.textContent=msg; t.appendChild(s);
+  w.appendChild(t);
+  setTimeout(function(){ t.style.transition="opacity .2s"; t.style.opacity="0"; setTimeout(function(){ if(t.parentNode) t.remove(); }, 220); }, 3600);
+}
+/* Iteration 6: remove a closed listing from My Jobs */
+document.querySelectorAll(".removeRow").forEach(function(b){
+  b.addEventListener("click", function(){
+    var row=b.closest(".row"); if(row) row.remove();
+    toast("Removed from My Jobs", "success");
+  });
+});
+</script>
+  <script src="js/wire.js"></script>
+</body>
+</html>

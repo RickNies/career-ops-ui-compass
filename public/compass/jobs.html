@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Jobs · Compass</title>
+<style>
+  /* ============ Compass design system (shared across screens) ============ */
+  :root{
+    --bg:#F6F3EC; --surface:#FFFFFF; --surface-2:#FBF9F4;
+    --ink:#16324F; --ink-soft:#3A4A5A; --muted:#6B7480;
+    --line:#E7E1D5; --line-soft:#F0ECE2;
+    --gold:#B4894C; --gold-deep:#96702F; --gold-soft:#F4EBD9;
+    --sage:#2F6F5B; --sage-soft:#E4EFE9;
+    --terra:#B5623B; --terra-soft:#F6E7DE;
+    --blue:#2E5C8A; --blue-soft:#E4EDF6;
+    --shadow:0 1px 2px rgba(22,50,79,.04), 0 8px 24px rgba(22,50,79,.06);
+    --shadow-sm:0 1px 2px rgba(22,50,79,.06);
+    --radius:14px; --radius-sm:10px;
+    --ring:var(--gold);
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  a{color:inherit;text-decoration:none}
+  h1,h2,h3{font-family:var(--serif);font-weight:600;letter-spacing:-.01em;margin:0}
+  button{font-family:inherit;cursor:pointer}
+
+  /* ===== Iteration 5 — shared interaction kit (accessibility + consistency) ===== */
+  :focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+  :focus:not(:focus-visible){outline:none}
+  /* one button vocabulary — base + variants + sizes */
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;font-family:inherit;font-weight:600;font-size:13.5px;line-height:1.2;border-radius:999px;border:1px solid transparent;padding:9px 15px;cursor:pointer;text-decoration:none;white-space:nowrap;transition:background .12s ease,border-color .12s ease,color .12s ease,transform .08s ease}
+  .btn svg{width:15px;height:15px;flex:none}
+  .btn:disabled{opacity:.6;cursor:default}
+  .btn--primary{background:var(--ink);color:#fff;border-color:var(--ink);box-shadow:var(--shadow-sm)}
+  .btn--primary:hover{background:#0f2740}
+  .btn--outline{background:var(--surface);color:var(--ink-soft);border-color:var(--line);box-shadow:var(--shadow-sm)}
+  .btn--outline:hover{border-color:var(--gold);color:var(--gold-deep)}
+  .btn--ghost{background:transparent;border-color:transparent;color:var(--ink-soft)}
+  .btn--ghost:hover{background:var(--line-soft)}
+  .btn--sage{background:var(--sage);color:#fff;border-color:var(--sage)}
+  .btn--sage:hover{background:#255a49}
+  .btn--terra{background:var(--terra);color:#fff;border-color:var(--terra)}
+  .btn--terra:hover{background:#9c5231}
+  .btn--sm{padding:8px 14px;font-size:13px}
+  .btn--icon{padding:0;width:38px;height:38px}
+  /* one badge vocabulary */
+  .badge{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;line-height:1.4;border-radius:999px;padding:3px 11px;border:1px solid transparent}
+  .badge svg{width:12px;height:12px;flex:none}
+  .badge .tk{width:6px;height:6px;border-radius:999px;flex:none}
+  .badge--cat{background:var(--gold-soft);color:var(--gold-deep)} .badge--cat .tk{background:var(--gold)}
+  .badge--func{background:var(--blue-soft);color:var(--blue)} .badge--func .tk{background:var(--blue)}
+  .badge--lvl{background:var(--sage-soft);color:var(--sage)} .badge--lvl .tk{background:var(--sage)}
+  .badge--warm{background:var(--sage-soft);color:var(--sage)}
+  .badge--cool{background:var(--gold-soft);color:var(--gold-deep)}
+  .badge--outline{background:var(--line-soft);color:var(--ink-soft)}
+  /* Iteration 6 — "still open?" liveness badges */
+  .badge--live{background:var(--sage-soft);color:var(--sage)} .badge--live .tk{background:var(--sage)}
+  .badge--closed{background:var(--terra-soft);color:var(--terra)} .badge--closed .tk{background:var(--terra)}
+  /* shared toast (role=status / aria-live announces completions) */
+  .toast-wrap{position:fixed;z-index:120;left:50%;bottom:24px;transform:translateX(-50%);display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
+  .toast{display:inline-flex;align-items:center;gap:9px;background:var(--ink);color:#fff;border-radius:999px;padding:11px 18px;font-size:13.5px;font-weight:600;box-shadow:0 10px 30px rgba(22,50,79,.25);pointer-events:auto;max-width:92vw;animation:toastin .2s ease}
+  .toast svg{width:16px;height:16px;flex:none}
+  .toast--success{background:var(--sage)} .toast--info{background:var(--ink)} .toast--error{background:var(--terra)}
+  @keyframes toastin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  @media(prefers-reduced-motion:reduce){ .toast,.btn{animation:none;transition:none} }
+
+  /* ---- top nav shell ---- */
+  .topbar{position:sticky;top:0;z-index:20;background:rgba(246,243,236,.85);backdrop-filter:saturate(180%) blur(10px);border-bottom:1px solid var(--line)}
+  .topbar-in{max-width:1320px;margin:0 auto;display:flex;align-items:center;gap:28px;padding:14px 22px}
+  .brand{display:flex;align-items:center;gap:9px;font-family:var(--serif);font-size:19px;font-weight:600;color:var(--ink)}
+  .brand svg{color:var(--gold)}
+  .nav{display:flex;gap:6px;margin-left:6px}
+  .nav a{padding:8px 14px;border-radius:999px;color:var(--ink-soft);font-weight:500;font-size:14.5px}
+  .nav a:hover{background:var(--line-soft)}
+  .nav a.active{background:var(--ink);color:#fff}
+  .spacer{flex:1}
+  .gear{width:34px;height:34px;border-radius:999px;background:var(--surface);border:1px solid var(--line);color:var(--ink-soft);display:grid;place-items:center;margin-right:2px}
+  .gear:hover{border-color:var(--gold);color:var(--gold-deep)}
+  .gear svg{width:17px;height:17px}
+  .avatar{width:34px;height:34px;border-radius:999px;background:var(--gold-soft);color:var(--gold-deep);display:grid;place-items:center;font-weight:600;font-size:13px;border:1px solid var(--line)}
+
+  /* Iteration 6 — widened Jobs page to use the extra horizontal space (rail stays pinned left) */
+  .wrap{max-width:1320px;margin:0 auto;padding:28px 22px 60px}
+  .page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:4px;flex-wrap:wrap}
+  .page-head h1{font-size:29px}
+  .page-head .sub{color:var(--muted);font-size:14.5px;margin-top:4px}
+  .head-actions{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+  #refreshBtn svg{color:var(--gold)}       /* keep the brass refresh glyph accent */
+  #refreshBtn:disabled svg{color:var(--muted)}
+
+  /* ---- find-new-jobs status readout ---- */
+  .scan-status{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--muted);margin-top:8px;min-height:20px}
+  .scan-status .sdot{width:8px;height:8px;border-radius:999px;background:var(--gold);flex:none;animation:pulse 1s infinite}
+  .scan-status.done .sdot{background:var(--sage);animation:none}
+  .scan-status b{color:var(--ink-soft);font-weight:600}
+  @keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}
+
+  /* ---- company logo (clearbit + monogram fallback) ---- */
+  .logo{flex:none;width:46px;height:46px;border-radius:11px;overflow:hidden;background:var(--surface-2);border:1px solid var(--line);display:grid;place-items:center;position:relative}
+  .logo img{width:100%;height:100%;object-fit:contain;display:block;padding:5px;background:#fff}
+  .logo.failed{background:var(--mc,#16324F);border-color:transparent}
+  .logo.failed::after{content:attr(data-mono);color:#fff;font-family:var(--serif);font-weight:600;font-size:15px;letter-spacing:.01em}
+
+  /* ---- two-column layout: reviewed rail + main ---- */
+  .jobs-layout{display:flex;gap:22px;align-items:flex-start;margin-top:18px}
+  .jobs-main{flex:1;min-width:0}
+
+  /* ---- reviewed rail (left) ---- */
+  .rev-rail{flex:none;width:240px;position:sticky;top:84px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px;max-height:calc(100vh - 108px);overflow:auto}
+  .rev-rail-head{display:flex;align-items:center;gap:8px;font-family:var(--serif);font-size:15px;font-weight:600;color:var(--ink);cursor:pointer;padding:4px 4px 6px;user-select:none}
+  .rev-rail-head .chev{margin-left:auto;color:var(--muted);transition:transform .15s ease}
+  .rev-rail-head .chev svg{width:16px;height:16px}
+  .rev-rail.collapsed .chev{transform:rotate(-90deg)}
+  .rev-rail.collapsed .rev-body{display:none}
+  .rev-group-t{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:12px 4px 6px;display:flex;gap:7px;align-items:center}
+  .rev-group-t .rc{margin-left:auto;font-size:11px;font-weight:700;background:var(--line-soft);color:var(--ink-soft);border-radius:999px;padding:1px 8px}
+  .rev-item{display:flex;gap:6px;align-items:flex-start;padding:8px;border-radius:10px;border:1px solid var(--line-soft);background:var(--surface-2);margin-bottom:6px}
+  .rev-item:hover{border-color:var(--line);background:#fff}
+  .ri-main{flex:1;min-width:0}
+  .ri-title{font-size:12.5px;font-weight:600;color:var(--ink);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ri-sub{font-size:11.5px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ri-reason{color:var(--gold-deep);font-weight:600}
+  .ri-acts{display:flex;gap:2px;flex:none}
+  .ri-acts button{width:24px;height:24px;border-radius:7px;border:1px solid transparent;background:transparent;display:grid;place-items:center;color:var(--muted)}
+  .ri-acts button svg{width:13px;height:13px}
+  .ri-acts button:hover{background:#fff;border-color:var(--line);color:var(--ink)}
+  .rev-empty{font-size:12.5px;color:var(--muted);padding:8px 4px 4px;line-height:1.5}
+
+  /* ---- filter bar ---- */
+  .filters{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px;margin:0 0 14px}
+  .search{display:flex;align-items:center;gap:10px;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 13px}
+  .search svg{color:var(--muted);flex:none}
+  .search input{border:0;background:transparent;outline:none;font-size:15px;width:100%;color:var(--ink);font-family:inherit}
+  .filter-row{display:flex;align-items:center;gap:10px;margin-top:13px;flex-wrap:wrap}
+  .filter-row.tags-row{margin-top:11px;padding-top:11px;border-top:1px solid var(--line-soft)}
+  .fl-group{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .fl-label{font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-right:2px}
+  .chip{display:inline-flex;align-items:center;gap:7px;padding:7px 13px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);font-size:13.5px;font-weight:500}
+  .chip svg{width:14px;height:14px}
+  .chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .chip.on svg{color:#fff}
+  .filter-row .right{margin-left:auto;display:flex;align-items:center;gap:8px}
+  .select{appearance:none;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:7px 32px 7px 13px;font-size:13.5px;color:var(--ink-soft);font-weight:500;font-family:inherit;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7480' stroke-width='2.5'><path d='M6 9l6 6 6-6'/></svg>");background-repeat:no-repeat;background-position:right 12px center}
+
+  /* multiselect (accessible popover: button trigger + panel) — used for location + tags */
+  .ms{position:relative}
+  .ms-trigger{cursor:pointer;display:inline-flex;align-items:center;gap:7px;padding:7px 13px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);font-size:13.5px;font-weight:500}
+  .ms-trigger .cv{width:12px;height:12px;color:var(--muted);transition:transform .15s ease}
+  .ms.open .ms-trigger{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .ms.open .ms-trigger .cv{color:#fff;transform:rotate(180deg)}
+  .ms-menu[hidden]{display:none}
+  .ms-menu{position:absolute;z-index:15;top:calc(100% + 6px);left:0;min-width:210px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm);box-shadow:var(--shadow);padding:8px}
+  .ms-menu label{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:8px;font-size:14px;color:var(--ink-soft);cursor:pointer}
+  .ms-menu label:hover{background:var(--surface-2)}
+  .ms-menu input{accent-color:var(--ink);width:15px;height:15px}
+
+  /* salary — compact popover (anchored pill in the filter row) */
+  .sal-menu{width:288px;padding:14px}
+  .sal-menu .sv-lab{font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:12px}
+  /* dual slider — track + fill + thumbs share ONE vertical centre-line */
+  .range{position:relative;width:100%;height:24px}
+  .range-track{position:absolute;top:50%;left:0;right:0;height:5px;transform:translateY(-50%);background:var(--line);border-radius:999px}
+  .range-fill{position:absolute;top:50%;height:5px;transform:translateY(-50%);background:var(--gold);border-radius:999px}
+  .range input[type=range]{-webkit-appearance:none;appearance:none;position:absolute;top:0;left:0;width:100%;height:24px;margin:0;background:transparent;pointer-events:none}
+  /* WebKit: 24px runnable track + 20px thumb → margin-top (24-20)/2 = 2px centres the thumb on the 50% line */
+  .range input[type=range]::-webkit-slider-runnable-track{height:24px;background:transparent;border:0}
+  .range input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;pointer-events:auto;width:20px;height:20px;border-radius:999px;background:#fff;border:2px solid var(--gold-deep);box-shadow:var(--shadow-sm);cursor:pointer;margin-top:2px}
+  /* Firefox: full-height transparent track lets it auto-centre the 20px thumb on the same line */
+  .range input[type=range]::-moz-range-track{height:24px;background:transparent;border:0}
+  .range input[type=range]::-moz-range-thumb{pointer-events:auto;width:18px;height:18px;border-radius:999px;background:#fff;border:2px solid var(--gold-deep);box-shadow:var(--shadow-sm);cursor:pointer}
+  .sal-vals{display:block;font-size:14px;font-weight:600;color:var(--ink);white-space:nowrap;text-align:center;margin:12px 0}
+  .sal-unknown{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--ink-soft);cursor:pointer;padding-top:12px;border-top:1px solid var(--line-soft)}
+  .sal-unknown input{accent-color:var(--ink);width:15px;height:15px;flex:none}
+  .sal-done-row{display:flex;justify-content:flex-end;margin-top:13px}
+
+  /* active filters bar */
+  .active-filters{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 14px}
+  .af-label{font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+  .afilter{display:inline-flex;align-items:center;gap:7px;background:var(--ink);color:#fff;border-radius:999px;padding:5px 8px 5px 12px;font-size:12.5px;font-weight:600}
+  .afilter button{border:0;background:rgba(255,255,255,.22);color:#fff;width:18px;height:18px;border-radius:999px;display:grid;place-items:center;line-height:1;padding:0}
+  .afilter button svg{width:10px;height:10px}
+  .afilter button:hover{background:rgba(255,255,255,.4)}
+  .clear-all{background:transparent;border:0;color:var(--gold-deep);font-weight:600;font-size:12.5px;text-decoration:underline;cursor:pointer;margin-left:2px}
+
+  /* review-status segmented tabs */
+  .status-row{display:flex;align-items:center;gap:12px;margin:2px 0 14px;flex-wrap:wrap}
+  .seg{display:inline-flex;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:3px;box-shadow:var(--shadow-sm)}
+  .seg button{border:0;background:transparent;color:var(--ink-soft);font-size:13.5px;font-weight:600;padding:7px 15px;border-radius:999px}
+  .seg button.on{background:var(--ink);color:#fff}
+  .count{color:var(--muted);font-size:13.5px;margin-left:auto}
+  .count b{color:var(--ink-soft)}
+
+  /* ---- job cards ---- */
+  /* each job is a row: [ verdict gutter ] [ card ] */
+  .job-row{display:flex;align-items:center;gap:13px;margin-bottom:12px}
+  .card{flex:1;min-width:0;display:flex;gap:14px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px;cursor:pointer;transition:transform .08s ease, box-shadow .12s ease}
+  .card:hover{transform:translateY(-1px);box-shadow:0 2px 4px rgba(22,50,79,.05),0 14px 30px rgba(22,50,79,.09)}
+  .card:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+  .card.is-reviewed{background:var(--surface-2)}
+
+  /* verdict buttons — big, vertical, OUTSIDE the card in a dedicated left gutter */
+  .verdict{flex:none;display:flex;flex-direction:column;gap:11px;align-items:center}
+  .vbtn{width:50px;height:50px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);display:grid;place-items:center;color:var(--muted);box-shadow:var(--shadow-sm);transition:all .12s ease}
+  .vbtn svg{width:23px;height:23px}
+  .vbtn:hover{transform:scale(1.06)}
+  .vbtn:active{transform:scale(.96)}
+  .vbtn.good:hover{border-color:var(--sage);color:var(--sage);background:var(--sage-soft)}
+  .vbtn.bad:hover{border-color:var(--terra);color:var(--terra);background:var(--terra-soft)}
+  .vbtn.on.good{background:var(--sage);border-color:var(--sage);color:#fff}
+  .vbtn.on.bad{background:var(--terra);border-color:var(--terra);color:#fff}
+
+  .fit{flex:none;width:62px;text-align:center}
+  .fit .ring{width:54px;height:54px;border-radius:999px;display:grid;place-items:center;font-family:var(--serif);font-size:19px;font-weight:600;margin:0 auto 5px}
+  .fit .lbl{font-size:10.5px;font-weight:600;letter-spacing:.02em;text-transform:uppercase}
+  .fit-strong .ring{background:var(--sage-soft);color:var(--sage);border:1.5px solid #B9D8CB}
+  .fit-strong .lbl{color:var(--sage)}
+  .fit-good .ring{background:var(--gold-soft);color:var(--gold-deep);border:1.5px solid #E7D3A8}
+  .fit-good .lbl{color:var(--gold-deep)}
+  .fit-fair .ring{background:#EEF0F2;color:var(--muted);border:1.5px solid #DFE3E7}
+  .fit-fair .lbl{color:var(--muted)}
+  .body{flex:1;min-width:0}
+  .body-head{display:flex;gap:13px;align-items:center}
+  .body h3{font-size:18px;line-height:1.3}
+  .body h3 a:hover{color:var(--gold-deep)}
+  .company{color:var(--ink-soft);font-weight:600;font-size:14.5px;margin-top:3px}
+  .rev-flag{display:none;align-items:center;gap:5px;font-size:11px;font-weight:600;border-radius:6px;padding:2px 8px;margin-left:8px;vertical-align:middle}
+  .rev-flag svg{width:12px;height:12px}
+  .card.rev-good .rev-flag.f-good{display:inline-flex;color:var(--sage);background:var(--sage-soft)}
+  .card.rev-bad .rev-flag.f-bad{display:inline-flex;color:var(--terra);background:var(--terra-soft)}
+  .meta{color:var(--muted);font-size:13.5px;margin-top:8px;display:flex;flex-wrap:wrap;gap:5px 14px;align-items:center}
+  .meta .pin{display:inline-flex;align-items:center;gap:5px}
+  .meta svg{color:var(--muted)}
+  .why{margin-top:11px;background:var(--surface-2);border:1px solid var(--line-soft);border-radius:var(--radius-sm);padding:9px 12px;font-size:13.5px;color:var(--ink-soft)}
+  .why b{color:var(--sage);font-weight:600}
+  .tags{margin-top:11px;display:flex;gap:7px;flex-wrap:wrap}
+  .tagchip{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;border-radius:999px;padding:3px 11px;border:1px solid transparent;cursor:pointer;transition:filter .1s ease, box-shadow .1s ease}
+  .tagchip .tk{width:6px;height:6px;border-radius:999px}
+  .tc-cat{background:var(--gold-soft);color:var(--gold-deep)} .tc-cat .tk{background:var(--gold)}
+  .tc-func{background:var(--blue-soft);color:var(--blue)} .tc-func .tk{background:var(--blue)}
+  .tc-lvl{background:var(--sage-soft);color:var(--sage)} .tc-lvl .tk{background:var(--sage)}
+  .tagchip:hover{filter:brightness(.96);box-shadow:var(--shadow-sm)}
+  .tagchip.on{outline:2px solid currentColor;outline-offset:1px}
+  .side{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:10px}
+  .save{width:38px;height:38px;border-radius:999px;border:1px solid var(--line);background:var(--surface);display:grid;place-items:center;color:var(--muted)}
+  .save svg{width:18px;height:18px}
+  .save.on{background:var(--terra-soft);border-color:#E9CBBB;color:var(--terra)}
+  .save.on svg{fill:var(--terra)}
+  .view svg{width:14px;height:14px}   /* .view is now a .btn .btn--primary; hook kept for card click handling */
+  .new-dot{font-size:11px;color:var(--gold-deep);background:var(--gold-soft);border-radius:6px;padding:2px 8px;font-weight:600}
+
+  .empty{display:none;text-align:center;color:var(--muted);background:var(--surface);border:1px dashed var(--line);border-radius:var(--radius);padding:40px 22px;font-size:14.5px}
+  .footer-note{color:var(--muted);font-size:12.5px;text-align:center;margin-top:26px}
+
+  /* ---- review reason popover ---- */
+  .rpop{position:fixed;z-index:60;width:274px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 12px 38px rgba(22,50,79,.20);padding:14px;animation:pop .14s ease}
+  @keyframes pop{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+  .rpop h4{font-family:var(--serif);font-size:14.5px;margin:0 0 3px;display:flex;align-items:center;gap:8px}
+  .rpop h4 .vd{width:10px;height:10px;border-radius:999px}
+  .rpop .rp-hint{color:var(--muted);font-size:12px;margin:0 0 11px}
+  .rpop-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:11px}
+  .rpop-chip{font-size:12px;font-weight:600;border:1px solid var(--line);background:var(--surface-2);color:var(--ink-soft);border-radius:999px;padding:5px 11px}
+  .rpop-chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .rpop-note{display:block;width:100%;border:1px solid var(--line);border-radius:var(--radius-sm);padding:8px 10px;font-family:inherit;font-size:13px;color:var(--ink);background:var(--surface-2);outline:none}
+  .rpop-note:focus{border-color:var(--gold)}
+  .rpop-actions{display:flex;justify-content:space-between;align-items:center;margin-top:11px}
+  .rpop-done{padding:7px 17px;font-size:13px}   /* .rpop-done = .btn .btn--primary */
+  .rpop-remove{background:transparent;border:0;color:var(--muted);font-size:12.5px;text-decoration:underline;cursor:pointer;padding:0}
+
+  /* ---- Quick Add modal ---- */
+  .modal{position:fixed;inset:0;z-index:80;background:rgba(22,50,79,.42);backdrop-filter:blur(2px);display:none;align-items:center;justify-content:center;padding:22px}
+  .modal.open{display:flex}
+  .modal-card{background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:0 22px 64px rgba(22,50,79,.30);width:100%;max-width:452px;padding:26px;animation:pop .16s ease}
+  .modal-card h2{font-size:21px;display:flex;align-items:center;gap:10px}
+  .modal-card h2 .mi{width:34px;height:34px;border-radius:10px;background:var(--gold-soft);color:var(--gold-deep);display:grid;place-items:center;flex:none}
+  .modal-card h2 .mi svg{width:18px;height:18px}
+  .modal-card .msub{color:var(--muted);font-size:13.5px;margin:8px 0 17px;line-height:1.5}
+  .qa-input{display:flex;align-items:center;gap:9px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--surface-2);padding:11px 13px;margin-bottom:15px}
+  .qa-input svg{color:var(--muted);flex:none}
+  .qa-input input{border:0;background:transparent;outline:none;width:100%;font-size:14.5px;font-family:inherit;color:var(--ink)}
+  .qa-actions{display:flex;gap:9px;justify-content:flex-end}
+  .qa-go{padding:10px 22px;font-size:14px}      /* .qa-go = .btn .btn--primary (size tuned) */
+  .qa-cancel{padding:10px 18px;font-size:14px}  /* .qa-cancel = .btn .btn--outline */
+  .qa-steps{list-style:none;padding:0;margin:4px 0 0}
+  .qa-steps li{display:flex;align-items:center;gap:12px;padding:9px 0;font-size:14px;color:var(--muted);transition:color .2s}
+  .qa-steps li .s-ic{width:24px;height:24px;border-radius:999px;border:2px solid var(--line);flex:none;display:grid;place-items:center;color:#fff}
+  .qa-steps li .s-ic svg{width:13px;height:13px;opacity:0}
+  .qa-steps li.doing{color:var(--ink);font-weight:600}
+  .qa-steps li.doing .s-ic{border-color:var(--gold);border-top-color:transparent;animation:spin .7s linear infinite}
+  .qa-steps li.done{color:var(--ink-soft)}
+  .qa-steps li.done .s-ic{border-color:var(--sage);background:var(--sage);animation:none}
+  .qa-steps li.done .s-ic svg{opacity:1}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .qa-result{display:flex;align-items:center;gap:13px;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin:6px 0 16px}
+  .qa-result .r-ring{flex:none;width:46px;height:46px;border-radius:999px;background:var(--sage-soft);color:var(--sage);border:1.5px solid #B9D8CB;display:grid;place-items:center;font-family:var(--serif);font-size:16px;font-weight:600}
+  .qa-result .r-t{font-family:var(--serif);font-size:15.5px;font-weight:600}
+  .qa-result .r-m{color:var(--muted);font-size:13px;margin-top:2px}
+  .qa-ok{display:flex;align-items:center;gap:8px;color:var(--sage);font-size:13.5px;font-weight:600;margin-bottom:13px}
+  .qa-ok svg{width:16px;height:16px}
+
+  @media(max-width:920px){
+    .jobs-layout{flex-direction:column}
+    .rev-rail{position:static;width:100%;max-height:none;order:-1}
+  }
+  @media(max-width:620px){
+    .nav a{padding:8px 10px;font-size:13.5px}
+    .brand span{display:none}
+    /* verdict buttons go horizontal, above the card */
+    .job-row{flex-direction:column;align-items:stretch;gap:10px}
+    .verdict{flex-direction:row;justify-content:center;gap:14px}
+    .card{flex-wrap:wrap}
+    .side{flex-direction:row;width:100%;justify-content:space-between;align-items:center}
+    .fit{order:-1}
+    .count{margin-left:0;width:100%}
+    .sal-menu{width:min(288px,78vw)}
+  }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-in">
+      <a href="dashboard.html" class="brand" style="text-decoration:none;color:var(--ink)">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><polygon points="15.5 8.5 10.5 10.5 8.5 15.5 13.5 13.5" fill="currentColor" stroke="none"/></svg>
+        <span>Compass</span>
+      </a>
+      <nav class="nav">
+        <a href="dashboard.html">Dashboard</a>
+        <a class="active" href="jobs.html">Jobs</a>
+        <a href="saved.html">My Jobs</a>
+        <a href="documents.html">Documents</a>
+      </nav>
+      <div class="spacer"></div>
+      <a class="gear" href="setup.html" title="Setup &amp; preferences" aria-label="Setup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-2.9-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.2-2.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></a>
+      <div class="avatar" title="Nicole Doan, CPA">ND</div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="page-head">
+      <div>
+        <h1>Jobs for you</h1>
+        <div class="sub">Ranked by how well they fit your background in content &amp; media finance.</div>
+        <div class="scan-status" id="scanStatus"><span class="sdot"></span><span id="scanText">Last updated today at 8:04 AM · 15 roles</span></div>
+      </div>
+      <div class="head-actions">
+        <button class="btn btn--primary" id="addJobBtn" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>
+          Add a job
+        </button>
+        <button class="btn btn--outline" id="refreshBtn" type="button">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v5h-5"/></svg>
+          Find new jobs
+        </button>
+      </div>
+    </div>
+
+    <div class="jobs-layout">
+      <!-- ====== Reviewed rail (left) ====== -->
+      <aside class="rev-rail" id="revRail">
+        <div class="rev-rail-head" id="railToggle">
+          Reviewed
+          <span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg></span>
+        </div>
+        <div class="rev-body" id="revBody"><!-- filled by JS --></div>
+      </aside>
+
+      <!-- ====== Main column ====== -->
+      <div class="jobs-main">
+        <section class="filters" aria-label="Filter jobs">
+          <label class="search">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+            <input id="q" type="text" placeholder="Search roles, companies, or keywords…" />
+          </label>
+
+          <div class="filter-row">
+            <div class="fl-group">
+              <span class="fl-label">Work type</span>
+              <button class="chip" data-work="Remote" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5h18v11H3z"/><path d="M8 20h8"/></svg>Remote</button>
+              <button class="chip" data-work="Hybrid" type="button">Hybrid</button>
+              <button class="chip" data-work="On-site" type="button">On-site</button>
+            </div>
+
+            <div class="ms" id="locMs">
+              <button class="ms-trigger" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="locPanel">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>
+                <span id="locLabel">All locations</span>
+                <svg class="cv" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+              </button>
+              <div class="ms-menu" id="locPanel" role="group" aria-label="Filter by location" hidden>
+                <label><input type="checkbox" class="loc-cb" value="new-york">New York</label>
+                <label><input type="checkbox" class="loc-cb" value="los-angeles">Los Angeles</label>
+                <label><input type="checkbox" class="loc-cb" value="sf-bay">SF Bay Area</label>
+                <label><input type="checkbox" class="loc-cb" value="remote">Remote</label>
+                <label><input type="checkbox" class="loc-cb" value="other">Other</label>
+              </div>
+            </div>
+
+            <div class="ms" id="salMs">
+              <button class="ms-trigger" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="salPanel">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                <span id="salPill">Any salary</span>
+                <svg class="cv" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+              </button>
+              <div class="ms-menu sal-menu" id="salPanel" role="group" aria-label="Filter by salary" hidden>
+                <span class="sv-lab">Salary range</span>
+                <div class="range" aria-label="Salary range">
+                  <div class="range-track"></div>
+                  <div class="range-fill" id="rangeFill"></div>
+                  <input type="range" id="salLow"  min="80" max="300" step="5" value="80"  aria-label="Minimum salary">
+                  <input type="range" id="salHigh" min="80" max="300" step="5" value="300" aria-label="Maximum salary">
+                </div>
+                <span class="sal-vals" id="salVals">$80K – $300K+</span>
+                <label class="sal-unknown"><input type="checkbox" id="salUnknown" checked>Show jobs with no listed salary</label>
+                <div class="sal-done-row"><button type="button" class="btn btn--primary btn--sm" id="salDone">Done</button></div>
+              </div>
+            </div>
+
+            <div class="right">
+              <select class="select" id="sort" aria-label="Sort by">
+                <option value="best" selected>Sort: Best match</option>
+                <option value="new">Sort: Newest</option>
+                <option value="salary">Sort: Salary</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- tag filter row -->
+          <div class="filter-row tags-row">
+            <span class="fl-label">Tags</span>
+            <div class="ms" id="catMs">
+              <button class="ms-trigger" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="catMenu"><span class="tk" style="width:7px;height:7px;border-radius:999px;background:var(--gold)"></span><span id="catLabel">Category</span><svg class="cv" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg></button>
+              <div class="ms-menu" id="catMenu" role="group" aria-label="Filter by category" hidden></div>
+            </div>
+            <div class="ms" id="funcMs">
+              <button class="ms-trigger" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="funcMenu"><span class="tk" style="width:7px;height:7px;border-radius:999px;background:var(--blue)"></span><span id="funcLabel">Function</span><svg class="cv" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg></button>
+              <div class="ms-menu" id="funcMenu" role="group" aria-label="Filter by function" hidden></div>
+            </div>
+            <div class="ms" id="lvlMs">
+              <button class="ms-trigger" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="lvlMenu"><span class="tk" style="width:7px;height:7px;border-radius:999px;background:var(--sage)"></span><span id="lvlLabel">Level</span><svg class="cv" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg></button>
+              <div class="ms-menu" id="lvlMenu" role="group" aria-label="Filter by level" hidden></div>
+            </div>
+          </div>
+
+        </section>
+
+        <!-- active filters -->
+        <div class="active-filters" id="activeFilters" style="display:none"></div>
+
+        <div class="status-row">
+          <div class="seg" role="tablist" aria-label="Review status">
+            <button data-rev="not" class="on" type="button" role="tab" aria-selected="true" tabindex="0" aria-controls="list">Not reviewed</button>
+            <button data-rev="reviewed" type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="list">Reviewed</button>
+            <button data-rev="all" type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="list">All</button>
+          </div>
+          <div class="count" id="count"></div>
+        </div>
+
+        <div id="list" role="tabpanel" aria-label="Jobs"></div>
+
+        <div class="empty" id="empty">No jobs match these filters. Try widening the salary range or clearing a filter.</div>
+
+        <p class="footer-note">New roles are found for you automatically every morning. You can also press &ldquo;Find new jobs&rdquo; anytime, or &ldquo;Add a job&rdquo; to paste a link you found yourself.</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- ====== Quick Add modal ====== -->
+  <div class="modal" id="qaModal" aria-hidden="true">
+    <div class="modal-card" id="qaCard" role="dialog" aria-modal="true" aria-labelledby="qaTitle" aria-describedby="qaSub">
+      <div id="qaBody"></div>
+    </div>
+  </div>
+
+  <!-- shared toast: screen-reader announced, non-blocking -->
+  <div id="toastLive" class="toast-wrap" role="status" aria-live="polite" aria-atomic="false"></div>
+
+<script>
+/* ============ Iteration 5 shared kit: toast + accessible popover + dialog trap + tabs ============ */
+function toast(msg, type){
+  var w=document.getElementById("toastLive"); if(!w) return;
+  var t=document.createElement("div"); t.className="toast toast--"+(type||"info");
+  if(type==="success"){ t.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>'; }
+  var s=document.createElement("span"); s.textContent=msg; t.appendChild(s);
+  w.appendChild(t);
+  setTimeout(function(){ t.style.transition="opacity .2s"; t.style.opacity="0"; setTimeout(function(){ if(t.parentNode) t.remove(); }, 220); }, 3600);
+}
+
+/* one reusable dropdown/popover controller for every .ms (salary, location, category/function/level):
+   real button trigger + panel, Esc to close, outside-click to close, only one open, focus return. */
+var Pop = (function(){
+  var openMs=null;
+  function panel(ms){ return ms.querySelector(".ms-menu"); }
+  function trig(ms){ return ms.querySelector(".ms-trigger"); }
+  function focusables(p){ return Array.prototype.slice.call(p.querySelectorAll('input:not([type=hidden]),button,select,textarea,a[href],[tabindex]:not([tabindex="-1"])')); }
+  function open(ms){
+    if(openMs && openMs!==ms) close(openMs, false);
+    panel(ms).hidden=false; ms.classList.add("open"); trig(ms).setAttribute("aria-expanded","true");
+    openMs=ms;
+    var f=focusables(panel(ms))[0]; if(f) f.focus();
+    document.addEventListener("mousedown", onDown, true);
+    document.addEventListener("keydown", onKey, true);
+  }
+  function close(ms, returnFocus){
+    if(!ms) return;
+    panel(ms).hidden=true; ms.classList.remove("open"); trig(ms).setAttribute("aria-expanded","false");
+    if(openMs===ms) openMs=null;
+    if(!openMs){ document.removeEventListener("mousedown", onDown, true); document.removeEventListener("keydown", onKey, true); }
+    if(returnFocus) trig(ms).focus();
+  }
+  function toggle(ms){ if(openMs===ms) close(ms, true); else open(ms); }
+  function onDown(e){ if(openMs && !openMs.contains(e.target)) close(openMs, false); }
+  function onKey(e){
+    if(!openMs) return;
+    if(e.key==="Escape"){ e.preventDefault(); close(openMs, true); return; }
+    if(e.key==="ArrowDown" || e.key==="ArrowUp"){
+      var ae=document.activeElement;
+      if(ae && ae.type==="range") return;   /* let sliders use arrows natively */
+      var items=focusables(panel(openMs)).filter(function(el){ return el.type!=="range"; });
+      if(!items.length) return;
+      var i=items.indexOf(ae);
+      e.preventDefault();
+      var n = e.key==="ArrowDown" ? (i+1)%items.length : (i-1+items.length)%items.length;
+      items[n].focus();
+    }
+  }
+  function init(ms){ trig(ms).addEventListener("click", function(){ toggle(ms); }); }
+  return {init:init, close:close, closeAll:function(rf){ close(openMs, rf); }};
+})();
+
+/* focus trap helper for the dialog */
+function trapTab(container, e){
+  if(e.key!=="Tab") return;
+  var f=Array.prototype.slice.call(container.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'))
+        .filter(function(el){ return el.offsetParent!==null; });
+  if(!f.length) return;
+  var first=f[0], last=f[f.length-1];
+  if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); }
+  else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); }
+}
+
+/* reusable ARIA tablist: roving tabindex + arrow/Home/End keys */
+function initTabs(tablist, opts){
+  opts=opts||{};
+  var tabs=Array.prototype.slice.call(tablist.querySelectorAll('[role="tab"]'));
+  function select(tab, focus){
+    tabs.forEach(function(t){
+      var on=t===tab;
+      t.setAttribute("aria-selected", on?"true":"false");
+      t.tabIndex = on?0:-1;
+      if(opts.onClass) t.classList.toggle(opts.onClass, on);
+      if(opts.panels){ var p=document.getElementById(t.getAttribute("aria-controls")); if(p) p.hidden=!on; }
+    });
+    if(focus) tab.focus();
+    if(opts.onSelect) opts.onSelect(tab);
+  }
+  tablist.addEventListener("keydown", function(e){
+    var i=tabs.indexOf(document.activeElement); if(i<0) return;
+    var n;
+    if(e.key==="ArrowRight"||e.key==="ArrowDown") n=(i+1)%tabs.length;
+    else if(e.key==="ArrowLeft"||e.key==="ArrowUp") n=(i-1+tabs.length)%tabs.length;
+    else if(e.key==="Home") n=0;
+    else if(e.key==="End") n=tabs.length-1;
+    else return;
+    e.preventDefault(); select(tabs[n], true);
+  });
+  tabs.forEach(function(t){ t.addEventListener("click", function(){ select(t, false); }); });
+  return {select:select, tabs:tabs};
+}
+/* ============ shared job data ============ */
+var JOBS = [
+  {id:"j1", title:"Director, Finance Business Manager", company:"Horizon Media", domain:"horizonmedia.com", mono:"HM", color:"#B5623B", loc:"New York, NY", locKey:"new-york", work:"Hybrid", salMin:185, salMax:215, fit:94, age:2, isNew:true, saved:true, cat:"Media & Entertainment", func:"Finance Business Partner", level:"Director", why:"Media agency FP&A leadership role — matches your WBD content-finance experience and CPA credential."},
+  {id:"j2", title:"Senior Manager, Content Finance", company:"Netflix", domain:"netflix.com", mono:"N", color:"#96702F", loc:"Los Angeles, CA", locKey:"los-angeles", work:"Hybrid", salMin:170, salMax:200, fit:91, age:4, isNew:false, saved:true, cat:"Media & Entertainment", func:"FP&A", level:"Sr Manager", why:"Content P&L ownership and title-level profitability — the core of your day-to-day at Warner Bros. Discovery."},
+  {id:"j3", title:"Director, Technical Ops Finance", company:"NBCUniversal", domain:"nbcuni.com", mono:"NBC", color:"#2E5C8A", loc:"New York, NY", locKey:"new-york", work:"On-site", salMin:165, salMax:190, fit:88, age:1, isNew:true, saved:false, cat:"Media & Entertainment", func:"Corporate Finance", level:"Director", why:"Director-level media finance in NYC. Operations focus is a slight pivot, but the FP&A discipline transfers cleanly."},
+  {id:"j4", title:"Finance Manager, FP&A", company:"Amazon MGM Studios", domain:"amazon.com", mono:"A", color:"#96702F", loc:"Los Angeles, CA", locKey:"los-angeles", work:"Hybrid", salMin:150, salMax:175, fit:87, age:6, isNew:false, saved:true, cat:"Media & Entertainment", func:"FP&A", level:"Manager", why:"Studio FP&A with strong forecasting scope. Hybrid in LA, and the content economics mirror your current work."},
+  {id:"j5", title:"Senior Director, Finance", company:"Reddit", domain:"reddit.com", mono:"R", color:"#B5623B", loc:"Remote (US)", locKey:"remote", work:"Remote", salMin:240, salMax:290, fit:86, age:3, isNew:true, saved:false, cat:"Tech", func:"Strategic Finance", level:"Director", why:"Fully remote finance leadership with a big step up in scope and pay. Platform (not content) finance, so a stretch worth a look."},
+  {id:"j6", title:"Director, FP&A — Streaming", company:"Paramount", domain:"paramount.com", mono:"P", color:"#16324F", loc:"New York, NY", locKey:"new-york", work:"Hybrid", salMin:180, salMax:205, fit:85, age:9, isNew:false, saved:true, cat:"Media & Entertainment", func:"FP&A", level:"Director", why:"Director-level streaming FP&A in NYC. Leans more on subscriber modeling than your title-level P&L work."},
+  {id:"j7", title:"Senior Manager, Content & Licensing Finance", company:"Spotify", domain:"spotify.com", mono:"S", color:"#2F6F5B", loc:"New York, NY", locKey:"new-york", work:"Hybrid", salMin:160, salMax:185, fit:82, age:7, isNew:false, saved:true, cat:"Media & Entertainment", func:"Strategic Finance", level:"Sr Manager", why:"Content & licensing economics overlap well; audio is a new vertical but the finance skills transfer."},
+  {id:"j8", title:"Senior Manager, Content Finance", company:"Hulu", domain:"hulu.com", mono:"H", color:"#2F6F5B", loc:"SF Bay Area, CA", locKey:"sf-bay", work:"Hybrid", salMin:175, salMax:205, fit:81, age:5, isNew:false, saved:false, cat:"Media & Entertainment", func:"FP&A", level:"Sr Manager", why:"Direct content-finance match at a streamer. Bay Area location is outside your NYC preference — hybrid may still work."},
+  {id:"j9", title:"Director, Financial Planning", company:"Warner Music Group", domain:"wmg.com", mono:"WMG", color:"#6B4E8A", loc:"New York, NY", locKey:"new-york", work:"Hybrid", salMin:175, salMax:200, fit:79, age:8, isNew:false, saved:false, cat:"Media & Entertainment", func:"Corporate Finance", level:"Director", why:"Director-level and NYC-based. Broader corporate planning scope vs. your content-P&L focus."},
+  {id:"j10", title:"Manager, Content Finance", company:"NBCUniversal", domain:"nbcuni.com", mono:"NBC", color:"#2E5C8A", loc:"New York, NY", locKey:"new-york", work:"On-site", salMin:135, salMax:155, fit:79, age:10, isNew:false, saved:false, cat:"Media & Entertainment", func:"FP&A", level:"Manager", why:"Right industry and location. Likely a step below your current level — worth a look for a strong culture fit."},
+  {id:"j11", title:"Manager, Studio FP&A", company:"Disney", domain:"disney.com", mono:"D", color:"#2E5C8A", loc:"Los Angeles, CA", locKey:"los-angeles", work:"On-site", salMin:145, salMax:170, fit:78, age:11, isNew:false, saved:false, cat:"Media & Entertainment", func:"FP&A", level:"Manager", why:"Studio FP&A at a marquee name. On-site LA and manager level make it a lateral, cross-country move."},
+  {id:"j12", title:"Director, Strategic Finance", company:"Coinbase", domain:"coinbase.com", mono:"CB", color:"#2E5C8A", loc:"Remote (US)", locKey:"remote", work:"Remote", salMin:210, salMax:260, fit:74, age:5, isNew:true, saved:false, cat:"Crypto", func:"Strategic Finance", level:"Director", why:"A strong pay and scope step-up, fully remote. Crypto is a new industry for you, so it's a genuine pivot to weigh."},
+  {id:"j13", title:"FP&A Manager, Media", company:"Roku", domain:"roku.com", mono:"R", color:"#6B4E8A", loc:"Remote (US)", locKey:"remote", work:"Remote", salMin:140, salMax:160, fit:73, age:14, isNew:false, saved:false, cat:"Tech", func:"FP&A", level:"Manager", why:"Fully remote and media-adjacent. More ad-platform finance than content finance, so a bit of a stretch."},
+  {id:"j14", title:"Manager, FP&A — Touring", company:"Live Nation", domain:"livenation.com", mono:"LN", color:"#B5623B", loc:"Los Angeles, CA", locKey:"los-angeles", work:"On-site", salMin:120, salMax:140, fit:71, age:15, isNew:false, saved:false, cat:"Consumer", func:"FP&A", level:"Manager", why:"Live-events finance is a fresh angle. Manager level is at the lower end of your target, but the industry is adjacent."},
+  {id:"j15", title:"Senior Manager, FP&A", company:"Chime", domain:"chime.com", mono:"Ch", color:"#2F6F5B", loc:"Remote (US)", locKey:"remote", work:"Remote", salMin:null, salMax:null, fit:70, age:13, isNew:false, saved:false, cat:"Fintech", func:"FP&A", level:"Sr Manager", why:"Consumer-fintech FP&A, fully remote. Salary isn't listed, and it's outside media — a pivot worth a quick look."}
+];
+
+/* Iteration 6 — "still open?" liveness: most roles Open, a couple no longer accepting */
+var CLOSED_JOBS = {j11:true, j14:true};   /* Disney (Studio FP&A) & Live Nation (Touring) filled */
+JOBS.forEach(function(j){ j.open = !CLOSED_JOBS[j.id]; });
+
+/* tag taxonomy (order = display order in filter menus) */
+var CATS  = ["Media & Entertainment","Tech","Crypto","Consumer","Fintech"];
+var FUNCS = ["FP&A","Strategic Finance","Corporate Finance","Finance Business Partner"];
+var LEVELS= ["Director","Sr Manager","Manager"];
+var LOC_LABEL = {"new-york":"New York","los-angeles":"Los Angeles","sf-bay":"SF Bay Area","remote":"Remote","other":"Other"};
+
+/* reason chip sets */
+var REASONS = {
+  good:["Great fit","Dream company","Right level","Great comp"],
+  bad:["Too junior","Wrong location","Below pay","Not my industry","Company"]
+};
+
+/* ============ review state (localStorage, shared across pages by job id) ============ */
+var REVK="compass_reviews", OLDK="compass_reviewed";
+function getReviews(){ try{ return JSON.parse(localStorage.getItem(REVK)||"{}"); }catch(e){ return {}; } }
+function setReviews(m){ localStorage.setItem(REVK, JSON.stringify(m)); }
+function getReview(id){ return getReviews()[id]||null; }
+function isReviewed(id){ return !!getReviews()[id]; }
+function saveReview(id, verdict, reason, note){
+  var m=getReviews(); var cur=m[id]||{};
+  m[id]={verdict:verdict, reason:(reason!=null?reason:(cur.reason||"")), note:(note!=null?note:(cur.note||"")), ts:Date.now()};
+  setReviews(m);
+}
+function clearReview(id){ var m=getReviews(); delete m[id]; setReviews(m); }
+/* one-time migration from the iteration-2 "compass_reviewed" boolean map */
+(function(){ try{
+  var old=JSON.parse(localStorage.getItem(OLDK)||"{}"); var m=getReviews(); var ch=false;
+  Object.keys(old).forEach(function(k){ if(!m[k]){ m[k]={verdict:"good",reason:"",note:"",ts:Date.now()}; ch=true; } });
+  if(ch) setReviews(m);
+}catch(e){} })();
+
+/* ============ filter state + persistence ============ */
+var FKEY="compass_filters";
+var DEF={q:"", works:[], locs:[], cats:[], funcs:[], levels:[], salLow:80, salHigh:300, showUnknown:true, rev:"not", sort:"best"};
+function loadFilters(){
+  var s=Object.assign({}, DEF);
+  try{ var saved=JSON.parse(localStorage.getItem(FKEY)||"null"); if(saved) s=Object.assign(s, saved); }catch(e){}
+  // query params (from job-detail tag links) override + take priority
+  var p=new URLSearchParams(location.search);
+  if(p.get("cat"))  s.cats  = [p.get("cat")];
+  if(p.get("func")) s.funcs = [p.get("func")];
+  if(p.get("level"))s.levels= [p.get("level")];
+  if(p.get("q"))    s.q     = p.get("q");
+  return s;
+}
+function saveFilters(){ localStorage.setItem(FKEY, JSON.stringify(state)); }
+var state = loadFilters();
+
+function fmtSal(j){ if(j.salMax==null) return "Salary not listed"; return "$"+j.salMin+"K–$"+j.salMax+"K"; }
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function toggleIn(arr,v){ var i=arr.indexOf(v); if(i>=0){ arr.splice(i,1); return false; } arr.push(v); return true; }
+
+/* ============ card render ============ */
+function cardHTML(j){
+  var rev = getReview(j.id);
+  var revCls = rev ? (" is-reviewed rev-"+rev.verdict) : "";
+  var fitClass = j.fit>=86 ? "fit-strong" : (j.fit>=75 ? "fit-good" : "fit-fair");
+  var fitLabel = j.fit>=86 ? "Strong fit" : (j.fit>=75 ? "Good fit" : "Fair fit");
+  var newDot = j.isNew ? '<span class="new-dot">New · '+j.age+' days ago</span>' : '';
+  var liveBadge = j.open
+    ? '<span class="badge badge--live" data-live="open"><span class="tk"></span>Open</span>'
+    : '<span class="badge badge--closed" data-live="closed"><span class="tk"></span>Closed — no longer accepting</span>';
+  var goodOn = rev && rev.verdict==="good" ? " on" : "";
+  var badOn  = rev && rev.verdict==="bad"  ? " on" : "";
+  var chips =
+    '<span class="tagchip tc-cat'+(state.cats.indexOf(j.cat)>=0?' on':'')+'" data-tt="cat" data-tv="'+esc(j.cat)+'"><span class="tk"></span>'+esc(j.cat)+'</span>'+
+    '<span class="tagchip tc-func'+(state.funcs.indexOf(j.func)>=0?' on':'')+'" data-tt="func" data-tv="'+esc(j.func)+'"><span class="tk"></span>'+esc(j.func)+'</span>'+
+    '<span class="tagchip tc-lvl'+(state.levels.indexOf(j.level)>=0?' on':'')+'" data-tt="level" data-tv="'+esc(j.level)+'"><span class="tk"></span>'+esc(j.level)+'</span>';
+  return ''+
+  '<div class="job-row">'+
+    '<div class="verdict">'+
+      '<button class="vbtn good'+goodOn+'" type="button" data-v="good" title="Good — interested" aria-label="Mark as a good fit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></button>'+
+      '<button class="vbtn bad'+badOn+'" type="button" data-v="bad" title="Pass" aria-label="Pass on this role"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></button>'+
+    '</div>'+
+    '<article class="card'+revCls+'" data-id="'+j.id+'" role="link" tabindex="0" aria-label="View '+esc(j.title)+' at '+esc(j.company)+'">'+
+    '<div class="fit '+fitClass+'"><div class="ring">'+j.fit+'</div><div class="lbl">'+fitLabel+'</div></div>'+
+    '<div class="body">'+
+      '<div class="body-head">'+
+        '<span class="logo" style="--mc:'+j.color+'" data-mono="'+esc(j.mono)+'"><img src="https://logo.clearbit.com/'+j.domain+'" alt="'+esc(j.company)+' logo" onerror="this.parentNode.classList.add(\'failed\');this.remove()"></span>'+
+        '<div>'+
+          '<h3><a href="job-detail.html">'+esc(j.title)+'</a>'+
+            '<span class="rev-flag f-good"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>Liked</span>'+
+            '<span class="rev-flag f-bad"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg>Passed</span>'+
+          '</h3>'+
+          '<div class="company">'+esc(j.company)+'</div>'+
+        '</div>'+
+      '</div>'+
+      '<div class="meta"><span class="pin"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>'+esc(j.loc)+'</span><span>'+esc(j.work)+'</span><span>'+fmtSal(j)+'</span>'+liveBadge+newDot+'</div>'+
+      '<div class="why"><b>Why it fits:</b> '+esc(j.why)+'</div>'+
+      '<div class="tags">'+chips+'</div>'+
+    '</div>'+
+    '<div class="side">'+
+      '<button class="save'+(j.saved?' on':'')+'" type="button" aria-label="'+(j.saved?'Saved':'Save this job')+'" aria-pressed="'+j.saved+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.8 8.6a5 5 0 0 0-8.8-3.2A5 5 0 0 0 3.2 8.6c0 3.8 4.5 7 8.8 10.4 4.3-3.4 8.8-6.6 8.8-10.4Z"/></svg></button>'+
+      '<a class="btn btn--primary btn--sm view" href="job-detail.html">View<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>'+
+    '</div>'+
+    '</article>'+
+  '</div>';
+}
+
+function matches(j){
+  if(state.q){
+    var hay=(j.title+" "+j.company+" "+j.cat+" "+j.func+" "+j.level+" "+j.loc).toLowerCase();
+    if(hay.indexOf(state.q.toLowerCase())===-1) return false;
+  }
+  if(state.works.length && state.works.indexOf(j.work)===-1) return false;
+  if(state.locs.length && state.locs.indexOf(j.locKey)===-1) return false;
+  if(state.cats.length && state.cats.indexOf(j.cat)===-1) return false;
+  if(state.funcs.length && state.funcs.indexOf(j.func)===-1) return false;
+  if(state.levels.length && state.levels.indexOf(j.level)===-1) return false;
+  if(j.salMax==null){ if(!state.showUnknown) return false; }
+  else { if(j.salMax<state.salLow || j.salMin>state.salHigh) return false; }
+  var r=isReviewed(j.id);
+  if(state.rev==="not" && r) return false;
+  if(state.rev==="reviewed" && !r) return false;
+  return true;
+}
+
+function render(){
+  var rows=JOBS.filter(matches);
+  if(state.sort==="best") rows.sort(function(a,b){ return b.fit-a.fit; });
+  else if(state.sort==="new") rows.sort(function(a,b){ return a.age-b.age; });
+  else if(state.sort==="salary") rows.sort(function(a,b){ return (b.salMax||0)-(a.salMax||0); });
+
+  document.getElementById("list").innerHTML = rows.map(cardHTML).join("");
+  document.getElementById("empty").style.display = rows.length ? "none" : "block";
+
+  var reviews=getReviews();
+  var revCount=Object.keys(reviews).length;
+  var label=state.rev==="not"?"not yet reviewed":(state.rev==="reviewed"?"reviewed":"in total");
+  document.getElementById("count").innerHTML="Showing <b>"+rows.length+"</b> "+(rows.length===1?"role":"roles")+" "+label+" · "+revCount+" reviewed so far";
+
+  renderRail();
+  renderActiveFilters();
+  bindCards();
+  saveFilters();
+}
+
+/* ============ reviewed rail ============ */
+function jobById(id){ for(var i=0;i<JOBS.length;i++){ if(JOBS[i].id===id) return JOBS[i]; } return null; }
+function renderRail(){
+  var reviews=getReviews();
+  var liked=[], passed=[];
+  Object.keys(reviews).forEach(function(id){
+    var j=jobById(id); if(!j) return;
+    (reviews[id].verdict==="bad"?passed:liked).push({j:j, r:reviews[id]});
+  });
+  function itemHTML(x){
+    var reason=x.r.reason ? '<span class="ri-reason">'+esc(x.r.reason)+'</span>' : '';
+    var sep=x.r.reason ? ' · ' : '';
+    return '<div class="rev-item" data-id="'+x.j.id+'">'+
+      '<div class="ri-main">'+
+        '<div class="ri-title">'+esc(x.j.title)+'</div>'+
+        '<div class="ri-sub">'+esc(x.j.company)+sep+reason+'</div>'+
+      '</div>'+
+      '<div class="ri-acts">'+
+        '<button class="ri-edit" data-id="'+x.j.id+'" title="Edit reason" aria-label="Edit reason"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h4L18 10l-4-4L4 16v4Z"/><path d="M13.5 6.5 17.5 10.5"/></svg></button>'+
+        '<button class="ri-undo" data-id="'+x.j.id+'" title="Un-review (return to list)" aria-label="Un-review"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>'+
+      '</div>'+
+    '</div>';
+  }
+  var html="";
+  if(!liked.length && !passed.length){
+    html='<div class="rev-empty">Nothing reviewed yet. Use the <b style="color:var(--sage)">✓</b> or <b style="color:var(--terra)">✗</b> on any job to sort it here — and jot down why, if you like.</div>';
+  } else {
+    html+='<div class="rev-group-t">👍 Liked<span class="rc">'+liked.length+'</span></div>';
+    html+= liked.length ? liked.map(itemHTML).join("") : '<div class="rev-empty">None yet.</div>';
+    html+='<div class="rev-group-t">👎 Passed<span class="rc">'+passed.length+'</span></div>';
+    html+= passed.length ? passed.map(itemHTML).join("") : '<div class="rev-empty">None yet.</div>';
+  }
+  document.getElementById("revBody").innerHTML=html;
+
+  document.querySelectorAll(".ri-undo").forEach(function(b){
+    b.onclick=function(e){ e.stopPropagation(); clearReview(b.getAttribute("data-id")); render(); };
+  });
+  document.querySelectorAll(".ri-edit").forEach(function(b){
+    b.onclick=function(e){ e.stopPropagation(); var id=b.getAttribute("data-id"); var rv=getReview(id);
+      openPopover(b, id, rv?rv.verdict:"good"); };
+  });
+}
+
+/* ============ active filters bar ============ */
+function renderActiveFilters(){
+  var bar=document.getElementById("activeFilters");
+  var pills=[];
+  if(state.q) pills.push({k:"q", v:state.q, label:'“'+state.q+'”'});
+  state.works.forEach(function(v){ pills.push({k:"work", v:v, label:v}); });
+  state.locs.forEach(function(v){ pills.push({k:"loc", v:v, label:LOC_LABEL[v]||v}); });
+  state.cats.forEach(function(v){ pills.push({k:"cat", v:v, label:v}); });
+  state.funcs.forEach(function(v){ pills.push({k:"func", v:v, label:v}); });
+  state.levels.forEach(function(v){ pills.push({k:"level", v:v, label:v}); });
+  if(state.salLow>80 || state.salHigh<300) pills.push({k:"sal", v:"", label:"$"+state.salLow+"K–$"+state.salHigh+"K"+(state.salHigh>=300?"+":"")});
+  if(!state.showUnknown) pills.push({k:"unknown", v:"", label:"Hiding no-salary roles"});
+
+  if(!pills.length){ bar.style.display="none"; bar.innerHTML=""; return; }
+  bar.style.display="flex";
+  bar.innerHTML='<span class="af-label">Active</span>'+pills.map(function(p){
+    return '<span class="afilter">'+esc(p.label)+'<button type="button" data-k="'+p.k+'" data-v="'+esc(p.v)+'" aria-label="Remove filter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span>';
+  }).join("")+'<button class="clear-all" type="button" id="clearAll">Clear all</button>';
+
+  bar.querySelectorAll(".afilter button").forEach(function(b){
+    b.onclick=function(){ removeFilter(b.getAttribute("data-k"), b.getAttribute("data-v")); };
+  });
+  document.getElementById("clearAll").onclick=clearAllFilters;
+}
+function removeFilter(k,v){
+  if(k==="q") state.q="";
+  else if(k==="work") state.works=state.works.filter(function(x){return x!==v;});
+  else if(k==="loc") state.locs=state.locs.filter(function(x){return x!==v;});
+  else if(k==="cat") state.cats=state.cats.filter(function(x){return x!==v;});
+  else if(k==="func") state.funcs=state.funcs.filter(function(x){return x!==v;});
+  else if(k==="level") state.levels=state.levels.filter(function(x){return x!==v;});
+  else if(k==="sal"){ state.salLow=80; state.salHigh=300; }
+  else if(k==="unknown") state.showUnknown=true;
+  applyControls(); render();
+}
+function clearAllFilters(){
+  state.q=""; state.works=[]; state.locs=[]; state.cats=[]; state.funcs=[]; state.levels=[];
+  state.salLow=80; state.salHigh=300; state.showUnknown=true;
+  applyControls(); render();
+}
+
+/* ============ card interactions ============ */
+function bindCards(){
+  // whole card is clickable → job detail. Inner controls stopPropagation so they win.
+  function goDetail(){ location.href="job-detail.html"; }
+  document.querySelectorAll(".card").forEach(function(card){
+    card.addEventListener("click", goDetail);
+    card.addEventListener("keydown", function(e){
+      if(e.key==="Enter" || e.key===" "){ e.preventDefault(); goDetail(); }
+    });
+  });
+  // the explicit title link + View button already point to job-detail.html — just don't double-fire
+  document.querySelectorAll(".card .body h3 a, .card .view").forEach(function(a){
+    a.addEventListener("click", function(e){ e.stopPropagation(); });
+  });
+
+  document.querySelectorAll(".save").forEach(function(btn){
+    btn.onclick=function(e){ e.stopPropagation(); var on=btn.classList.toggle("on"); btn.setAttribute("aria-pressed",on); btn.setAttribute("aria-label",on?"Saved":"Save this job"); };
+  });
+  document.querySelectorAll(".vbtn").forEach(function(btn){
+    btn.onclick=function(e){
+      e.stopPropagation();
+      var card=btn.closest(".job-row").querySelector(".card"); var id=card.getAttribute("data-id"); var v=btn.getAttribute("data-v");
+      var cur=getReview(id);
+      if(cur && cur.verdict===v){ /* second tap on same verdict → just (re)open editor */ openPopover(btn,id,v); return; }
+      saveReview(id, v);                 /* one-tap commit; reason optional */
+      // reflect immediately without dropping the card out of view yet
+      card.classList.remove("rev-good","rev-bad"); card.classList.add("is-reviewed","rev-"+v);
+      btn.closest(".job-row").querySelectorAll(".vbtn").forEach(function(b){ b.classList.toggle("on", b.getAttribute("data-v")===v); });
+      renderRail();
+      openPopover(btn, id, v);           /* slide in the optional-reason popover */
+    };
+  });
+  document.querySelectorAll(".tagchip").forEach(function(chip){
+    chip.onclick=function(e){
+      e.stopPropagation();
+      var tt=chip.getAttribute("data-tt"), tv=chip.getAttribute("data-tv");
+      var arr = tt==="cat"?state.cats:(tt==="func"?state.funcs:state.levels);
+      toggleIn(arr, tv);
+      applyControls(); render();
+    };
+  });
+}
+
+/* ============ review reason popover ============ */
+var pop=null, popCtx=null;
+function closePopover(rerender){
+  if(pop){ pop.remove(); pop=null; popCtx=null; document.removeEventListener("mousedown", onDocDown, true); document.removeEventListener("keydown", onKey, true); }
+  if(rerender) render();
+}
+function onDocDown(e){ if(pop && !pop.contains(e.target)){ closePopover(true); } }
+function onKey(e){ if(e.key==="Escape") closePopover(true); }
+function openPopover(anchor, id, verdict){
+  closePopover(false);
+  var rv=getReview(id)||{verdict:verdict, reason:"", note:""};
+  popCtx={id:id, verdict:verdict};
+  var isGood=verdict==="good";
+  var head = isGood ? "Nice — what makes it a fit?" : "Got it. Mind sharing why?";
+  var chips=REASONS[verdict].map(function(r){
+    return '<button type="button" class="rpop-chip'+(rv.reason===r?' on':'')+'" data-r="'+esc(r)+'">'+esc(r)+'</button>';
+  }).join("");
+  pop=document.createElement("div");
+  pop.className="rpop";
+  pop.innerHTML=
+    '<h4><span class="vd" style="background:'+(isGood?'var(--sage)':'var(--terra)')+'"></span>'+head+'</h4>'+
+    '<p class="rp-hint">Optional — one tap already saved it.</p>'+
+    '<div class="rpop-chips">'+chips+'</div>'+
+    '<input class="rpop-note" type="text" placeholder="Add a note — optional" value="'+esc(rv.note||"")+'" maxlength="120">'+
+    '<div class="rpop-actions"><button class="rpop-remove" type="button">Un-review</button><button class="btn btn--primary btn--sm rpop-done" type="button">Done</button></div>';
+  document.body.appendChild(pop);
+
+  // position near anchor, kept inside the viewport
+  var r=anchor.getBoundingClientRect();
+  var w=274, left=r.right+10, top=r.top;
+  if(left+w>window.innerWidth-12) left=Math.max(12, r.left-w-10);
+  if(left<12) left=12;
+  if(top+250>window.innerHeight-12) top=Math.max(12, window.innerHeight-262);
+  pop.style.left=left+"px"; pop.style.top=top+"px";
+
+  pop.querySelectorAll(".rpop-chip").forEach(function(c){
+    c.onclick=function(){
+      var val=c.getAttribute("data-r");
+      var already=c.classList.contains("on");
+      pop.querySelectorAll(".rpop-chip").forEach(function(x){ x.classList.remove("on"); });
+      if(!already){ c.classList.add("on"); saveReview(id, verdict, val); }
+      else { saveReview(id, verdict, ""); }  // toggle off
+      renderRail();
+    };
+  });
+  var note=pop.querySelector(".rpop-note");
+  note.oninput=function(){ saveReview(id, verdict, null, note.value); };
+  pop.querySelector(".rpop-done").onclick=function(){ closePopover(true); };
+  pop.querySelector(".rpop-remove").onclick=function(){ clearReview(id); closePopover(true); };
+
+  setTimeout(function(){ document.addEventListener("mousedown", onDocDown, true); document.addEventListener("keydown", onKey, true); },0);
+}
+
+/* ============ salary dual slider (hardened) ============ */
+var salLow=document.getElementById("salLow"), salHigh=document.getElementById("salHigh");
+var fill=document.getElementById("rangeFill"), salVals=document.getElementById("salVals"), salPill=document.getElementById("salPill");
+var SAL_MIN=80, SAL_MAX=300, SAL_GAP=5;
+function salText(v){ return "$"+v+"K"+(v>=SAL_MAX?"+":""); }
+function updateThumbZ(){
+  // keep the high thumb reachable when it sits at/near the shared minimum end,
+  // otherwise give the last-moved thumb priority so neither can trap the other.
+  var lo=+salLow.value, hi=+salHigh.value;
+  if(hi<=SAL_MIN + SAL_GAP*2){ salHigh.style.zIndex=6; salLow.style.zIndex=5; }
+  else if(lo>=SAL_MAX - SAL_GAP*2){ salLow.style.zIndex=6; salHigh.style.zIndex=5; }
+}
+function paintSlider(){
+  var lo=+salLow.value, hi=+salHigh.value;
+  var lp=(lo-SAL_MIN)/(SAL_MAX-SAL_MIN)*100, rp=(hi-SAL_MIN)/(SAL_MAX-SAL_MIN)*100;
+  fill.style.left=lp+"%"; fill.style.right=(100-rp)+"%";
+  var plus=(hi>=SAL_MAX?"+":"");
+  salVals.textContent="$"+lo+"K – $"+hi+"K"+plus;
+  salPill.textContent=(lo<=SAL_MIN && hi>=SAL_MAX) ? "Any salary" : ("$"+lo+"–"+hi+"K"+plus);
+  // announce dollar amounts, not raw numbers
+  salLow.setAttribute("aria-valuetext", salText(lo));
+  salHigh.setAttribute("aria-valuetext", salText(hi));
+  updateThumbZ();
+}
+document.getElementById("salDone").onclick=function(){ Pop.close(document.getElementById("salMs"), true); };
+function onSlide(){
+  var lo=+salLow.value, hi=+salHigh.value;
+  // enforce a minimum gap so the two thumbs can never cross or overlap
+  if(this===salLow){ if(lo>hi-SAL_GAP){ lo=hi-SAL_GAP; salLow.value=lo; } salLow.style.zIndex=6; salHigh.style.zIndex=5; }
+  else { if(hi<lo+SAL_GAP){ hi=lo+SAL_GAP; salHigh.value=hi; } salHigh.style.zIndex=6; salLow.style.zIndex=5; }
+  state.salLow=lo; state.salHigh=hi; paintSlider(); render();
+}
+salLow.addEventListener("input", onSlide);
+salHigh.addEventListener("input", onSlide);
+
+/* ============ build tag filter menus ============ */
+function buildMenu(menuId, cls, values, getArr){
+  document.getElementById(menuId).innerHTML=values.map(function(v){
+    return '<label><input type="checkbox" class="'+cls+'" value="'+esc(v)+'">'+esc(v)+'</label>';
+  }).join("");
+}
+buildMenu("catMenu","cat-cb",CATS);
+buildMenu("funcMenu","func-cb",FUNCS);
+buildMenu("lvlMenu","lvl-cb",LEVELS);
+
+/* ============ wire controls ============ */
+document.getElementById("q").addEventListener("input", function(e){ state.q=e.target.value; render(); });
+document.getElementById("sort").addEventListener("change", function(e){ state.sort=e.target.value; render(); });
+document.getElementById("salUnknown").addEventListener("change", function(e){ state.showUnknown=e.target.checked; render(); });
+
+document.querySelectorAll(".chip[data-work]").forEach(function(chip){
+  chip.addEventListener("click", function(){ toggleIn(state.works, chip.getAttribute("data-work")); applyControls(); render(); });
+});
+
+function wireCb(sel, arr, labelId, oneLabel, allLabel){
+  document.querySelectorAll(sel).forEach(function(cb){
+    cb.addEventListener("change", function(){
+      if(cb.checked){ if(arr.indexOf(cb.value)<0) arr.push(cb.value); }
+      else { var i=arr.indexOf(cb.value); if(i>=0) arr.splice(i,1); }
+      updateMsLabel(labelId, arr, oneLabel, allLabel); render();
+    });
+  });
+}
+function updateMsLabel(labelId, arr, oneLabel, allLabel){
+  var el=document.getElementById(labelId);
+  if(labelId==="locLabel") el.textContent = arr.length===0?allLabel:(arr.length===1?(LOC_LABEL[arr[0]]||arr[0]):arr.length+" locations");
+  else el.textContent = arr.length===0?allLabel:(arr.length===1?arr[0]:arr.length+" selected");
+}
+wireCb(".loc-cb", state.locs, "locLabel", "", "All locations");
+wireCb(".cat-cb", state.cats, "catLabel", "", "Category");
+wireCb(".func-cb", state.funcs, "funcLabel", "", "Function");
+wireCb(".lvl-cb", state.levels, "lvlLabel", "", "Level");
+
+/* review-status segmented control is now a real ARIA tablist (roving tabindex + arrow keys) */
+var segTabs = initTabs(document.querySelector(".seg"), {
+  onClass:"on",
+  onSelect:function(btn){ state.rev=btn.getAttribute("data-rev"); render(); }
+});
+
+/* reflect the full state object into every control (used on load + when filters change elsewhere) */
+function applyControls(){
+  document.getElementById("q").value=state.q;
+  document.getElementById("sort").value=state.sort;
+  salLow.value=state.salLow; salHigh.value=state.salHigh; paintSlider();
+  document.getElementById("salUnknown").checked=state.showUnknown;
+  document.querySelectorAll(".chip[data-work]").forEach(function(c){ c.classList.toggle("on", state.works.indexOf(c.getAttribute("data-work"))>=0); });
+  document.querySelectorAll(".loc-cb").forEach(function(cb){ cb.checked=state.locs.indexOf(cb.value)>=0; });
+  document.querySelectorAll(".cat-cb").forEach(function(cb){ cb.checked=state.cats.indexOf(cb.value)>=0; });
+  document.querySelectorAll(".func-cb").forEach(function(cb){ cb.checked=state.funcs.indexOf(cb.value)>=0; });
+  document.querySelectorAll(".lvl-cb").forEach(function(cb){ cb.checked=state.levels.indexOf(cb.value)>=0; });
+  updateMsLabel("locLabel", state.locs, "", "All locations");
+  updateMsLabel("catLabel", state.cats, "", "Category");
+  updateMsLabel("funcLabel", state.funcs, "", "Function");
+  updateMsLabel("lvlLabel", state.levels, "", "Level");
+  document.querySelectorAll(".seg button[data-rev]").forEach(function(b){
+    var on=b.getAttribute("data-rev")===state.rev;
+    b.classList.toggle("on", on); b.setAttribute("aria-selected", on?"true":"false"); b.tabIndex = on?0:-1;
+  });
+}
+
+/* activate the accessible dropdown controller on every filter popover */
+["locMs","salMs","catMs","funcMs","lvlMs"].forEach(function(id){ Pop.init(document.getElementById(id)); });
+
+/* ============ reviewed rail collapse ============ */
+var RAILK="compass_railcollapsed";
+var rail=document.getElementById("revRail");
+if(localStorage.getItem(RAILK)==="1") rail.classList.add("collapsed");
+document.getElementById("railToggle").addEventListener("click", function(){
+  var c=rail.classList.toggle("collapsed");
+  localStorage.setItem(RAILK, c?"1":"0");
+});
+
+/* ============ Find new jobs — friendly progress readout ============ */
+var refreshBtn=document.getElementById("refreshBtn");
+var scanStatus=document.getElementById("scanStatus"), scanText=document.getElementById("scanText");
+refreshBtn.addEventListener("click", function(){
+  refreshBtn.disabled=true; scanStatus.classList.remove("done");
+  refreshBtn.querySelector("svg").animate([{transform:"rotate(0)"},{transform:"rotate(360deg)"}],{duration:700,iterations:3});
+  var steps=[
+    "Checking 68 job sources for you…",
+    "Reading new postings across media, tech &amp; finance…",
+    "Matching each one to your résumé…"
+  ];
+  var i=0;
+  scanText.innerHTML=steps[0];
+  var iv=setInterval(function(){
+    i++;
+    if(i<steps.length){ scanText.innerHTML=steps[i]; }
+    else {
+      clearInterval(iv);
+      scanStatus.classList.add("done");
+      scanText.innerHTML="<b>Found 3 new roles.</b> Updated just now · 15 roles in your feed";
+      refreshBtn.disabled=false;
+      toast("Found 3 new roles", "success");
+    }
+  }, 900);
+});
+
+/* ============ Quick Add ("Add a job") — real dialog (focus trap, Esc, backdrop, scroll-lock, focus return) ============ */
+var modal=document.getElementById("qaModal"), qaBody=document.getElementById("qaBody"), qaCard=document.getElementById("qaCard");
+var lastFocus=null;
+function openModal(){
+  lastFocus=document.activeElement;
+  modal.classList.add("open"); modal.setAttribute("aria-hidden","false");
+  document.body.style.overflow="hidden";                 /* scroll-lock */
+  renderQAForm();
+}
+function closeModal(){
+  modal.classList.remove("open"); modal.setAttribute("aria-hidden","true");
+  document.body.style.overflow="";                       /* restore scroll */
+  if(lastFocus && lastFocus.focus){ lastFocus.focus(); } /* return focus to trigger */
+}
+document.getElementById("addJobBtn").addEventListener("click", openModal);
+modal.addEventListener("mousedown", function(e){ if(e.target===modal) closeModal(); }); /* backdrop click */
+document.addEventListener("keydown", function(e){
+  if(!modal.classList.contains("open")) return;
+  if(e.key==="Escape"){ closeModal(); return; }
+  trapTab(qaCard, e);                                     /* Tab cycles inside the dialog */
+});
+
+function renderQAForm(){
+  qaBody.innerHTML=
+    '<h2 id="qaTitle"><span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg></span>Add a job by link</h2>'+
+    '<p class="msub" id="qaSub">Found a posting somewhere else? Paste the link and Compass will read it, match it to your résumé, and file it in My Jobs — no copying and pasting.</p>'+
+    '<div class="qa-input"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg><input id="qaUrl" type="text" placeholder="Paste a job link, e.g. linkedin.com/jobs/…" value="https://careers.acme.com/finance-director"></div>'+
+    '<div class="qa-actions"><button class="btn btn--outline qa-cancel" type="button" id="qaCancel">Cancel</button><button class="btn btn--primary qa-go" type="button" id="qaGo">Add it</button></div>';
+  document.getElementById("qaCancel").onclick=closeModal;
+  document.getElementById("qaGo").onclick=runQA;
+  document.getElementById("qaUrl").focus();
+}
+function runQA(){
+  var url=document.getElementById("qaUrl").value.trim();
+  if(!url){ document.getElementById("qaUrl").focus(); return; }
+  var steps=["Reading the job posting…","Matching it to your résumé…","Scoring your fit…","Saving to My Jobs…"];
+  qaBody.innerHTML='<h2 id="qaTitle"><span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg></span>Adding your job…</h2>'+
+    '<ul class="qa-steps">'+steps.map(function(s,i){
+      return '<li id="qs'+i+'"><span class="s-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>'+s+'</li>';
+    }).join("")+'</ul>';
+  var i=0;
+  function step(){
+    if(i>0) document.getElementById("qs"+(i-1)).classList.remove("doing"), document.getElementById("qs"+(i-1)).classList.add("done");
+    if(i<steps.length){ document.getElementById("qs"+i).classList.add("doing"); i++; setTimeout(step, 950); }
+    else { showQAResult(); }
+  }
+  step();
+}
+function showQAResult(){
+  qaBody.innerHTML=
+    '<div class="qa-ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>Added to My Jobs</div>'+
+    '<h2 id="qaTitle" style="font-size:19px">Here&rsquo;s what we found</h2>'+
+    '<div class="qa-result"><div class="r-ring">89</div><div><div class="r-t">Director, Strategic Finance</div><div class="r-m">Acme Studios · New York, NY · Strong fit for your background</div></div></div>'+
+    '<div class="qa-actions"><button class="btn btn--outline qa-cancel" type="button" id="qaAnother">Add another</button><a class="btn btn--primary qa-go" href="job-detail.html">View job</a></div>';
+  document.getElementById("qaAnother").onclick=renderQAForm;
+  toast("Job added — saved to My Jobs", "success");
+}
+
+/* ============ init ============ */
+applyControls();
+render();
+if(location.hash==="#add") openModal();
+</script>
+  <script src="js/wire.js"></script>
+</body>
+</html>

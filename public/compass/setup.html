@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Setup · Compass</title>
+<style>
+  :root{
+    --bg:#F6F3EC; --surface:#FFFFFF; --surface-2:#FBF9F4;
+    --ink:#16324F; --ink-soft:#3A4A5A; --muted:#6B7480;
+    --line:#E7E1D5; --line-soft:#F0ECE2;
+    --gold:#B4894C; --gold-deep:#96702F; --gold-soft:#F4EBD9;
+    --sage:#2F6F5B; --sage-soft:#E4EFE9;
+    --terra:#B5623B; --terra-soft:#F6E7DE;
+    --blue:#2E5C8A; --blue-soft:#E4EDF6;
+    --shadow:0 1px 2px rgba(22,50,79,.04), 0 8px 24px rgba(22,50,79,.06);
+    --shadow-sm:0 1px 2px rgba(22,50,79,.06);
+    --radius:14px; --radius-sm:10px;
+    --ring:var(--gold);
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  a{color:inherit;text-decoration:none}
+  h1,h2,h3{font-family:var(--serif);font-weight:600;letter-spacing:-.01em;margin:0}
+  button{font-family:inherit;cursor:pointer}
+
+  /* ===== Iteration 5 — shared interaction kit (accessibility + consistency) ===== */
+  :focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+  :focus:not(:focus-visible){outline:none}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;font-family:inherit;font-weight:600;font-size:13.5px;line-height:1.2;border-radius:999px;border:1px solid transparent;padding:9px 15px;cursor:pointer;text-decoration:none;white-space:nowrap;transition:background .12s ease,border-color .12s ease,color .12s ease,transform .08s ease}
+  .btn svg{width:15px;height:15px;flex:none}
+  .btn:disabled{opacity:.6;cursor:default}
+  .btn--primary{background:var(--ink);color:#fff;border-color:var(--ink);box-shadow:var(--shadow-sm)}
+  .btn--primary:hover{background:#0f2740}
+  .btn--outline{background:var(--surface);color:var(--ink-soft);border-color:var(--line);box-shadow:var(--shadow-sm)}
+  .btn--outline:hover{border-color:var(--gold);color:var(--gold-deep)}
+  .btn--ghost{background:transparent;border-color:transparent;color:var(--ink-soft)}
+  .btn--ghost:hover{background:var(--line-soft)}
+  .btn--sage{background:var(--sage);color:#fff;border-color:var(--sage)}
+  .btn--sage:hover{background:#255a49}
+  .btn--terra{background:var(--terra);color:#fff;border-color:var(--terra)}
+  .btn--terra:hover{background:#9c5231}
+  .btn--sm{padding:8px 14px;font-size:13px}
+  .btn--icon{padding:0;width:38px;height:38px}
+  .badge{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;line-height:1.4;border-radius:999px;padding:3px 11px;border:1px solid transparent}
+  .badge svg{width:12px;height:12px;flex:none}
+  .badge .tk{width:6px;height:6px;border-radius:999px;flex:none}
+  .badge--cat{background:var(--gold-soft);color:var(--gold-deep)} .badge--cat .tk{background:var(--gold)}
+  .badge--func{background:var(--blue-soft);color:var(--blue)} .badge--func .tk{background:var(--blue)}
+  .badge--lvl{background:var(--sage-soft);color:var(--sage)} .badge--lvl .tk{background:var(--sage)}
+  .badge--warm{background:var(--sage-soft);color:var(--sage)}
+  .badge--cool{background:var(--gold-soft);color:var(--gold-deep)}
+  .badge--outline{background:var(--line-soft);color:var(--ink-soft)}
+  .toast-wrap{position:fixed;z-index:120;left:50%;bottom:24px;transform:translateX(-50%);display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
+  .toast{display:inline-flex;align-items:center;gap:9px;background:var(--ink);color:#fff;border-radius:999px;padding:11px 18px;font-size:13.5px;font-weight:600;box-shadow:0 10px 30px rgba(22,50,79,.25);pointer-events:auto;max-width:92vw;animation:toastin .2s ease}
+  .toast svg{width:16px;height:16px;flex:none}
+  .toast--success{background:var(--sage)} .toast--info{background:var(--ink)} .toast--error{background:var(--terra)}
+  @keyframes toastin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  @media(prefers-reduced-motion:reduce){ .toast,.btn{animation:none;transition:none} }
+
+  .topbar{position:sticky;top:0;z-index:20;background:rgba(246,243,236,.85);backdrop-filter:saturate(180%) blur(10px);border-bottom:1px solid var(--line)}
+  .topbar-in{max-width:960px;margin:0 auto;display:flex;align-items:center;gap:28px;padding:14px 22px}
+  .brand{display:flex;align-items:center;gap:9px;font-family:var(--serif);font-size:19px;font-weight:600;color:var(--ink)}
+  .brand svg{color:var(--gold)}
+  .nav{display:flex;gap:6px;margin-left:6px}
+  .nav a{padding:8px 14px;border-radius:999px;color:var(--ink-soft);font-weight:500;font-size:14.5px}
+  .nav a:hover{background:var(--line-soft)}
+  .nav a.active{background:var(--ink);color:#fff}
+  .spacer{flex:1}
+  .gear{width:34px;height:34px;border-radius:999px;background:var(--gold-soft);border:1px solid var(--gold);color:var(--gold-deep);display:grid;place-items:center;margin-right:2px}
+  .gear svg{width:17px;height:17px}
+  .avatar{width:34px;height:34px;border-radius:999px;background:var(--gold-soft);color:var(--gold-deep);display:grid;place-items:center;font-weight:600;font-size:13px;border:1px solid var(--line)}
+
+  .wrap{max-width:760px;margin:0 auto;padding:28px 22px 70px}
+  .page-head h1{font-size:29px}
+  .page-head .sub{color:var(--muted);font-size:14.5px;margin-top:5px;max-width:60ch}
+
+  /* "all set" banner */
+  .allset{display:flex;align-items:center;gap:14px;background:var(--sage-soft);border:1px solid #B9D8CB;border-radius:var(--radius);padding:16px 18px;margin:22px 0 6px}
+  .allset .ck{flex:none;width:40px;height:40px;border-radius:999px;background:var(--sage);color:#fff;display:grid;place-items:center}
+  .allset .ck svg{width:22px;height:22px}
+  .allset .t{font-family:var(--serif);font-size:17px;font-weight:600;color:var(--ink)}
+  .allset .d{color:var(--ink-soft);font-size:13.5px;margin-top:2px}
+  .allset a.go{margin-left:auto;padding:10px 17px}   /* .go = .btn .btn--primary */
+  .allset a.go svg{width:14px;height:14px}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:22px;margin-top:18px}
+  .card h2{font-size:18px;display:flex;align-items:center;gap:10px}
+  .card h2 .ic{width:32px;height:32px;border-radius:9px;background:var(--gold-soft);color:var(--gold-deep);display:grid;place-items:center;flex:none}
+  .card h2 .ic svg{width:17px;height:17px}
+  .card .hint{color:var(--muted);font-size:13.5px;margin:6px 0 16px;padding-left:42px}
+  @media(max-width:560px){ .card .hint{padding-left:0} }
+
+  /* résumé drop zone */
+  .drop{border:2px dashed var(--line);border-radius:var(--radius);background:var(--surface-2);padding:22px;display:flex;align-items:center;gap:16px;transition:border-color .12s, background .12s}
+  .drop.drag{border-color:var(--gold);background:var(--gold-soft)}
+  .drop .fic{flex:none;width:46px;height:46px;border-radius:11px;background:var(--surface);border:1px solid var(--line);display:grid;place-items:center;color:var(--terra)}
+  .drop .fic svg{width:22px;height:22px}
+  .drop .fname{font-weight:600;color:var(--ink)}
+  .drop .fmeta{color:var(--muted);font-size:13px;margin-top:2px}
+  .drop .fmeta .ok{color:var(--sage);font-weight:600}
+  .drop .replace{margin-left:auto}   /* .replace = .btn .btn--outline .btn--sm */
+  .drop-empty{flex-direction:column;text-align:center;justify-content:center;color:var(--muted)}
+
+  /* chips input */
+  .chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .rchip{display:inline-flex;align-items:center;gap:7px;background:var(--blue-soft);color:var(--blue);border-radius:999px;padding:6px 8px 6px 13px;font-size:13.5px;font-weight:600}
+  .rchip button{border:0;background:rgba(46,92,138,.18);color:var(--blue);width:18px;height:18px;border-radius:999px;display:grid;place-items:center;padding:0}
+  .rchip button svg{width:10px;height:10px}
+  .rchip button:hover{background:rgba(46,92,138,.32)}
+  .chip-add{display:inline-flex;align-items:center;gap:6px;border:1px dashed var(--line);background:var(--surface-2);color:var(--muted);border-radius:999px;padding:6px 13px;font-size:13.5px;font-weight:600}
+  .chip-add:focus-within{border-color:var(--gold);color:var(--ink)}
+  .chip-add svg{width:13px;height:13px}
+  .chip-add input{border:0;background:transparent;outline:none;font-family:inherit;font-size:13.5px;width:120px;color:var(--ink)}
+
+  /* location list */
+  .loc-list{display:flex;flex-direction:column;gap:8px}
+  .loc-item{display:flex;align-items:center;gap:11px;border:1px solid var(--line);border-radius:var(--radius-sm);padding:11px 14px;background:var(--surface-2)}
+  .loc-item.primary{border-color:#E7D3A8;background:var(--gold-soft)}
+  .loc-item .star{color:var(--gold-deep)}
+  .loc-item .star svg{width:16px;height:16px}
+  .loc-item .ln{font-weight:600;color:var(--ink)}
+  .loc-item .tagp{margin-left:auto;font-size:11.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--gold-deep);background:var(--surface);border:1px solid #E7D3A8;border-radius:999px;padding:2px 10px}
+  .loc-item .mut{margin-left:auto;color:var(--muted);font-size:13px}
+
+  /* comp floor slider */
+  .floor{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+  .floor .big{font-family:var(--serif);font-size:30px;font-weight:600;color:var(--ink);min-width:150px}
+  .floor .big small{font-size:14px;color:var(--muted);font-family:var(--sans);font-weight:500;margin-left:6px}
+  .frange{flex:1;min-width:220px}
+  .frange input[type=range]{width:100%;accent-color:var(--gold-deep);height:6px}
+  .frange .ends{display:flex;justify-content:space-between;color:var(--muted);font-size:12px;margin-top:6px}
+
+  /* work-type toggles */
+  .worktypes{display:flex;gap:10px;flex-wrap:wrap}
+  .wt{display:flex;align-items:center;gap:9px;border:1.5px solid var(--line);background:var(--surface);border-radius:var(--radius-sm);padding:12px 16px;font-weight:600;color:var(--ink-soft);font-size:14px}
+  .wt svg{width:16px;height:16px;color:var(--muted)}
+  .wt.on{border-color:var(--sage);background:var(--sage-soft);color:var(--sage)}
+  .wt.on svg{color:var(--sage)}
+
+  /* plain text/select fields (profile + AI + updates) */
+  .fields{display:flex;flex-direction:column;gap:15px}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field.two{display:grid;grid-template-columns:1fr 1fr;gap:15px}
+  @media(max-width:520px){ .field.two{grid-template-columns:1fr} }
+  .field label,.flabel{font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted)}
+  .field input[type=text],.field input[type=email],.field select,.field.plain{width:100%;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--surface-2);padding:11px 13px;font-family:inherit;font-size:14.5px;color:var(--ink);outline:none}
+  .field input:focus,.field select:focus{border-color:var(--gold);background:var(--surface)}
+  .field select{appearance:none;cursor:pointer;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7480' stroke-width='2.5'><path d='M6 9l6 6 6-6'/></svg>");background-repeat:no-repeat;background-position:right 13px center;padding-right:34px}
+  .field .fnote{font-size:12.5px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0}
+
+  /* AI connection status row (stands in for provider + API keys) */
+  .conn{display:flex;align-items:center;gap:13px;border:1px solid #B9D8CB;background:var(--sage-soft);border-radius:var(--radius-sm);padding:14px 16px}
+  .conn .cdot{flex:none;width:38px;height:38px;border-radius:999px;background:var(--sage);color:#fff;display:grid;place-items:center}
+  .conn .cdot svg{width:20px;height:20px}
+  .conn .ct{font-weight:600;color:var(--ink)}
+  .conn .cm{color:var(--ink-soft);font-size:13px;margin-top:2px}
+  .conn .manage{margin-left:auto}   /* .manage = .btn .btn--outline .btn--sm */
+
+  /* notification toggle rows */
+  .toggle-row{display:flex;align-items:center;gap:13px;padding:11px 0;border-top:1px solid var(--line-soft)}
+  .toggle-row:first-child{border-top:0}
+  .toggle-row .tt{font-weight:600;color:var(--ink)}
+  .toggle-row .tm{color:var(--muted);font-size:13px;margin-top:2px}
+  .toggle-row .sw{margin-left:auto;flex:none;width:46px;height:27px;border-radius:999px;background:var(--line);border:0;position:relative;transition:background .15s}
+  .toggle-row .sw::after{content:"";position:absolute;top:3px;left:3px;width:21px;height:21px;border-radius:999px;background:#fff;box-shadow:var(--shadow-sm);transition:transform .15s}
+  .toggle-row .sw.on{background:var(--sage)}
+  .toggle-row .sw.on::after{transform:translateX(19px)}
+
+  /* footer save bar */
+  .savebar{display:flex;align-items:center;gap:12px;margin-top:24px}
+  .save-main{padding:12px 24px;font-size:14.5px}   /* .save-main = .btn .btn--primary */
+  .saved-note{color:var(--sage);font-size:13.5px;font-weight:600;display:none;align-items:center;gap:7px}
+  .saved-note.show{display:inline-flex}
+  .saved-note svg{width:16px;height:16px}
+
+  /* ===== Iteration 6: search-filter chips (include / exclude / phrases) ===== */
+  .rchip.inc{background:var(--sage-soft);color:var(--sage)}
+  .rchip.inc button{background:rgba(47,111,91,.16);color:var(--sage)} .rchip.inc button:hover{background:rgba(47,111,91,.3)}
+  .rchip.exc{background:var(--terra-soft);color:var(--terra)}
+  .rchip.exc button{background:rgba(181,98,59,.16);color:var(--terra)} .rchip.exc button:hover{background:rgba(181,98,59,.3)}
+  .rchip.term{background:var(--gold-soft);color:var(--gold-deep)}
+  .rchip.term button{background:rgba(180,137,76,.18);color:var(--gold-deep)} .rchip.term button:hover{background:rgba(180,137,76,.32)}
+  .subhead{font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin:4px 0 9px;display:flex;align-items:center;gap:8px}
+  .subhead .dt{width:8px;height:8px;border-radius:999px;flex:none}
+  .subhead .dt.inc{background:var(--sage)} .subhead .dt.exc{background:var(--terra)}
+  .subhead + .chips{margin-bottom:18px}
+  .caption{font-size:12.5px;color:var(--muted);margin-top:14px;display:flex;gap:8px;align-items:flex-start;line-height:1.5}
+  .caption svg{width:15px;height:15px;flex:none;color:var(--gold-deep);margin-top:1px}
+
+  /* NYC priority toggle + Remote toggle inside the Location card */
+  .remote-row{display:flex;align-items:center;gap:13px;padding:12px 14px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--surface-2);margin-top:10px}
+  .remote-row .tt{font-weight:600;color:var(--ink)}
+  .remote-row .tm{color:var(--muted);font-size:13px;margin-top:2px}
+  .remote-row .sw{margin-left:auto;flex:none;width:46px;height:27px;border-radius:999px;background:var(--line);border:0;position:relative;transition:background .15s}
+  .remote-row .sw::after{content:"";position:absolute;top:3px;left:3px;width:21px;height:21px;border-radius:999px;background:#fff;box-shadow:var(--shadow-sm);transition:transform .15s}
+  .remote-row .sw.on{background:var(--sage)}
+  .remote-row .sw.on::after{transform:translateX(19px)}
+  .loc-item .pin-toggle{margin-left:auto;border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:999px;padding:5px 12px;font-size:12px;font-weight:600}
+  .loc-item .pin-toggle.on{background:var(--gold-soft);border-color:#E7D3A8;color:var(--gold-deep)}
+  .loc-item .rm-city{border:0;background:rgba(107,116,128,.14);color:var(--muted);width:22px;height:22px;border-radius:999px;display:grid;place-items:center;padding:0;margin-left:10px}
+  .loc-item .rm-city svg{width:11px;height:11px}
+  .loc-item .rm-city:hover{background:rgba(107,116,128,.28);color:var(--ink)}
+
+  /* companies to watch (with logos) */
+  .co-list{display:flex;flex-direction:column;gap:8px;margin-bottom:6px}
+  .co-item{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:var(--radius-sm);padding:9px 12px;background:var(--surface-2)}
+  .co-logo{flex:none;width:34px;height:34px;border-radius:9px;overflow:hidden;background:var(--surface);border:1px solid var(--line);display:grid;place-items:center;position:relative}
+  .co-logo img{width:100%;height:100%;object-fit:contain;display:block;padding:4px;background:#fff}
+  .co-logo.failed{background:var(--mc,#16324F);border-color:transparent}
+  .co-logo.failed::after{content:attr(data-mono);color:#fff;font-family:var(--serif);font-weight:600;font-size:12px}
+  .co-name{font-weight:600;color:var(--ink);font-size:14px}
+  .co-note{color:var(--muted);font-size:12.5px;margin-top:1px}
+  .co-item .rm{margin-left:auto;border:0;background:rgba(107,116,128,.14);color:var(--muted);width:24px;height:24px;border-radius:999px;display:grid;place-items:center;padding:0}
+  .co-item .rm svg{width:12px;height:12px}
+  .co-item .rm:hover{background:rgba(107,116,128,.28);color:var(--ink)}
+  .co-add{display:flex;gap:8px;align-items:center;margin-top:10px}
+  .co-add input{flex:1;border:1px dashed var(--line);border-radius:999px;background:var(--surface-2);padding:9px 14px;font-family:inherit;font-size:13.5px;color:var(--ink);outline:none}
+  .co-add input:focus{border-color:var(--gold);background:var(--surface)}
+
+  /* ===== Iteration 6: "Where your search runs" panel ===== */
+  .runs{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--surface)}
+  .run-row{display:flex;align-items:center;gap:14px;padding:14px 16px;border-top:1px solid var(--line-soft)}
+  .run-row:first-child{border-top:0}
+  .run-ic{flex:none;width:38px;height:38px;border-radius:10px;background:var(--gold-soft);color:var(--gold-deep);display:grid;place-items:center}
+  .run-ic svg{width:19px;height:19px}
+  .run-main{flex:1;min-width:0}
+  .run-t{font-weight:600;color:var(--ink);font-size:14.5px}
+  .run-d{color:var(--muted);font-size:13px;margin-top:2px}
+  .run-sched{flex:none;color:var(--ink-soft);font-size:13px;font-weight:600;white-space:nowrap}
+  .run-status{flex:none}
+  @media(max-width:640px){ .run-row{flex-wrap:wrap} .run-sched{margin-left:52px} .run-status{margin-left:auto} }
+
+  /* ===== Preview: what we actually search (engineer / technical view) ===== */
+  .pv{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--surface)}
+  .pv>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;padding:14px 16px;font-weight:600;color:var(--ink);font-size:14.5px}
+  .pv>summary::-webkit-details-marker{display:none}
+  .pv>summary .chev{margin-left:auto;color:var(--muted);transition:transform .15s}
+  .pv>summary .chev svg{width:16px;height:16px}
+  .pv[open]>summary .chev{transform:rotate(180deg)}
+  .pv-body{padding:0 16px 16px;border-top:1px solid var(--line-soft)}
+  .pv-area{border-top:1px solid var(--line-soft);padding:16px 0}
+  .pv-area:first-child{border-top:0}
+  .pv-atop{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .pv-num{flex:none;width:22px;height:22px;border-radius:7px;background:var(--gold-soft);color:var(--gold-deep);font-family:var(--serif);font-weight:600;font-size:12.5px;display:grid;place-items:center}
+  .pv-name{font-weight:600;color:var(--ink);font-size:14.5px}
+  .pv-when{margin-left:auto;font-size:11px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+  .pv-mech{color:var(--ink-soft);font-size:13px;margin-top:7px}
+  .pv-inputs{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+  .pv-tag{font-size:11.5px;font-weight:600;color:var(--muted);background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:3px 10px}
+  .pv-tag b{color:var(--ink);font-weight:700}
+  .pv-code{margin-top:10px;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 12px;overflow-x:auto}
+  .pv-code .ln{display:block;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-size:12px;line-height:1.75;color:var(--ink);white-space:pre}
+  .pv-code .ln + .ln{border-top:1px solid var(--line-soft);padding-top:5px;margin-top:5px}
+  .pv-code .kw{color:var(--gold-deep)}
+  .pv-code .loc{color:var(--blue)}
+  .pv-code .op{color:var(--muted)}
+  .pv-more{font-size:12px;color:var(--muted);margin-top:8px;font-weight:600}
+  .pv-gate{display:flex;gap:11px;align-items:flex-start;margin-top:18px;background:var(--gold-soft);border:1px solid #E7D3A8;border-radius:var(--radius-sm);padding:13px 15px}
+  .pv-gate .gic{flex:none;color:var(--gold-deep);margin-top:1px}
+  .pv-gate .gic svg{width:17px;height:17px}
+  .pv-gate .gt{font-weight:700;color:var(--ink);font-size:11px;text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px}
+  .pv-gate .gd{color:var(--ink-soft);font-size:13px;line-height:1.55}
+  .pv-gate .gd b{color:var(--ink);font-weight:700}
+
+  @media(max-width:620px){ .brand span{display:none} .allset{flex-wrap:wrap} .allset a.go{margin-left:0;width:100%;justify-content:center} }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-in">
+      <a href="dashboard.html" class="brand" style="text-decoration:none;color:var(--ink)">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><polygon points="15.5 8.5 10.5 10.5 8.5 15.5 13.5 13.5" fill="currentColor" stroke="none"/></svg>
+        <span>Compass</span>
+      </a>
+      <nav class="nav">
+        <a href="dashboard.html">Dashboard</a>
+        <a href="jobs.html">Jobs</a>
+        <a href="saved.html">My Jobs</a>
+        <a href="documents.html">Documents</a>
+      </nav>
+      <div class="spacer"></div>
+      <a class="gear" href="setup.html" title="Setup &amp; preferences" aria-label="Setup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-2.9-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.2-2.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></a>
+      <div class="avatar" title="Nicole Doan, CPA">ND</div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="page-head">
+      <h1>Setup &amp; preferences</h1>
+      <div class="sub">Tell Compass what you&rsquo;re looking for. This is what powers your ranked matches and the &ldquo;Find new jobs&rdquo; scan each morning. You can change any of it later.</div>
+    </div>
+
+    <div class="allset">
+      <div class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></div>
+      <div>
+        <div class="t">You&rsquo;re all set</div>
+        <div class="d">Compass is matching new roles to your résumé and preferences.</div>
+      </div>
+      <a class="btn btn--primary go" href="jobs.html">Go to your jobs<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+    </div>
+
+    <!-- ===== SECTION: Your profile ===== -->
+    <section class="card">
+      <h2><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.5-6 8-6s8 2 8 6"/></svg></span>Your profile</h2>
+      <div class="hint">Your name and contact details appear on the cover letters and application emails Compass writes for you.</div>
+      <div class="fields" style="margin-bottom:20px">
+        <div class="field two">
+          <div class="field"><label for="pName">Full name</label><input id="pName" type="text" value="Nicole Doan, CPA"></div>
+          <div class="field"><label for="pPhone">Phone</label><input id="pPhone" type="text" value="(212) 555-0147"></div>
+        </div>
+        <div class="field"><label for="pEmail">Email</label><input id="pEmail" type="email" value="nicole.doan@gmail.com"></div>
+      </div>
+
+      <div class="flabel" style="margin-bottom:9px">Résumé</div>
+      <div class="hint" style="padding-left:0;margin-top:0">We read your résumé to match you to jobs and to write cover letters &amp; emails. PDF or Word.</div>
+      <div class="drop" id="drop">
+        <div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h9l5 5v13H6z"/><path d="M14 3v6h6"/></svg></div>
+        <div>
+          <div class="fname">Nicole Doan, CPA — resume 2026.pdf</div>
+          <div class="fmeta"><span class="ok">✓ Uploaded</span> · 214 KB · added Aug 20, 2026</div>
+        </div>
+        <button class="btn btn--outline btn--sm replace" id="replaceBtn" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M5 21h14"/></svg>Replace</button>
+        <input type="file" id="fileInput" accept=".pdf,.doc,.docx" style="display:none">
+      </div>
+    </section>
+
+    <!-- Target roles -->
+    <section class="card">
+      <h2><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg></span>Target roles &amp; titles</h2>
+      <div class="hint">The kinds of roles you want. We&rsquo;ll rank matches against these — add or remove any.</div>
+      <div class="chips" id="roleChips">
+        <!-- filled by JS -->
+        <label class="chip-add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg><input id="roleInput" type="text" placeholder="Add a title…"></label>
+      </div>
+    </section>
+
+    <!-- Iteration 6: Job titles to include / exclude (mirrors portals.yml title_filter) -->
+    <section class="card">
+      <h2><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>What your daily search looks for</h2>
+      <div class="hint">The words in a job&rsquo;s title decide whether it shows up. Keep the titles you want, and rule out the ones you never do.</div>
+
+      <div class="subhead"><span class="dt inc"></span>Titles to include</div>
+      <div class="chips" id="incChips">
+        <label class="chip-add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg><input id="incInput" type="text" placeholder="Add a title…"></label>
+      </div>
+
+      <div class="subhead"><span class="dt exc"></span>Titles to exclude</div>
+      <div class="chips" id="excChips">
+        <label class="chip-add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg><input id="excInput" type="text" placeholder="Add a word to skip…"></label>
+      </div>
+
+      <div class="caption"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg><span>These control what the daily searches look for. A role must match at least one &ldquo;include&rdquo; word and none of the &ldquo;exclude&rdquo; words.</span></div>
+    </section>
+
+    <!-- Location (Iteration 6: editable — NYC priority toggle + add cities + Remote/US) -->
+    <section class="card">
+      <h2><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg></span>Locations</h2>
+      <div class="hint">Where you want to search. Star one as your top priority, add more cities, or remove any.</div>
+      <div class="loc-list" id="locList"><!-- filled by JS --></div>
+      <div class="co-add" style="margin-top:10px">
+        <input id="cityInput" type="text" placeholder="Add a city, e.g. Atlanta, GA">
+        <button class="btn btn--outline btn--sm" id="cityAdd" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>Add</button>
+      </div>
+      <div class="remote-row">
+        <div>
+          <div class="tt">Include Remote / US roles</div>
+          <div class="tm">Show remote jobs based anywhere in the United States.</div>
+        </div>
+        <button class="sw on" type="button" id="swRemote" role="switch" aria-checked="true" aria-label="Include remote US roles"></button>
+      </div>
+    </section>
+
+    <!-- Comp floor -->
+    <section class="card">
+      <h2><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>Minimum compensation</h2>
+      <div class="hint">We&rsquo;ll still show roles that don&rsquo;t list a salary, but flag anything below your floor.</div>
+      <div class="floor">
+        <div class="big" id="floorVal">$150K<small>base minimum</small></div>
+        <div class="frange">
+          <input type="range" id="floor" min="80" max="300" step="5" value="150" aria-label="Minimum compensation">
+          <div class="ends"><span>$80K</span><span>$300K+</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Work type -->
+    <section class="card">
+      <h2><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 7h18v12H3z"/><path d="M8 7V4h8v3"/></svg></span>How you want to work</h2>
+      <div class="hint">Pick any that work for you. This filters and ranks your feed.</div>
+      <div class="worktypes" id="worktypes">
+        <button class="wt on" data-wt="Remote" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5h18v11H3z"/><path d="M8 20h8"/></svg>Remote</button>
+        <button class="wt on" data-wt="Hybrid" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h16M12 4v16"/></svg>Hybrid</button>
+        <button class="wt on" data-wt="On-site" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21V7l9-4 9 4v14"/><path d="M9 21v-6h6v6"/></svg>On-site</button>
+      </div>
+    </section>
+
+    <!-- Iteration 6: Companies to watch (mirrors portals.yml tracked_companies) -->
+    <section class="card">
+      <h2><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 9h.01M15 9h.01M9 13h.01M15 13h.01"/></svg></span>Companies to watch</h2>
+      <div class="hint">Compass checks these employers&rsquo; own career pages every day, on top of the general job boards. Add or remove any.</div>
+      <div class="co-list" id="coList"><!-- filled by JS --></div>
+      <div class="co-add">
+        <input id="coInput" type="text" placeholder="Add a company, e.g. Warner Bros. Discovery">
+        <button class="btn btn--outline btn--sm" id="coAdd" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>Add</button>
+      </div>
+      <div class="caption"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg><span>Compass watches 68 companies &amp; boards in total. These are the ones you&rsquo;ve pinned to follow closely.</span></div>
+    </section>
+
+    <!-- Iteration 6: Extra search phrases (mirrors the discovery/board query keywords) -->
+    <section class="card">
+      <h2><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 7h16M4 12h10M4 17h7"/></svg></span>Extra phrases to search for</h2>
+      <div class="hint">Beyond your job titles, these are phrases Compass types into the wider job boards to surface new roles and companies for you.</div>
+      <div class="chips" id="termChips">
+        <label class="chip-add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg><input id="termInput" type="text" placeholder="Add a phrase…"></label>
+      </div>
+      <div class="caption"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg><span>Simple phrases work best, e.g. &ldquo;Content Finance&rdquo; or &ldquo;Strategic Finance United States&rdquo;.</span></div>
+    </section>
+
+    <!-- Iteration 6: Where your search runs -->
+    <section class="card">
+      <h2><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>Where your search runs</h2>
+      <div class="hint">The automated searches working for you behind the scenes. You don&rsquo;t need to do anything — this is just so you can see what&rsquo;s running.</div>
+      <div class="runs">
+        <div class="run-row">
+          <span class="run-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 21h18M5 21V7l7-4 7 4v14"/></svg></span>
+          <div class="run-main"><div class="run-t">Job-site scan</div><div class="run-d">68 companies &amp; boards</div></div>
+          <span class="run-sched">Every day · 7:00 AM</span>
+          <span class="run-status"><span class="badge badge--live"><span class="tk"></span>Ran today ✓</span></span>
+        </div>
+        <div class="run-row">
+          <span class="run-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
+          <div class="run-main"><div class="run-t">Deep board search</div><div class="run-d">Built In, crypto &amp; remote boards</div></div>
+          <span class="run-sched">Every day · 7:30 AM</span>
+          <span class="run-status"><span class="badge badge--live"><span class="tk"></span>Ran today ✓</span></span>
+        </div>
+        <div class="run-row">
+          <span class="run-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg></span>
+          <div class="run-main"><div class="run-t">Web discovery</div><div class="run-d">Finds brand-new companies to add</div></div>
+          <span class="run-sched">Twice weekly · Wed &amp; Sun</span>
+          <span class="run-status"><span class="badge badge--live"><span class="tk"></span>Ran Sunday ✓</span></span>
+        </div>
+        <div class="run-row">
+          <span class="run-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9v7M7 7v.01M11 16v-4a2 2 0 0 1 4 0v4"/></svg></span>
+          <div class="run-main"><div class="run-t">LinkedIn</div><div class="run-d">Fresh finance roles from your network&rsquo;s companies</div></div>
+          <span class="run-sched">Twice weekly · Wed &amp; Sun</span>
+          <span class="run-status"><span class="badge badge--live"><span class="tk"></span>Ran Sunday ✓</span></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Preview: what we actually search (engineer / technical view — live-generated from the inputs above) -->
+    <section class="card">
+      <h2><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M9 18l6-6-6-6"/><path d="M3 21h18" opacity=".0"/><path d="M4 6h4M4 18h9"/></svg></span>Preview: what we actually search</h2>
+      <div class="hint">The technical view — the real mechanism behind each search area, the inputs it reads, and live example queries built from your settings above. Edit a title, phrase, city, or the Remote toggle and these regenerate instantly.</div>
+      <details class="pv" id="pv" open>
+        <summary>Search areas &amp; generated queries<span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></span></summary>
+        <div class="pv-body">
+
+          <!-- Area 1: Company career-page scan -->
+          <div class="pv-area">
+            <div class="pv-atop"><span class="pv-num">1</span><span class="pv-name">Company career-page scan</span><span class="pv-when">Daily · 7:00</span></div>
+            <div class="pv-mech" id="pvCoMech">&nbsp;</div>
+            <div class="pv-inputs"><span class="pv-tag">reads <b>companies</b> list</span><span class="pv-tag">not keyword-based</span><span class="pv-tag">applies the gate</span></div>
+            <div class="pv-code"><span class="ln"><span class="kw">Greenhouse</span>  boards-api.greenhouse.io/v1/boards/&lt;company&gt;/jobs</span><span class="ln"><span class="kw">Lever</span>      api.lever.co/v0/postings/&lt;company&gt;?mode=json</span><span class="ln"><span class="kw">Ashby</span>      api.ashbyhq.com/posting-api/job-board/&lt;company&gt;</span><span class="ln"><span class="kw">Workday</span>    &lt;tenant&gt;.myworkdayjobs.com/&hellip;/cxs/&hellip;/jobs</span></div>
+          </div>
+
+          <!-- Area 2: Deep board search -->
+          <div class="pv-area">
+            <div class="pv-atop"><span class="pv-num">2</span><span class="pv-name">Deep board search</span><span class="pv-when">Daily · 7:30</span></div>
+            <div class="pv-mech">Browser-based scrape (anti-detect) of Cloudflare-gated aggregators. Loads each board, harvests the embedded job JSON, then applies the gate. No per-query preview &mdash; the whole board is walked.</div>
+            <div class="pv-inputs"><span class="pv-tag">headless browser</span><span class="pv-tag">applies the gate</span></div>
+            <div class="pv-code"><span class="ln"><span class="kw">builtin</span>          Built In (all markets)</span><span class="ln"><span class="kw">cryptojobslist</span>   Crypto Jobs List</span><span class="ln"><span class="kw">dailyremote</span>      DailyRemote</span></div>
+          </div>
+
+          <!-- Area 3: Web discovery (Google site:) -->
+          <div class="pv-area">
+            <div class="pv-atop"><span class="pv-num">3</span><span class="pv-name">Web discovery (Google <span style="font-family:ui-monospace,Menlo,monospace;font-size:.92em">site:</span>)</span><span class="pv-when">Wed &amp; Sun</span></div>
+            <div class="pv-mech">Builds queries as <b>hosts &times; keyword-groups</b>, scoped by your locations, capped at 15 per run. Keyword-groups are your phrases chunked into OR-groups of two.</div>
+            <div class="pv-inputs" id="pvGoogleInputs"></div>
+            <div class="pv-code" id="pvGoogleCode"></div>
+            <div class="pv-more" id="pvGoogleMore"></div>
+          </div>
+
+          <!-- Area 4: LinkedIn (guest API) -->
+          <div class="pv-area">
+            <div class="pv-atop"><span class="pv-num">4</span><span class="pv-name">LinkedIn (guest API)</span><span class="pv-when">Wed &amp; Sun</span></div>
+            <div class="pv-mech">Hits the unauthenticated jobs-guest endpoint. <b>Primary:</b> each phrase &times; &ldquo;New York City Metropolitan Area&rdquo; &times; pages {0, 25}. <b>Secondary:</b> first two phrases &times; &ldquo;United States&rdquo; &times; page {0}. Capped at 16.</div>
+            <div class="pv-inputs" id="pvLinkedinInputs"></div>
+            <div class="pv-code" id="pvLinkedinCode"></div>
+            <div class="pv-more" id="pvLinkedinMore"></div>
+          </div>
+
+          <!-- Shared gate -->
+          <div class="pv-gate">
+            <span class="gic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 3l7 4v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7z"/><path d="M9.5 12l1.8 1.8L15 10"/></svg></span>
+            <div>
+              <div class="gt">Shared gate &mdash; applied to all four</div>
+              <div class="gd" id="pvGate">&nbsp;</div>
+            </div>
+          </div>
+
+        </div>
+      </details>
+    </section>
+
+    <!-- ===== SECTION: AI & language (mirrors the app's provider/model/language config, simplified) ===== -->
+    <section class="card">
+      <h2><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 2a3 3 0 0 1 3 3 3 3 0 0 1 3 3 3 3 0 0 1 0 6 3 3 0 0 1-3 3 3 3 0 0 1-6 0 3 3 0 0 1-3-3 3 3 0 0 1 0-6 3 3 0 0 1 3-3 3 3 0 0 1 3-3Z"/><path d="M12 8v8M9 12h6"/></svg></span>AI &amp; language</h2>
+      <div class="hint">Compass uses AI to score your fit and draft your documents. It&rsquo;s set up and ready — you don&rsquo;t need to manage anything technical.</div>
+      <div class="conn" style="margin-bottom:18px">
+        <span class="cdot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>
+        <div>
+          <div class="ct">AI connection active</div>
+          <div class="cm">Your assistant is connected and working. Managed for you — no keys or setup required.</div>
+        </div>
+        <button class="btn btn--outline btn--sm manage" type="button" id="connManage">Manage</button>
+      </div>
+      <div class="fields">
+        <div class="field">
+          <label for="aiQuality">AI quality</label>
+          <select id="aiQuality">
+            <option value="balanced">Balanced — recommended for most people</option>
+            <option value="higher">Higher quality — more thorough, a little slower</option>
+            <option value="faster">Faster — quicker and lighter</option>
+          </select>
+          <span class="fnote">Controls how much effort the assistant puts into matching and writing.</span>
+        </div>
+        <div class="field">
+          <label for="language">Language</label>
+          <select id="language">
+            <option value="en">English</option>
+            <option value="es">Español</option>
+            <option value="fr">Français</option>
+            <option value="de">Deutsch</option>
+            <option value="pt">Português</option>
+          </select>
+          <span class="fnote">The language Compass uses for the app and the documents it writes.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== SECTION: Updates & notifications (mirrors the scan schedule / runtime, simplified) ===== -->
+    <section class="card">
+      <h2><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span>Updates &amp; notifications</h2>
+      <div class="hint">How often Compass looks for new roles, and when it lets you know.</div>
+      <div class="fields" style="margin-bottom:8px">
+        <div class="field">
+          <label for="cadence">Look for new jobs</label>
+          <select id="cadence">
+            <option value="daily">Every morning</option>
+            <option value="twice">Twice a day</option>
+            <option value="weekdays">Weekday mornings</option>
+            <option value="weekly">Once a week</option>
+          </select>
+          <span class="fnote">You can always press &ldquo;Find new jobs&rdquo; yourself, anytime.</span>
+        </div>
+      </div>
+      <div class="toggle-row">
+        <div>
+          <div class="tt">Email me new matches</div>
+          <div class="tm">A short digest of your best new roles.</div>
+        </div>
+        <button class="sw on" type="button" id="swEmail" role="switch" aria-checked="true" aria-label="Email me new matches"></button>
+      </div>
+      <div class="toggle-row">
+        <div>
+          <div class="tt">Reminders to follow up</div>
+          <div class="tm">Nudge me about applications and next steps.</div>
+        </div>
+        <button class="sw on" type="button" id="swRemind" role="switch" aria-checked="true" aria-label="Reminders to follow up"></button>
+      </div>
+    </section>
+
+    <div class="savebar">
+      <button class="btn btn--primary save-main" id="saveBtn" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 6L9 17l-5-5"/></svg>Save preferences</button>
+      <span class="saved-note" id="savedNote"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>Saved — Compass will use these for your matches.</span>
+    </div>
+  </main>
+
+  <!-- shared toast: screen-reader announced, non-blocking -->
+  <div id="toastLive" class="toast-wrap" role="status" aria-live="polite" aria-atomic="false"></div>
+
+<script>
+/* ===== Iteration 5 shared kit: toast ===== */
+function toast(msg, type){
+  var w=document.getElementById("toastLive"); if(!w) return;
+  var t=document.createElement("div"); t.className="toast toast--"+(type||"info");
+  if(type==="success"){ t.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>'; }
+  var s=document.createElement("span"); s.textContent=msg; t.appendChild(s);
+  w.appendChild(t);
+  setTimeout(function(){ t.style.transition="opacity .2s"; t.style.opacity="0"; setTimeout(function(){ if(t.parentNode) t.remove(); }, 220); }, 3600);
+}
+
+var SKEY="compass_setup";
+function load(){ try{ return JSON.parse(localStorage.getItem(SKEY)||"null"); }catch(e){ return null; } }
+function save(o){ localStorage.setItem(SKEY, JSON.stringify(o)); }
+
+var DEFAULT_ROLES=["Director, FP&A","Content / Media Finance","Strategic Finance","Finance Business Partner","Sr Manager, FP&A"];
+/* Iteration 6 — defaults mirror portals.yml (title_filter, locations, tracked_companies, discovery queries) */
+var DEFAULT_INCLUDE=["Finance","FP&A","Financial Planning","Strategic Finance","Corporate Finance","Content Finance","Finance Business Partner"];
+var DEFAULT_EXCLUDE=["Accounting","Controller","Tax","Audit","Intern","Junior","Entry Level","Payroll"];
+var DEFAULT_TERMS=["Finance United States","FP&A United States","Strategic Finance","Content Finance"];
+var DEFAULT_CITIES=[
+  {name:"New York, NY", priority:true},
+  {name:"Los Angeles, CA", priority:false},
+  {name:"Atlanta, GA", priority:false}
+];
+var DEFAULT_COMPANIES=[
+  {name:"Spotify", domain:"spotify.com", mono:"S", color:"#2F6F5B"},
+  {name:"Netflix", domain:"netflix.com", mono:"N", color:"#96702F"},
+  {name:"NBCUniversal", domain:"nbcuni.com", mono:"NBC", color:"#2E5C8A"},
+  {name:"Coinbase", domain:"coinbase.com", mono:"CB", color:"#2E5C8A"},
+  {name:"Amazon", domain:"amazon.com", mono:"A", color:"#96702F"}
+];
+var stored=load()||{};
+var roles = stored.roles || DEFAULT_ROLES.slice();
+var floor = stored.floor || 150;
+var works = stored.works || ["Remote","Hybrid","On-site"];
+var includeTitles = stored.includeTitles || DEFAULT_INCLUDE.slice();
+var excludeTitles = stored.excludeTitles || DEFAULT_EXCLUDE.slice();
+var searchTerms   = stored.searchTerms   || DEFAULT_TERMS.slice();
+var cities        = stored.cities        || DEFAULT_CITIES.map(function(c){ return {name:c.name, priority:c.priority}; });
+var companies     = stored.companies     || DEFAULT_COMPANIES.map(function(c){ return Object.assign({}, c); });
+var remoteUS      = (stored.remoteUS!=null) ? stored.remoteUS : true;
+
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+/* ---- profile contact + AI/language + updates fields (restore any saved values) ---- */
+function setVal(id,v){ var el=document.getElementById(id); if(el && v!=null) el.value=v; }
+setVal("pName",  stored.name);
+setVal("pEmail", stored.email);
+setVal("pPhone", stored.phone);
+setVal("aiQuality", stored.aiQuality || "balanced");
+setVal("language",  stored.language  || "en");
+setVal("cadence",   stored.cadence   || "daily");
+
+/* ---- notification toggles ---- */
+var notify = stored.notify || {email:true, remind:true};
+function wireSwitch(id, key){
+  var sw=document.getElementById(id);
+  function paint(){ sw.classList.toggle("on", !!notify[key]); sw.setAttribute("aria-checked", notify[key]?"true":"false"); }
+  paint();
+  sw.onclick=function(){ notify[key]=!notify[key]; paint(); };
+}
+wireSwitch("swEmail","email");
+wireSwitch("swRemind","remind");
+
+/* ---- "Manage" (AI connection) — friendly reassurance, no dev config exposed ---- */
+document.getElementById("connManage").onclick=function(){
+  toast("Your AI assistant is managed by Compass — nothing to set up or pay for separately.", "info");
+};
+
+/* ---- role chips ---- */
+var roleChips=document.getElementById("roleChips"), roleInput=document.getElementById("roleInput");
+function renderRoles(){
+  // remove existing chips (keep the add-input label at the end)
+  roleChips.querySelectorAll(".rchip").forEach(function(c){ c.remove(); });
+  var addLabel=roleChips.querySelector(".chip-add");
+  roles.forEach(function(r){
+    var el=document.createElement("span");
+    el.className="rchip";
+    el.innerHTML=esc(r)+'<button type="button" aria-label="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></button>';
+    el.querySelector("button").onclick=function(){ roles=roles.filter(function(x){return x!==r;}); renderRoles(); };
+    roleChips.insertBefore(el, addLabel);
+  });
+}
+roleInput.addEventListener("keydown", function(e){
+  if(e.key==="Enter" && roleInput.value.trim()){ roles.push(roleInput.value.trim()); roleInput.value=""; renderRoles(); }
+});
+renderRoles();
+
+/* ---- Iteration 6: generic chip list (include / exclude titles, search phrases) ---- */
+function makeChipList(containerId, inputId, getArr, variant){
+  var container=document.getElementById(containerId);
+  var input=document.getElementById(inputId);
+  function render(){
+    container.querySelectorAll(".rchip").forEach(function(c){ c.remove(); });
+    var addLabel=container.querySelector(".chip-add");
+    getArr().forEach(function(v){
+      var el=document.createElement("span");
+      el.className="rchip "+variant;
+      el.innerHTML=esc(v)+'<button type="button" aria-label="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></button>';
+      el.querySelector("button").onclick=function(){ var a=getArr(); var i=a.indexOf(v); if(i>=0) a.splice(i,1); render(); };
+      container.insertBefore(el, addLabel);
+    });
+    if(window.pvRefresh) window.pvRefresh();
+  }
+  input.addEventListener("keydown", function(e){
+    if(e.key==="Enter" && input.value.trim()){ var a=getArr(); if(a.indexOf(input.value.trim())<0) a.push(input.value.trim()); input.value=""; render(); }
+  });
+  render();
+  return render;
+}
+makeChipList("incChips","incInput", function(){ return includeTitles; }, "inc");
+makeChipList("excChips","excInput", function(){ return excludeTitles; }, "exc");
+makeChipList("termChips","termInput", function(){ return searchTerms; }, "term");
+
+/* ---- Iteration 6: editable locations (star a priority, add/remove cities, Remote toggle) ---- */
+var locList=document.getElementById("locList");
+function renderCities(){
+  locList.innerHTML=cities.map(function(c,i){
+    var starOn = c.priority;
+    return '<div class="loc-item'+(starOn?' primary':'')+'" data-i="'+i+'">'+
+      (starOn ? '<span class="star"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2l2.9 6.3 6.9.6-5.2 4.6 1.6 6.8L12 17.3 5.8 20.9l1.6-6.8L2.2 8.9l6.9-.6z"/></svg></span>' : '') +
+      '<span class="ln">'+esc(c.name)+'</span>'+
+      (starOn ? '<span class="tagp">Top priority</span>' : '<button class="pin-toggle" type="button" data-i="'+i+'">Make top priority</button>') +
+      '<button class="rm-city" type="button" data-i="'+i+'" aria-label="Remove city"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></button>'+
+    '</div>';
+  }).join("");
+  locList.querySelectorAll(".pin-toggle").forEach(function(b){
+    b.onclick=function(){ var i=+b.getAttribute("data-i"); cities.forEach(function(c,j){ c.priority=(j===i); }); renderCities(); };
+  });
+  locList.querySelectorAll(".rm-city").forEach(function(b){
+    b.onclick=function(){ var i=+b.getAttribute("data-i"); var wasPri=cities[i].priority; cities.splice(i,1); if(wasPri && cities.length) cities[0].priority=true; renderCities(); };
+  });
+  if(window.pvRefresh) window.pvRefresh();
+}
+renderCities();
+var cityInput=document.getElementById("cityInput");
+function addCity(){ var v=cityInput.value.trim(); if(v){ cities.push({name:v, priority:cities.length===0}); cityInput.value=""; renderCities(); } }
+document.getElementById("cityAdd").onclick=addCity;
+cityInput.addEventListener("keydown", function(e){ if(e.key==="Enter") addCity(); });
+
+/* Remote/US toggle */
+var swRemote=document.getElementById("swRemote");
+function paintRemote(){ swRemote.classList.toggle("on", !!remoteUS); swRemote.setAttribute("aria-checked", remoteUS?"true":"false"); if(window.pvRefresh) window.pvRefresh(); }
+paintRemote();
+swRemote.onclick=function(){ remoteUS=!remoteUS; paintRemote(); };
+
+/* ---- Iteration 6: companies to watch (logos + add/remove) ---- */
+var coList=document.getElementById("coList"), coInput=document.getElementById("coInput");
+function domainFor(name){ return name.toLowerCase().replace(/[^a-z0-9]+/g,"")+".com"; }
+function monoFor(name){ return name.replace(/[^A-Za-z0-9 ]/g,"").split(/\s+/).map(function(w){return w[0];}).join("").slice(0,3).toUpperCase(); }
+function renderCompanies(){
+  coList.innerHTML=companies.map(function(c,i){
+    var dom=c.domain||domainFor(c.name), mono=c.mono||monoFor(c.name), col=c.color||"#16324F";
+    return '<div class="co-item" data-i="'+i+'">'+
+      '<span class="co-logo" style="--mc:'+col+'" data-mono="'+esc(mono)+'"><img src="https://logo.clearbit.com/'+esc(dom)+'" alt="'+esc(c.name)+' logo" onerror="this.parentNode.classList.add(\'failed\');this.remove()"></span>'+
+      '<div><div class="co-name">'+esc(c.name)+'</div><div class="co-note">Career page checked daily</div></div>'+
+      '<button class="rm" type="button" data-i="'+i+'" aria-label="Remove company"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></button>'+
+    '</div>';
+  }).join("");
+  coList.querySelectorAll(".rm").forEach(function(b){
+    b.onclick=function(){ companies.splice(+b.getAttribute("data-i"),1); renderCompanies(); };
+  });
+  if(window.pvRefresh) window.pvRefresh();
+}
+renderCompanies();
+function addCompany(){ var v=coInput.value.trim(); if(v){ companies.push({name:v, domain:domainFor(v), mono:monoFor(v), color:"#16324F"}); coInput.value=""; renderCompanies(); } }
+document.getElementById("coAdd").onclick=addCompany;
+coInput.addEventListener("keydown", function(e){ if(e.key==="Enter") addCompany(); });
+
+/* ---- résumé drop zone (mock) ---- */
+var drop=document.getElementById("drop"), fileInput=document.getElementById("fileInput");
+document.getElementById("replaceBtn").onclick=function(){ fileInput.click(); };
+fileInput.addEventListener("change", function(){ if(fileInput.files&&fileInput.files[0]) setFile(fileInput.files[0].name); });
+["dragenter","dragover"].forEach(function(ev){ drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.add("drag"); }); });
+["dragleave","drop"].forEach(function(ev){ drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.remove("drag"); }); });
+drop.addEventListener("drop", function(e){ var f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0]; if(f) setFile(f.name); });
+function setFile(name){
+  drop.querySelector(".fname").textContent=name;
+  drop.querySelector(".fmeta").innerHTML='<span class="ok">✓ Uploaded</span> · just now';
+}
+
+/* ---- comp floor ---- */
+var floorEl=document.getElementById("floor"), floorVal=document.getElementById("floorVal");
+function paintFloor(){
+  var v=+floorEl.value, plus=(v>=300?"+":"");
+  floorVal.innerHTML="$"+v+"K"+plus+"<small>base minimum</small>";
+  floorEl.setAttribute("aria-valuetext", "$"+v+"K"+plus);   /* announce dollars, not raw number */
+}
+floorEl.value=floor; paintFloor();
+floorEl.addEventListener("input", function(){ floor=+floorEl.value; paintFloor(); });
+
+/* ---- work types ---- */
+document.querySelectorAll(".wt").forEach(function(b){
+  b.classList.toggle("on", works.indexOf(b.getAttribute("data-wt"))>=0);
+  b.onclick=function(){
+    var w=b.getAttribute("data-wt"), i=works.indexOf(w);
+    if(i>=0){ works.splice(i,1); b.classList.remove("on"); } else { works.push(w); b.classList.add("on"); }
+  };
+});
+
+/* ===== Preview: what we actually search — live generators from the Setup inputs ===== */
+var PV_GOOGLE_HOSTS=["job-boards.greenhouse.io","boards.greenhouse.io","jobs.lever.co","jobs.ashbyhq.com","myworkdayjobs.com"];
+var PV_GOOGLE_CAP=15, PV_LINKEDIN_CAP=16;
+var PV_DEF_GROUPS=[["FP&A","Financial Planning"],["Finance Director","Director of Finance","Strategic Finance"],["Corporate Finance","Finance Manager"]];
+var PV_DEF_LOCS=["New York","remote"];
+var PV_DEF_LI_KW=["FP&A","Financial Planning","Strategic Finance"];
+
+function pvKeywordGroups(){
+  var terms=(searchTerms||[]).map(function(t){return String(t).trim();}).filter(Boolean);
+  if(!terms.length) return PV_DEF_GROUPS.map(function(g){return g.slice();});
+  var groups=[]; for(var i=0;i<terms.length;i+=2){ groups.push(terms.slice(i,i+2)); }
+  return groups;
+}
+function pvLocations(){
+  var locs=(cities||[]).map(function(c){return String(c.name).trim();}).filter(Boolean);
+  if(remoteUS) locs.push("remote");
+  if(!locs.length) locs=PV_DEF_LOCS.slice();
+  return locs;
+}
+function pvGoogleQueries(){
+  var groups=pvKeywordGroups(), locs=pvLocations();
+  var locClause="("+locs.join(" OR ")+")";
+  var out=[];
+  PV_GOOGLE_HOSTS.forEach(function(h){
+    groups.forEach(function(g){
+      var kw="("+g.map(function(k){return '"'+k+'"';}).join(" OR ")+")";
+      out.push("site:"+h+" "+kw+" "+locClause);
+    });
+  });
+  return out; /* backend caps the run at PV_GOOGLE_CAP */
+}
+function pvLinkedinKeywords(){
+  var terms=(searchTerms||[]).map(function(t){return String(t).trim();}).filter(Boolean);
+  return terms.length? terms : PV_DEF_LI_KW.slice();
+}
+function pvLinkedinUrls(){
+  var kws=pvLinkedinKeywords(), out=[], base="https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search";
+  kws.forEach(function(kw){
+    [0,25].forEach(function(start){
+      out.push(base+"?keywords="+encodeURIComponent(kw)+"&location="+encodeURIComponent("New York City Metropolitan Area")+"&start="+start);
+    });
+  });
+  kws.slice(0,2).forEach(function(kw){
+    out.push(base+"?keywords="+encodeURIComponent(kw)+"&location="+encodeURIComponent("United States")+"&start=0");
+  });
+  return out.slice(0, PV_LINKEDIN_CAP);
+}
+
+function pvColorGoogle(q){
+  /* light syntax highlight, all pieces escaped first */
+  var s=esc(q);
+  s=s.replace(/(site:[^\s]+)/, '<span class="kw">$1</span>');
+  s=s.replace(/\bOR\b/g, '<span class="op">OR</span>');
+  return s;
+}
+window.pvRefresh=function(){
+  /* Area 1 — company count + copy */
+  var n=(companies&&companies.length)?companies.length:68;
+  var coMech=document.getElementById("pvCoMech");
+  if(coMech) coMech.innerHTML="Checks all open roles at your <b>"+n+"</b> watched companies, straight from their career-page APIs. Not keyword-based &mdash; every open role is pulled, then the gate is applied.";
+
+  /* Area 3 — Google site: queries */
+  var gAll=pvGoogleQueries(), gRun=gAll.slice(0, PV_GOOGLE_CAP);
+  var gCode=document.getElementById("pvGoogleCode");
+  if(gCode){
+    var show=gRun.slice(0,8);
+    gCode.innerHTML=show.map(function(q){ return '<span class="ln">'+pvColorGoogle(q)+'</span>'; }).join("");
+  }
+  var gMore=document.getElementById("pvGoogleMore");
+  if(gMore){
+    var groups=pvKeywordGroups();
+    var extra=gRun.length-8;
+    gMore.innerHTML=(extra>0?("+ "+extra+" more &middot; "):"")+
+      "<b>"+gRun.length+"</b> queries this run ("+PV_GOOGLE_HOSTS.length+" hosts &times; "+groups.length+" keyword-groups"+(gAll.length>PV_GOOGLE_CAP?(" = "+gAll.length+", capped at "+PV_GOOGLE_CAP):"")+")";
+  }
+  var gIn=document.getElementById("pvGoogleInputs");
+  if(gIn){
+    var locs=pvLocations();
+    gIn.innerHTML='<span class="pv-tag"><b>'+PV_GOOGLE_HOSTS.length+'</b> hosts</span>'+
+      '<span class="pv-tag"><b>'+pvKeywordGroups().length+'</b> keyword-groups</span>'+
+      '<span class="pv-tag">locations: <b>'+esc(locs.join(", "))+'</b></span>'+
+      '<span class="pv-tag">cap <b>'+PV_GOOGLE_CAP+'</b></span>';
+  }
+
+  /* Area 4 — LinkedIn guest URLs */
+  var liAll=pvLinkedinUrls();
+  var liCode=document.getElementById("pvLinkedinCode");
+  if(liCode){
+    var liShow=liAll.slice(0,3);
+    liCode.innerHTML=liShow.map(function(u){ return '<span class="ln">'+esc(u)+'</span>'; }).join("");
+  }
+  var liMore=document.getElementById("pvLinkedinMore");
+  if(liMore){
+    var liExtra=liAll.length-3;
+    liMore.innerHTML=(liExtra>0?("+ "+liExtra+" more &middot; "):"")+"<b>"+liAll.length+"</b> URLs this run (cap "+PV_LINKEDIN_CAP+"). Note the <b>%26</b> encoding for the &amp; in FP&amp;A.";
+  }
+  var liIn=document.getElementById("pvLinkedinInputs");
+  if(liIn){
+    var kws=pvLinkedinKeywords();
+    liIn.innerHTML='<span class="pv-tag"><b>'+kws.length+'</b> phrases</span>'+
+      '<span class="pv-tag">NYC Metro + United States</span>'+
+      '<span class="pv-tag">pages 0, 25</span>'+
+      '<span class="pv-tag">cap <b>'+PV_LINKEDIN_CAP+'</b></span>';
+  }
+
+  /* Shared gate */
+  var gate=document.getElementById("pvGate");
+  if(gate){
+    var inc=(includeTitles||[]), exc=(excludeTitles||[]);
+    var cityNames=(cities||[]).map(function(c){return c.name;});
+    var locStr=cityNames.join(", ")+(remoteUS?(cityNames.length?" + Remote/US":"Remote/US"):"");
+    gate.innerHTML="Kept only if the title contains one of {<b>"+esc(inc.join(", ")||"—")+"</b>} "+
+      "and none of {<b>"+esc(exc.join(", ")||"—")+"</b>}, and the location is in {<b>"+esc(locStr||"—")+"</b>}.";
+  }
+};
+window.pvRefresh();
+
+/* ---- save ---- */
+document.getElementById("saveBtn").onclick=function(){
+  save({
+    roles:roles, floor:floor, works:works,
+    includeTitles:includeTitles, excludeTitles:excludeTitles,
+    searchTerms:searchTerms, cities:cities, companies:companies, remoteUS:remoteUS,
+    name:document.getElementById("pName").value,
+    email:document.getElementById("pEmail").value,
+    phone:document.getElementById("pPhone").value,
+    aiQuality:document.getElementById("aiQuality").value,
+    language:document.getElementById("language").value,
+    cadence:document.getElementById("cadence").value,
+    notify:notify
+  });
+  var note=document.getElementById("savedNote"); note.classList.add("show");
+  setTimeout(function(){ note.classList.remove("show"); }, 2600);
+  toast("Search settings saved", "success");
+};
+</script>
+  <script src="js/wire.js"></script>
+</body>
+</html>

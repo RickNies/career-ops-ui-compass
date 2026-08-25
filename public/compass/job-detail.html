@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Director, Finance Business Manager · Compass</title>
+<style>
+  :root{
+    --bg:#F6F3EC; --surface:#FFFFFF; --surface-2:#FBF9F4;
+    --ink:#16324F; --ink-soft:#3A4A5A; --muted:#6B7480;
+    --line:#E7E1D5; --line-soft:#F0ECE2;
+    --gold:#B4894C; --gold-deep:#96702F; --gold-soft:#F4EBD9;
+    --sage:#2F6F5B; --sage-soft:#E4EFE9;
+    --terra:#B5623B; --terra-soft:#F6E7DE;
+    --blue:#2E5C8A; --blue-soft:#E4EDF6;
+    --shadow:0 1px 2px rgba(22,50,79,.04), 0 8px 24px rgba(22,50,79,.06);
+    --shadow-sm:0 1px 2px rgba(22,50,79,.06);
+    --radius:14px; --radius-sm:10px;
+    --ring:var(--gold);
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  a{color:inherit;text-decoration:none}
+  h1,h2,h3{font-family:var(--serif);font-weight:600;letter-spacing:-.01em;margin:0}
+  button{font-family:inherit;cursor:pointer}
+
+  /* ===== Iteration 5 — shared interaction kit (accessibility + consistency) =====
+     Note: this page's action-rail buttons are the full-width block members of the .btn family
+     (see the .btn override below); the shared pill base still supplies typography + focus. */
+  :focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+  :focus:not(:focus-visible){outline:none}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;font-family:inherit;font-weight:600;font-size:13.5px;line-height:1.2;border-radius:999px;border:1px solid transparent;padding:9px 15px;cursor:pointer;text-decoration:none;white-space:nowrap;transition:background .12s ease,border-color .12s ease,color .12s ease,transform .08s ease}
+  .btn:disabled{opacity:.6;cursor:default}
+  .btn--primary{background:var(--ink);color:#fff;border-color:var(--ink);box-shadow:var(--shadow-sm)}
+  .btn--primary:hover{background:#0f2740}
+  .btn--outline{background:var(--surface);color:var(--ink-soft);border-color:var(--line);box-shadow:var(--shadow-sm)}
+  .btn--outline:hover{border-color:var(--gold);color:var(--gold-deep)}
+  .btn--ghost{background:transparent;border-color:transparent;color:var(--ink-soft)}
+  .btn--ghost:hover{background:var(--line-soft)}
+  .btn--sage{background:var(--sage);color:#fff;border-color:var(--sage)}
+  .btn--sage:hover{background:#255a49}
+  .btn--terra{background:var(--terra);color:#fff;border-color:var(--terra)}
+  .btn--terra:hover{background:#9c5231}
+  .btn--sm{padding:8px 14px;font-size:13px}
+  .btn--icon{padding:0;width:38px;height:38px}
+  .badge{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;line-height:1.4;border-radius:999px;padding:3px 11px;border:1px solid transparent}
+  .badge svg{width:12px;height:12px;flex:none}
+  .badge .tk{width:6px;height:6px;border-radius:999px;flex:none}
+  .badge--cat{background:var(--gold-soft);color:var(--gold-deep)} .badge--cat .tk{background:var(--gold)}
+  .badge--func{background:var(--blue-soft);color:var(--blue)} .badge--func .tk{background:var(--blue)}
+  .badge--lvl{background:var(--sage-soft);color:var(--sage)} .badge--lvl .tk{background:var(--sage)}
+  .badge--warm{background:var(--sage-soft);color:var(--sage)}
+  .badge--cool{background:var(--gold-soft);color:var(--gold-deep)}
+  .badge--outline{background:var(--line-soft);color:var(--ink-soft)}
+  /* Iteration 6 — "still open?" liveness badges */
+  .badge--live{background:var(--sage-soft);color:var(--sage)} .badge--live .tk{background:var(--sage)}
+  .badge--closed{background:var(--terra-soft);color:var(--terra)} .badge--closed .tk{background:var(--terra)}
+
+  .topbar{position:sticky;top:0;z-index:20;background:rgba(246,243,236,.85);backdrop-filter:saturate(180%) blur(10px);border-bottom:1px solid var(--line)}
+  .topbar-in{max-width:1320px;margin:0 auto;display:flex;align-items:center;gap:28px;padding:14px 22px}
+  .brand{display:flex;align-items:center;gap:9px;font-family:var(--serif);font-size:19px;font-weight:600}
+  .brand svg{color:var(--gold)}
+  .nav{display:flex;gap:6px;margin-left:6px}
+  .nav a{padding:8px 14px;border-radius:999px;color:var(--ink-soft);font-weight:500;font-size:14.5px}
+  .nav a:hover{background:var(--line-soft)}
+  .nav a.active{background:var(--ink);color:#fff}
+  .spacer{flex:1}
+  .gear{width:34px;height:34px;border-radius:999px;background:var(--surface);border:1px solid var(--line);color:var(--ink-soft);display:grid;place-items:center;margin-right:2px}
+  .gear:hover{border-color:var(--gold);color:var(--gold-deep)}
+  .gear svg{width:17px;height:17px}
+  .avatar{width:34px;height:34px;border-radius:999px;background:var(--gold-soft);color:var(--gold-deep);display:grid;place-items:center;font-weight:600;font-size:13px;border:1px solid var(--line)}
+
+  .wrap{max-width:1320px;margin:0 auto;padding:22px 22px 70px}
+  .back{display:inline-flex;align-items:center;gap:7px;color:var(--muted);font-size:13.5px;font-weight:500;margin-bottom:16px}
+  .back:hover{color:var(--ink)}
+
+  .grid{display:grid;grid-template-columns:1fr 320px;gap:22px;align-items:start}
+
+  .head{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:24px}
+  .head-top{display:flex;gap:16px;align-items:flex-start}
+  .logo{flex:none;width:60px;height:60px;border-radius:13px;overflow:hidden;background:var(--surface-2);border:1px solid var(--line);display:grid;place-items:center;position:relative}
+  .logo img{width:100%;height:100%;object-fit:contain;display:block;padding:8px;background:#fff}
+  .logo.failed{background:var(--mc,#16324F);border-color:transparent}
+  .logo.failed::after{content:attr(data-mono);color:#fff;font-family:var(--serif);font-weight:600;font-size:20px}
+  .head h1{font-size:26px;line-height:1.25}
+  .head .company{font-weight:600;color:var(--ink-soft);font-size:16px;margin-top:6px}
+  .head .meta{color:var(--muted);font-size:14px;margin-top:12px;display:flex;flex-wrap:wrap;gap:8px 18px}
+  .head .meta .pin{display:inline-flex;align-items:center;gap:6px}
+  .badges{margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .tag{font-size:12.5px;color:var(--ink-soft);background:var(--line-soft);border-radius:6px;padding:4px 10px;font-weight:500}
+  /* clickable tag chips → open the Jobs feed filtered by that tag */
+  .tagchip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;border-radius:999px;padding:4px 11px;border:1px solid transparent;cursor:pointer}
+  .tagchip .tk{width:6px;height:6px;border-radius:999px}
+  .tc-cat{background:var(--gold-soft);color:var(--gold-deep)} .tc-cat .tk{background:var(--gold)}
+  .tc-func{background:var(--blue-soft);color:var(--blue)} .tc-func .tk{background:var(--blue)}
+  .tc-lvl{background:var(--sage-soft);color:var(--sage)} .tc-lvl .tk{background:var(--sage)}
+  .tagchip:hover{filter:brightness(.96);box-shadow:var(--shadow-sm)}
+  .badges .tag-hint{font-size:11.5px;color:var(--muted)}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:22px;margin-top:18px}
+  .card h2{font-size:19px;margin-bottom:14px}
+  .card h2 .em{color:var(--gold-deep)}
+
+  /* how you match */
+  .match-head{display:flex;align-items:center;gap:16px;padding-bottom:16px;border-bottom:1px solid var(--line-soft);margin-bottom:16px}
+  .match-ring{flex:none;width:74px;height:74px;border-radius:999px;display:grid;place-items:center;background:var(--sage-soft);border:2px solid #B9D8CB;font-family:var(--serif);font-size:26px;font-weight:600;color:var(--sage)}
+  .match-head .t{font-family:var(--serif);font-size:18px;font-weight:600}
+  .match-head .d{color:var(--muted);font-size:13.5px;margin-top:3px}
+  .mlist{list-style:none;padding:0;margin:0}
+  .mlist li{display:flex;gap:11px;padding:9px 0;font-size:14.5px;color:var(--ink-soft);align-items:flex-start}
+  .mlist li .ic{flex:none;width:22px;height:22px;border-radius:999px;display:grid;place-items:center;margin-top:1px}
+  .mlist li .ic svg{width:13px;height:13px}
+  .ic-yes{background:var(--sage-soft);color:var(--sage)}
+  .ic-gap{background:var(--terra-soft);color:var(--terra)}
+  .sub-label{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:18px 0 4px}
+  .sub-label:first-child{margin-top:0}
+
+  .jd{color:var(--ink-soft);font-size:14.5px}
+  .jd p{margin:0 0 12px}
+  .jd h3{font-family:var(--serif);font-size:15.5px;color:var(--ink);margin:18px 0 8px}
+  .jd ul{margin:0 0 12px;padding-left:20px}
+  .jd li{margin-bottom:6px}
+
+  /* action rail */
+  .rail{position:sticky;top:86px;display:flex;flex-direction:column;gap:10px}
+  .rail-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px}
+  .rail-card .fit-inline{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+  .rail-card .fit-inline .r{width:52px;height:52px;border-radius:999px;background:var(--sage-soft);border:1.5px solid #B9D8CB;color:var(--sage);display:grid;place-items:center;font-family:var(--serif);font-size:19px;font-weight:600}
+  .rail-card .fit-inline .txt{font-weight:600;color:var(--sage);font-size:14.5px}
+  .rail-card .fit-inline .txt small{display:block;color:var(--muted);font-weight:400;font-size:12.5px}
+  /* full-width block members of the .btn family (rail actions) */
+  .btn{display:flex;justify-content:flex-start;align-items:center;gap:10px;width:100%;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:var(--radius-sm);padding:12px 14px;font-size:14px;font-weight:600;text-align:left;margin-bottom:8px}
+  .btn svg{width:17px;height:17px;color:var(--gold-deep);flex:none}
+  .btn:hover{background:var(--surface-2);border-color:var(--gold)}
+  .btn.primary{background:var(--ink);color:#fff;border-color:var(--ink);justify-content:center}
+  .btn.primary svg{color:#fff}
+  .btn.primary:hover{background:#0f2740}
+  .btn.apply{background:var(--sage);color:#fff;border-color:var(--sage);justify-content:center}
+  .btn.apply svg{color:#fff}
+  .btn.apply:hover{background:#255a49}
+  .btn.save-btn.on{background:var(--terra-soft);border-color:#E9CBBB;color:var(--terra)}
+  .btn.save-btn.on svg{color:var(--terra);fill:var(--terra)}
+  .btn.rev-btn svg{color:var(--sage)}
+  .btn.rev-btn.on{background:var(--sage-soft);border-color:#B9D8CB;color:var(--sage)}
+  .btn.rev-btn.on svg{color:var(--sage)}
+
+  /* good / pass verdict + reason */
+  .verdict-row{display:flex;gap:8px;margin-bottom:8px}
+  .vbtn2{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink-soft);border-radius:var(--radius-sm);padding:11px 10px;font-size:13.5px;font-weight:600}
+  .vbtn2 svg{width:15px;height:15px}
+  .vbtn2.good:hover{border-color:var(--sage);color:var(--sage);background:var(--sage-soft)}
+  .vbtn2.bad:hover{border-color:var(--terra);color:var(--terra);background:var(--terra-soft)}
+  .vbtn2.good.on{background:var(--sage);border-color:var(--sage);color:#fff}
+  .vbtn2.bad.on{background:var(--terra);border-color:var(--terra);color:#fff}
+  .reason-box{display:none;background:var(--surface-2);border:1px solid var(--line-soft);border-radius:var(--radius-sm);padding:11px;margin-bottom:8px}
+  .reason-box.show{display:block}
+  .reason-box .rl{font-size:11.5px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+  .reason-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:9px}
+  .rchip{font-size:12px;font-weight:600;border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);border-radius:999px;padding:5px 11px}
+  .rchip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .reason-note{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-family:inherit;font-size:13px;color:var(--ink);background:var(--surface);outline:none}
+  .reason-note:focus{border-color:var(--gold)}
+  .rail-sep{height:1px;background:var(--line-soft);margin:6px 0 12px}
+  .rail-note{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.45}
+
+  @media(max-width:820px){
+    .grid{grid-template-columns:1fr}
+    .rail{position:static;order:-1}
+    .brand span{display:none}
+  }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-in">
+      <a href="dashboard.html" class="brand" style="text-decoration:none;color:var(--ink)">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><polygon points="15.5 8.5 10.5 10.5 8.5 15.5 13.5 13.5" fill="currentColor" stroke="none"/></svg>
+        <span>Compass</span>
+      </a>
+      <nav class="nav">
+        <a href="dashboard.html">Dashboard</a>
+        <a class="active" href="jobs.html">Jobs</a>
+        <a href="saved.html">My Jobs</a>
+        <a href="documents.html">Documents</a>
+      </nav>
+      <div class="spacer"></div>
+      <a class="gear" href="setup.html" title="Setup &amp; preferences" aria-label="Setup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-2.9-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.2-2.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></a>
+      <div class="avatar" title="Nicole Doan, CPA">ND</div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <a class="back" href="jobs.html"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>Back to jobs</a>
+
+    <div class="grid">
+      <div>
+        <section class="head">
+          <div class="head-top">
+            <span class="logo" style="--mc:#B5623B" data-mono="HM"><img src="https://logo.clearbit.com/horizonmedia.com" alt="Horizon Media logo" onerror="this.parentNode.classList.add('failed');this.remove()"></span>
+            <div>
+              <h1>Director, Finance Business Manager</h1>
+              <div class="company">Horizon Media</div>
+            </div>
+          </div>
+          <div class="meta">
+            <span class="pin"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>New York, NY · On-site</span>
+            <span>$185,000–$215,000</span>
+            <span>Full-time</span>
+            <span>Posted 2 days ago</span>
+            <span class="badge badge--live" data-live="open"><span class="tk"></span>Open · accepting applications</span>
+          </div>
+          <div class="badges">
+            <a class="tagchip tc-cat" href="jobs.html?cat=Media%20%26%20Entertainment"><span class="tk"></span>Media &amp; Entertainment</a>
+            <a class="tagchip tc-func" href="jobs.html?func=Finance%20Business%20Partner"><span class="tk"></span>Finance Business Partner</a>
+            <a class="tagchip tc-lvl" href="jobs.html?level=Director"><span class="tk"></span>Director</a>
+            <span class="tag-hint">Tap a tag to see similar roles</span>
+          </div>
+        </section>
+
+        <!-- How you match -->
+        <section class="card">
+          <h2>How you match <span class="em">this role</span></h2>
+          <div class="match-head">
+            <div class="match-ring">94</div>
+            <div>
+              <div class="t">Strong fit for your background</div>
+              <div class="d">Based on your resume, profile, and what you've told us you're looking for.</div>
+            </div>
+          </div>
+
+          <div class="sub-label">What lines up well</div>
+          <ul class="mlist">
+            <li><span class="ic ic-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span><span><b>Content &amp; media finance</b> — your 6+ years at Warner Bros. Discovery map directly to running an agency's finance business.</span></li>
+            <li><span class="ic ic-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span><span><b>CPA credential</b> — explicitly preferred in the posting, and you hold it.</span></li>
+            <li><span class="ic ic-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span><span><b>FP&amp;A leadership</b> — budgeting, forecasting, and monthly reporting are already core to your current role.</span></li>
+            <li><span class="ic ic-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span><span><b>New York based</b> — this is an on-site NYC role, your top location preference.</span></li>
+          </ul>
+
+          <div class="sub-label">Worth a closer look</div>
+          <ul class="mlist">
+            <li><span class="ic ic-gap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 8v5M12 17h.01"/></svg></span><span><b>Agency-side experience</b> — you've worked in-house at a studio; the role is at a media agency. Your resume doesn't mention agency clients, so it's worth addressing in your cover letter.</span></li>
+            <li><span class="ic ic-gap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 8v5M12 17h.01"/></svg></span><span><b>Direct team size</b> — the posting mentions managing a team of 5+. Highlighting the analysts you've mentored would strengthen your case.</span></li>
+          </ul>
+        </section>
+
+        <!-- Job description -->
+        <section class="card">
+          <h2>The role</h2>
+          <div class="jd">
+            <p>Horizon Media is looking for a Director, Finance Business Manager to serve as the finance lead for one of our largest client portfolios. You'll be the trusted financial partner to agency leadership — owning the P&amp;L, driving the annual plan, and turning numbers into decisions.</p>
+            <h3>What you'll do</h3>
+            <ul>
+              <li>Own budgeting, forecasting, and monthly close for a $200M+ client portfolio.</li>
+              <li>Partner with account leads to improve margin and resource planning.</li>
+              <li>Build and present financial reporting to senior leadership.</li>
+              <li>Lead and mentor a team of 5 finance analysts.</li>
+            </ul>
+            <h3>What we're looking for</h3>
+            <ul>
+              <li>8+ years of progressive finance experience, ideally in media, entertainment, or advertising.</li>
+              <li>CPA or MBA strongly preferred.</li>
+              <li>Advanced FP&amp;A skills — modeling, variance analysis, and executive reporting.</li>
+              <li>Experience managing and developing a team.</li>
+            </ul>
+          </div>
+        </section>
+      </div>
+
+      <!-- Action rail -->
+      <aside class="rail">
+        <div class="rail-card">
+          <div class="fit-inline">
+            <div class="r">94</div>
+            <div class="txt">Strong fit<small>for your background</small></div>
+          </div>
+          <a class="btn apply" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>Apply now</a>
+          <button class="btn save-btn on" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.8 8.6a5 5 0 0 0-8.8-3.2A5 5 0 0 0 3.2 8.6c0 3.8 4.5 7 8.8 10.4 4.3-3.4 8.8-6.6 8.8-10.4Z"/></svg>Saved</button>
+          <div class="verdict-row">
+            <button class="vbtn2 good" id="goodBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6L9 17l-5-5"/></svg>Good fit</button>
+            <button class="vbtn2 bad" id="badBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M18 6 6 18M6 6l12 12"/></svg>Pass</button>
+          </div>
+          <div class="reason-box" id="reasonBox">
+            <div class="rl" id="reasonLabel">Why? (optional)</div>
+            <div class="reason-chips" id="reasonChips"></div>
+            <input class="reason-note" id="reasonNote" type="text" placeholder="Add a note — optional" maxlength="120">
+          </div>
+
+          <div class="rail-sep"></div>
+
+          <a class="btn" href="documents.html#tailor"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10"/><path d="M14 4l6 6-2 2-6-6z"/></svg>Tailor my résumé for this job</a>
+          <a class="btn" href="documents.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Match to my resume</a>
+          <a class="btn" href="documents.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h6"/></svg>Write a cover letter</a>
+          <a class="btn" href="documents.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16v14H4z"/><path d="M4 6l8 6 8-6"/></svg>Draft application email</a>
+          <a class="btn" href="outreach.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M17 9v6M14 12h6"/></svg>Find a contact</a>
+
+          <p class="rail-note">Everything you create here is saved under Documents, tied to this job.</p>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+<script>
+/* Good / Pass review with optional reason — persists to localStorage by job id,
+   shared with the Jobs feed (same "compass_reviews" store). */
+var JOB_ID = "j1"; /* Director, Finance Business Manager — Horizon Media */
+var REVK = "compass_reviews";
+var REASONS = {
+  good:["Great fit","Dream company","Right level","Great comp"],
+  bad:["Too junior","Wrong location","Below pay","Not my industry","Company"]
+};
+function getReviews(){ try{ return JSON.parse(localStorage.getItem(REVK)||"{}"); }catch(e){ return {}; } }
+function setReviews(m){ localStorage.setItem(REVK, JSON.stringify(m)); }
+function getReview(){ return getReviews()[JOB_ID]||null; }
+function saveReview(verdict, reason, note){
+  var m=getReviews(), cur=m[JOB_ID]||{};
+  m[JOB_ID]={verdict:verdict, reason:(reason!=null?reason:(cur.reason||"")), note:(note!=null?note:(cur.note||"")), ts:Date.now()};
+  setReviews(m);
+}
+function clearReview(){ var m=getReviews(); delete m[JOB_ID]; setReviews(m); }
+
+var goodBtn=document.getElementById("goodBtn"), badBtn=document.getElementById("badBtn");
+var box=document.getElementById("reasonBox"), chipsEl=document.getElementById("reasonChips");
+var noteEl=document.getElementById("reasonNote"), labelEl=document.getElementById("reasonLabel");
+
+function paint(){
+  var rv=getReview();
+  goodBtn.classList.toggle("on", !!rv && rv.verdict==="good");
+  badBtn.classList.toggle("on", !!rv && rv.verdict==="bad");
+  goodBtn.innerHTML = (rv && rv.verdict==="good")
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6L9 17l-5-5"/></svg>Liked'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6L9 17l-5-5"/></svg>Good fit';
+  if(!rv){ box.classList.remove("show"); return; }
+  box.classList.add("show");
+  labelEl.textContent = rv.verdict==="good" ? "What makes it a fit? (optional)" : "Mind sharing why? (optional)";
+  chipsEl.innerHTML = REASONS[rv.verdict].map(function(r){
+    return '<button type="button" class="rchip'+(rv.reason===r?' on':'')+'" data-r="'+r.replace(/"/g,'&quot;')+'">'+r+'</button>';
+  }).join("");
+  noteEl.value = rv.note||"";
+  chipsEl.querySelectorAll(".rchip").forEach(function(c){
+    c.onclick=function(){
+      var val=c.getAttribute("data-r"), already=c.classList.contains("on");
+      saveReview(rv.verdict, already?"":val);
+      paint();
+    };
+  });
+}
+goodBtn.addEventListener("click", function(){ var rv=getReview(); if(rv&&rv.verdict==="good"){ clearReview(); } else { saveReview("good"); } paint(); });
+badBtn.addEventListener("click", function(){ var rv=getReview(); if(rv&&rv.verdict==="bad"){ clearReview(); } else { saveReview("bad"); } paint(); });
+noteEl.addEventListener("input", function(){ var rv=getReview(); if(rv) saveReview(rv.verdict, null, noteEl.value); });
+paint();
+</script>
+  <script src="js/wire.js"></script>
+</body>
+</html>
