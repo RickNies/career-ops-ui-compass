@@ -41,7 +41,7 @@ export async function runOpenAICompatible(prompt, opts = {}) {
     return { markdown: '', usage: null, error: `${label} key not set` };
   }
   const maxTokens = Math.min(Math.max(opts.maxTokens || 8192, 256), 16384);
-  const timeoutMs = opts.timeoutMs || 180_000;
+  const timeoutMs = opts.timeoutMs || Number(process.env.LLM_TIMEOUT_MS) || 180_000;
   const fetchImpl = opts.fetchImpl || fetch;
 
   const ctrl = new AbortController();
@@ -60,7 +60,7 @@ export async function runOpenAICompatible(prompt, opts = {}) {
       },
       body: JSON.stringify({
         model,
-        max_tokens: maxTokens,
+        ...(String(url || "").includes("api.openai.com") ? { max_completion_tokens: Math.min(Math.max(opts.maxTokens || 16384, 256), 32000) } : { max_tokens: maxTokens }),
         messages: [{ role: 'user', content: prompt }],
       }),
     });
