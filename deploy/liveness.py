@@ -90,8 +90,13 @@ def load_store():
     if os.path.exists(STORE):
         with open(STORE, encoding="utf-8") as f:
             for row in csv.reader(f, delimiter="\t"):
-                if len(row) >= 4 and row[0] != "url":
-                    d[row[0]] = {"state": row[1], "http_status": row[2], "checked_at": row[3]}
+                if len(row) >= 2 and row[0] != "url":
+                    d[row[0]] = {
+                        "state": row[1],
+                        "http_status": row[2] if len(row) > 2 else "",
+                        "checked_at": row[3] if len(row) > 3 else "",
+                        "method": row[4] if len(row) > 4 else "http",
+                    }
     return d
 
 
@@ -99,9 +104,9 @@ def save_store(d):
     tmp = STORE + ".tmp"
     with open(tmp, "w", encoding="utf-8", newline="") as f:
         w = csv.writer(f, delimiter="\t")
-        w.writerow(["url", "state", "http_status", "checked_at"])
+        w.writerow(["url", "state", "http_status", "checked_at", "method"])
         for u, v in sorted(d.items()):
-            w.writerow([u, v["state"], v["http_status"], v["checked_at"]])
+            w.writerow([u, v["state"], v.get("http_status", ""), v.get("checked_at", ""), v.get("method", "http")])
     os.replace(tmp, STORE)
 
 
@@ -144,7 +149,7 @@ def sweep(limit, concurrency, only_unchecked):
                 state, st = fut.result()
             except Exception:
                 state, st = ("unknown", 0)
-            results[u] = {"state": state, "http_status": str(st), "checked_at": now}
+            results[u] = {"state": state, "http_status": str(st), "checked_at": now, "method": "http"}
     store.update(results)
     save_store(store)
     c = Counter(v["state"] for v in results.values())

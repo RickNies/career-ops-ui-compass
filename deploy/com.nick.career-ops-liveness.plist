@@ -3,17 +3,13 @@
 <plist version="1.0">
 <dict>
   <key>Label</key><string>com.nick.career-ops-liveness</string>
-  <!-- Daily at 06:30 (staggered 30m before the 07:00 scan). Probes every
-       tracker URL for dead/closed listings; annotate-only into
-       data/liveness.tsv. The Compass UI hides rows marked dead. -->
-  <key>EnvironmentVariables</key>
-  <dict><key>CAREER_OPS_ROOT</key><string>/Users/nick/apps/career-ops</string></dict>
+  <!-- Daily 06:30 (staggered 30m before the 07:00 scan). Two-tier: HTTP
+       prefilter (liveness.py) then Camoufox browser-verify (liveness_browser.py)
+       to catch JS soft-404s. Annotate-only -> data/liveness.tsv; UI hides dead. -->
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/nick/apps/career-ops-scrape/venv/bin/python</string>
-    <string>/Users/nick/apps/career-ops-scrape/liveness.py</string>
-    <string>sweep</string>
-    <string>--concurrency</string><string>10</string>
+    <string>/bin/bash</string>
+    <string>/Users/nick/apps/career-ops-scrape/run-liveness.sh</string>
   </array>
   <key>StartCalendarInterval</key>
   <dict><key>Hour</key><integer>6</integer><key>Minute</key><integer>30</integer></dict>

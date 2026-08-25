@@ -352,68 +352,210 @@
     banner('Documents LIVE — "Redo the tailoring" → /api/cv-studio/tailor (real local model, slow); "Download" → real .docx. Pre-filled sample text is demo until you generate.');
   }
 
-  // ======================= SETUP (native AI panel) =========================
+  // ======================= SETUP (full native migration) ===================
+  // Rebuilds the original app's ENTIRE Setup nav-group natively in Compass,
+  // hitting the same endpoints: #/config, #/portals, #/profile, #/cv, #/memory,
+  // #/health, #/usage, #/docs-assistant, #/orientation, #/help, #/cv-studio.
   var PROVIDERS = ['auto', 'hermes', 'anthropic', 'gemini', 'openai', 'qwen', 'openrouter', 'github'];
-  function injectAiPanel() {
-    var conn = document.querySelector('.conn');
-    if (!conn || document.getElementById('compassAiPanel')) return;
-    var p = document.createElement('div');
-    p.id = 'compassAiPanel';
-    p.style.cssText = 'margin:14px 0 4px;padding:16px;border:1px solid #e6ddc9;border-radius:14px;background:#FBF7EF';
-    p.innerHTML =
-      '<div style="font:600 14px system-ui;color:#16324F;margin-bottom:2px">AI provider &amp; keys</div>' +
-      '<div id="compassProv" style="font:12.5px system-ui;color:#2f6f5b;margin-bottom:12px">Loading…</div>' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
-      '<label style="font:600 12px system-ui;color:#6b6255">Provider<select id="cfgProvider" style="display:block;width:100%;margin-top:4px;padding:8px;border:1px solid #d8cdb8;border-radius:8px;font:13px system-ui">' + PROVIDERS.map(function (x) { return '<option value="' + x + '">' + x + '</option>'; }).join('') + '</select></label>' +
-      '<label style="font:600 12px system-ui;color:#6b6255">Anthropic model<input id="cfgModel" type="text" placeholder="claude-opus-4-5" style="display:block;width:100%;margin-top:4px;padding:8px;border:1px solid #d8cdb8;border-radius:8px;font:13px system-ui;box-sizing:border-box"></label>' +
-      '<label style="font:600 12px system-ui;color:#6b6255">LLM timeout (ms)<input id="cfgTimeout" type="text" placeholder="600000" style="display:block;width:100%;margin-top:4px;padding:8px;border:1px solid #d8cdb8;border-radius:8px;font:13px system-ui;box-sizing:border-box"></label>' +
-      '<label style="font:600 12px system-ui;color:#6b6255">Anthropic API key<input id="cfgKey" type="password" placeholder="sk-ant-…" style="display:block;width:100%;margin-top:4px;padding:8px;border:1px solid #d8cdb8;border-radius:8px;font:13px system-ui;box-sizing:border-box"></label>' +
-      '</div>' +
-      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">' +
-      '<button id="cfgSave" type="button" class="btn btn--primary btn--sm">Save provider / model / timeout</button>' +
-      '<button id="cfgKeyAdd" type="button" class="btn btn--outline btn--sm">Add / update key</button>' +
-      '<button id="cfgKeyRemove" type="button" class="btn btn--outline btn--sm">Remove key</button>' +
-      '</div>' +
-      '<div id="cfgMsg" style="font:12px system-ui;color:#6b6255;margin-top:9px"></div>';
-    conn.parentNode.insertBefore(p, conn.nextSibling);
+  function el(tag, css, html) { var e = document.createElement(tag); if (css) e.style.cssText = css; if (html != null) e.innerHTML = html; return e; }
+  var CARD = 'background:#fff;border:1px solid #ece5d6;border-radius:16px;box-shadow:0 1px 3px rgba(0,0,0,.05);padding:0;margin-bottom:14px;overflow:hidden';
+  var SUM = 'cursor:pointer;list-style:none;padding:16px 20px;font:600 16px system-ui;color:#16324F;display:flex;justify-content:space-between;align-items:center';
+  var BODY = 'padding:4px 20px 20px';
+  var INP = 'display:block;width:100%;margin-top:4px;padding:8px 10px;border:1px solid #d8cdb8;border-radius:8px;font:13px system-ui;box-sizing:border-box';
+  var LBL = 'font:600 12px system-ui;color:#6b6255;display:block;margin-top:10px';
+  function details(title, open) { var d = el('details', CARD); if (open) d.setAttribute('open', ''); d.innerHTML = '<summary style="' + SUM + '">' + esc(title) + '<span style="font:400 12px system-ui;color:#b0a790">▾</span></summary>'; var b = el('div', BODY); d.appendChild(b); return { d: d, body: b }; }
+  function msgLine() { return el('div', 'font:12px system-ui;color:#6b6255;margin-top:10px;min-height:16px'); }
+  function say(node, t, ok) { node.textContent = t; node.style.color = ok === false ? '#9c5231' : (ok ? '#2f6f5b' : '#6b6255'); }
+  function chips(val) { return (Array.isArray(val) ? val : []).join('\n'); }
+  function fromLines(s) { return String(s || '').split('\n').map(function (x) { return x.trim(); }).filter(Boolean); }
 
-    function msg(t, ok) { var el = document.getElementById('cfgMsg'); if (el) { el.textContent = t; el.style.color = ok === false ? '#9c5231' : (ok ? '#2f6f5b' : '#6b6255'); } }
-    function refresh() {
-      Promise.all([jGet('/api/config'), jGet('/api/status/providers')]).then(function (a) {
-        var v = (a[0] && a[0].values) || {}, st = a[1] || {};
-        var sel = document.getElementById('cfgProvider'); if (sel) sel.value = (v.LLM_PROVIDER || 'auto');
-        var mdl = document.getElementById('cfgModel'); if (mdl && !mdl.value) mdl.value = v.ANTHROPIC_MODEL || '';
-        var to = document.getElementById('cfgTimeout'); if (to && !to.value) to.value = v.LLM_TIMEOUT_MS || '';
-        var key = v.ANTHROPIC_API_KEY;
-        document.getElementById('compassProv').textContent = 'Active provider: ' + (st.activeProvider || 'none') + (st.activeModel ? ' · ' + st.activeModel : '') + ' · Anthropic key: ' + (key ? key + ' (set)' : 'not set');
+  // ---- FULL CONFIG (all KNOWN_KEYS, grouped) ----
+  function sectionConfig(host) {
+    var s = details('AI & app settings — full config (#/config)', true); host.appendChild(s.d);
+    var prov = el('div', 'font:12.5px system-ui;color:#2f6f5b;margin:6px 0 12px', 'Loading…'); s.body.appendChild(prov);
+    var form = el('div'); s.body.appendChild(form);
+    var m = msgLine(); s.body.appendChild(m);
+    var actions = el('div', 'display:flex;gap:8px;flex-wrap:wrap;margin-top:12px');
+    actions.innerHTML = '<button class="btn btn--primary btn--sm" id="cfgSaveAll" type="button">Save all settings</button>';
+    s.body.appendChild(actions);
+    jGet('/api/config').then(function (cfg) {
+      var secret = new Set(cfg.secretKeys || []); var groups = cfg.groups || {}; var vals = cfg.values || {};
+      var byGroup = {}; (cfg.keys || []).forEach(function (k) { var g = groups[k] || 'other'; (byGroup[g] = byGroup[g] || []).push(k); });
+      var html = '';
+      Object.keys(byGroup).forEach(function (g) {
+        html += '<div style="font:700 11px system-ui;letter-spacing:.05em;text-transform:uppercase;color:#b0a790;margin:14px 0 2px">' + esc(g) + '</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+        byGroup[g].forEach(function (k) {
+          if (k === 'LLM_PROVIDER') { html += '<label style="' + LBL + '">' + k + '<select data-k="' + k + '" style="' + INP + '">' + PROVIDERS.map(function (x) { return '<option' + (vals[k] === x ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select></label>'; }
+          else if (secret.has(k)) { html += '<label style="' + LBL + '">' + k + ' <span style="color:#b0a790;font-weight:400">' + (vals[k] ? '(' + esc(vals[k]) + ')' : '(not set)') + '</span><input data-k="' + k + '" data-secret="1" type="password" placeholder="' + (vals[k] ? 'leave blank to keep' : 'not set') + '" style="' + INP + '"><label style="font:400 11px system-ui;color:#b0a790"><input type="checkbox" data-clear="' + k + '"> remove</label></label>'; }
+          else { html += '<label style="' + LBL + '">' + k + '<input data-k="' + k + '" type="text" value="' + esc(vals[k] || '') + '" style="' + INP + '"></label>'; }
+        });
+        html += '</div>';
       });
-    }
-    document.getElementById('cfgSave').onclick = function () {
-      var payload = { LLM_PROVIDER: document.getElementById('cfgProvider').value, ANTHROPIC_MODEL: document.getElementById('cfgModel').value.trim(), LLM_TIMEOUT_MS: document.getElementById('cfgTimeout').value.trim() };
-      jPost('/api/config', payload).then(function (r) { if (r.status === 200 && r.body.ok) { msg('Saved provider/model/timeout to .env ✓', true); refresh(); } else { msg('Save rejected: ' + ((r.body && r.body.details && r.body.details.join('; ')) || r.body.error || r.status), false); } });
-    };
-    document.getElementById('cfgKeyAdd').onclick = function () {
-      var k = document.getElementById('cfgKey').value.trim();
-      if (!k) { msg('Enter a key first.', false); return; }
-      if (!/^sk-ant-\S{20,}$/.test(k)) { msg('That does not look like an Anthropic key (expected sk-ant-… + 20+ chars). It will be rejected by the server.', false); }
-      jPost('/api/config', { ANTHROPIC_API_KEY: k, LLM_PROVIDER: 'anthropic' }).then(function (r) {
-        if (r.status === 200 && r.body.ok) { document.getElementById('cfgKey').value = ''; msg('Key saved to .env; provider set to Anthropic.', true); refresh(); }
-        else { msg('Rejected: ' + ((r.body && r.body.details && r.body.details.join('; ')) || (r.body && r.body.error) || r.status), false); }
+      form.innerHTML = html;
+    });
+    function refreshProv() { jGet('/api/status/providers').then(function (st) { prov.textContent = 'Active provider: ' + (st.activeProvider || 'none') + (st.activeModel ? ' · ' + st.activeModel : ''); }); }
+    refreshProv();
+    actions.querySelector('#cfgSaveAll').onclick = function () {
+      var payload = {};
+      form.querySelectorAll('[data-k]').forEach(function (inp) {
+        var k = inp.getAttribute('data-k');
+        if (inp.getAttribute('data-secret')) { var v = inp.value.trim(); if (v) payload[k] = v; }
+        else payload[k] = (inp.value || '').trim();
+      });
+      form.querySelectorAll('[data-clear]').forEach(function (cb) { if (cb.checked) payload[cb.getAttribute('data-clear')] = ''; });
+      jPost('/api/config', payload).then(function (r) {
+        if (r.status === 200 && r.body.ok) { say(m, 'Saved to .env (' + (r.body.written || []).length + ' keys written) ✓', true); refreshProv(); }
+        else { say(m, 'Rejected: ' + ((r.body && r.body.details && r.body.details.join('; ')) || (r.body && r.body.error) || r.status), false); }
       });
     };
-    document.getElementById('cfgKeyRemove').onclick = function () {
-      jPost('/api/config', { ANTHROPIC_API_KEY: '', LLM_PROVIDER: '' }).then(function (r) { if (r.status === 200 && r.body.ok) { msg('Key removed; back to auto/local Hermes.', true); refresh(); } else { msg('Remove failed: ' + ((r.body && r.body.error) || r.status), false); } });
-    };
-    refresh();
   }
+
+  // ---- PORTALS (full editor incl. companies WITH source keys) ----
+  function sectionPortals(host) {
+    var s = details('Portals — companies, filters, discovery (#/portals)', false); host.appendChild(s.d);
+    var box = el('div'); s.body.appendChild(box); var m = msgLine(); s.body.appendChild(m);
+    jGet('/api/portals').then(function (r) {
+      var p = (r && r.portals) || {};
+      var companies = Array.isArray(p.tracked_companies) ? p.tracked_companies : [];
+      var tf = p.title_filter || {}, lf = p.location_filter || {}, disc = p.discovery || {};
+      var allow = Array.isArray(lf.allow) ? lf.allow : [];
+      var cityList = allow.filter(function (x) { return !/^(remote|united states|usa)$/i.test(x); });
+      var remoteUS = allow.some(function (x) { return /remote/i.test(x); });
+      box.innerHTML =
+        '<div style="font:700 12px system-ui;color:#16324F;margin:6px 0 6px">Tracked companies (each needs a source: careers_url / api / provider)</div>' +
+        '<div id="coRows"></div>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><input id="coName" placeholder="Company name" style="' + INP + ';flex:1;margin:0"><input id="coSrc" placeholder="careers_url (https://…) or provider (greenhouse/lever/ashby)" style="' + INP + ';flex:2;margin:0"><button class="btn btn--outline btn--sm" id="coAdd" type="button">Add</button></div>' +
+        '<label style="' + LBL + '">Include titles (title_filter.positive — one per line)<textarea id="pTitles" rows="4" style="' + INP + '">' + esc(chips(tf.positive)) + '</textarea></label>' +
+        '<label style="' + LBL + '">Exclude titles (title_filter.negative — one per line)<textarea id="pNeg" rows="3" style="' + INP + '">' + esc(chips(tf.negative)) + '</textarea></label>' +
+        '<label style="' + LBL + '">Cities (location_filter.allow — one per line)<textarea id="pCities" rows="3" style="' + INP + '">' + esc(chips(cityList)) + '</textarea></label>' +
+        '<label style="font:400 12px system-ui;color:#6b6255;display:block;margin-top:6px"><input type="checkbox" id="pRemote"' + (remoteUS ? ' checked' : '') + '> Include Remote / United States</label>' +
+        '<label style="' + LBL + '">Search terms (discovery.linkedin_keywords — one per line)<textarea id="pTerms" rows="3" style="' + INP + '">' + esc(chips(disc.linkedin_keywords)) + '</textarea></label>' +
+        '<div style="font:11px system-ui;color:#b0a790;margin-top:8px">location_filter.block (' + esc((lf.block || []).join(', ') || 'none') + ') and other discovery fields survive untouched (not replaced by this save).</div>' +
+        '<button class="btn btn--primary btn--sm" id="pSave" type="button" style="margin-top:12px">Save portals.yml</button>';
+      var model = companies.map(function (c) { return { name: c.name || '', src: c.careers_url || c.api || c.provider || '', careers_url: c.careers_url, api: c.api, provider: c.provider, enabled: c.enabled !== false }; });
+      function renderCos() {
+        var host2 = box.querySelector('#coRows'); host2.innerHTML = model.map(function (c, i) {
+          return '<div style="display:flex;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid #f0ead9"><span style="flex:1;font:13px system-ui;color:#16324F">' + esc(c.name) + '</span><span style="flex:2;font:11px system-ui;color:#8a8172;overflow:hidden;text-overflow:ellipsis">' + esc(c.src || '(no source!)') + '</span><label style="font:11px system-ui"><input type="checkbox" data-en="' + i + '"' + (c.enabled ? ' checked' : '') + '>on</label><button class="btn btn--ghost btn--sm" data-rm="' + i + '" type="button">✕</button></div>';
+        }).join('') || '<div style="font:12px system-ui;color:#b0a790">none</div>';
+        host2.querySelectorAll('[data-rm]').forEach(function (b) { b.onclick = function () { model.splice(+b.getAttribute('data-rm'), 1); renderCos(); }; });
+        host2.querySelectorAll('[data-en]').forEach(function (cb) { cb.onchange = function () { model[+cb.getAttribute('data-en')].enabled = cb.checked; }; });
+      }
+      renderCos();
+      box.querySelector('#coAdd').onclick = function () {
+        var name = box.querySelector('#coName').value.trim(), src = box.querySelector('#coSrc').value.trim();
+        if (!name || !src) { say(m, 'Company needs a name AND a source (careers_url or provider).', false); return; }
+        var entry = { name: name, src: src, enabled: true };
+        if (/^https?:\/\//i.test(src)) entry.careers_url = src; else entry.provider = src;
+        model.push(entry); box.querySelector('#coName').value = ''; box.querySelector('#coSrc').value = ''; renderCos();
+      };
+      box.querySelector('#pSave').onclick = function () {
+        var settings = {
+          companies: model.map(function (c) { var o = { name: c.name, enabled: c.enabled }; if (c.careers_url) o.careers_url = c.careers_url; else if (c.api) o.api = c.api; else if (c.provider) o.provider = c.provider; else if (/^https?:/i.test(c.src)) o.careers_url = c.src; else o.provider = c.src; return o; }),
+          includeTitles: fromLines(box.querySelector('#pTitles').value),
+          excludeTitles: fromLines(box.querySelector('#pNeg').value),
+          cities: fromLines(box.querySelector('#pCities').value),
+          remoteUS: box.querySelector('#pRemote').checked,
+          searchTerms: fromLines(box.querySelector('#pTerms').value)
+        };
+        jPost('/api/compass/setup', { settings: settings }).then(function (r) {
+          if (r.body && r.body.ok) say(m, 'portals.yml saved (' + settings.companies.length + ' companies kept with source keys) ✓', true);
+          else say(m, 'Save failed: ' + ((r.body && r.body.error) || r.status) + ' ' + ((r.body && r.body.details) || ''), false);
+        });
+      };
+    });
+  }
+
+  // ---- PROFILE ----
+  function sectionProfile(host) {
+    var s = details('Profile (#/profile)', false); host.appendChild(s.d);
+    var box = el('div'); s.body.appendChild(box); var m = msgLine(); s.body.appendChild(m);
+    jGet('/api/profile').then(function (r) {
+      var p = (r && r.profile) || {}; var c = p.candidate || {}; var n = p.narrative || {}; var comp = p.compensation || {};
+      var f = [['candidate.full_name', 'Full name', c.full_name], ['candidate.email', 'Email', c.email], ['candidate.phone', 'Phone', c.phone], ['candidate.location', 'Location', c.location], ['narrative.headline', 'Headline', n.headline], ['compensation.target_range', 'Target comp', comp.target_range]];
+      box.innerHTML = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' + f.map(function (x) { return '<label style="' + LBL + '">' + x[1] + '<input data-p="' + x[0] + '" type="text" value="' + esc(x[2] || '') + '" style="' + INP + '"></label>'; }).join('') + '</div><button class="btn btn--primary btn--sm" id="profSave" type="button" style="margin-top:12px">Save profile</button>';
+      box.querySelector('#profSave').onclick = function () {
+        var fields = {}; box.querySelectorAll('[data-p]').forEach(function (i) { fields[i.getAttribute('data-p')] = i.value; });
+        fetch('/api/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: fields }) }).then(function (rr) { return rr.json().then(function (j) { return { s: rr.status, j: j }; }); }).then(function (o) { say(m, o.s === 200 && o.j.ok ? 'profile.yml saved ✓' : ('Save failed: ' + (o.j.error || o.s)), o.s === 200 && o.j.ok); });
+      };
+    });
+  }
+
+  // ---- markdown doc editor (CV / Memory) ----
+  function sectionDoc(host, title, getUrl, putUrl) {
+    var s = details(title, false); host.appendChild(s.d);
+    var ta = el('textarea', INP + ';min-height:220px;font-family:ui-monospace,monospace'); s.body.appendChild(ta);
+    var m = msgLine(); s.body.appendChild(m);
+    var save = el('button', 'margin-top:10px', 'Save'); save.className = 'btn btn--primary btn--sm'; save.type = 'button'; s.body.appendChild(save);
+    jGet(getUrl).then(function (j) { ta.value = (j && j.markdown) || ''; });
+    save.onclick = function () { fetch(putUrl, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ markdown: ta.value }) }).then(function (r) { return r.json().then(function (j) { return { s: r.status, j: j }; }); }).then(function (o) { say(m, o.s === 200 && o.j.ok ? 'saved ✓ (' + (o.j.bytes || (o.j.markdown || '').length) + ' bytes)' : ('save failed: ' + (o.j.error || o.s)), o.s === 200 && o.j.ok); }); };
+  }
+
+  // ---- read-only status views (health / usage) ----
+  function sectionReadonly(host, title, url, render) {
+    var s = details(title, false); host.appendChild(s.d);
+    var box = el('div', 'font:12.5px/1.6 system-ui;color:#3a3428'); box.textContent = 'Loading…'; s.body.appendChild(box);
+    jGet(url).then(function (j) { box.innerHTML = render(j); }).catch(function (e) { box.textContent = 'error: ' + e; });
+  }
+
+  // ---- LLM action views (docs-assistant / orientation) ----
+  function sectionDocsAssistant(host) {
+    var s = details('Docs assistant (#/docs-assistant)', false); host.appendChild(s.d);
+    var ta = el('input', INP); ta.placeholder = 'Ask about how career-ops works…'; s.body.appendChild(ta);
+    var btn = el('button', 'margin-top:10px', 'Ask (real LLM, may be slow)'); btn.className = 'btn btn--primary btn--sm'; btn.type = 'button'; s.body.appendChild(btn);
+    var out = el('div', 'margin-top:12px;white-space:pre-wrap;font:13px/1.6 system-ui;color:#3a3428'); s.body.appendChild(out);
+    btn.onclick = function () { var q = ta.value.trim(); if (!q) return; out.textContent = 'Thinking on the local model…'; jPost('/api/docs-assistant/ask', { question: q, q: q, message: q }).then(function (r) { out.textContent = (r.body && (r.body.answer || r.body.markdown || r.body.text)) || ('(' + JSON.stringify(r.body).slice(0, 400) + ')'); }).catch(function (e) { out.textContent = 'error: ' + e; }); };
+  }
+  function sectionOrientation(host) {
+    var s = details('Career orientation (#/orientation)', false); host.appendChild(s.d);
+    var btn = el('button', null, 'Generate orientation profile (real LLM, slow)'); btn.className = 'btn btn--primary btn--sm'; btn.type = 'button'; s.body.appendChild(btn);
+    var out = el('div', 'margin-top:12px;white-space:pre-wrap;font:13px/1.6 system-ui;color:#3a3428'); s.body.appendChild(out);
+    btn.onclick = function () { out.textContent = 'Generating on the local model…'; jPost('/api/orientation/generate', {}).then(function (r) { out.textContent = (r.body && (r.body.markdown || r.body.text || r.body.profile)) || ('(' + JSON.stringify(r.body).slice(0, 400) + ')'); }).catch(function (e) { out.textContent = 'error: ' + e; }); };
+  }
+  function sectionHelp(host) {
+    sectionReadonly(host, 'Help & guides (#/help)', '/api/help/en', function (j) {
+      var items = j.sections || j.guides || j.topics || (Array.isArray(j) ? j : null);
+      if (items) return '<ul style="margin:0;padding-left:18px">' + items.slice(0, 30).map(function (x) { return '<li>' + esc(x.title || x.name || x.slug || x) + '</li>'; }).join('') + '</ul>';
+      return '<pre style="white-space:pre-wrap">' + esc(JSON.stringify(j).slice(0, 800)) + '</pre>';
+    });
+  }
+  function sectionCvStudioNote(host) {
+    var s = details('CV Studio (#/cv-studio)', false); host.appendChild(s.d);
+    s.body.innerHTML = '<div style="font:13px/1.6 system-ui;color:#3a3428">CV tailoring, humanize, and cover-letter drafting are wired live on the <a href="documents.html" style="color:#2f6f5b">Documents</a> page (POST /api/cv-studio/tailor + /api/export/docx). Your source CV is editable in the “CV (cv.md)” section above.</div>';
+  }
+
+  function buildNativeSetup() {
+    if (document.getElementById('compassNativeSetup')) return;
+    var main = document.querySelector('main .wrap') || document.querySelector('main') || document.body;
+    var wrap = el('section', 'margin:0 0 24px', '<div style="font:700 13px system-ui;letter-spacing:.04em;text-transform:uppercase;color:#B08D57;margin:8px 0 12px">⚙︎ Full app settings (migrated from the original Setup — same backends)</div>');
+    wrap.id = 'compassNativeSetup';
+    main.insertBefore(wrap, main.firstChild);
+    sectionConfig(wrap);
+    sectionPortals(wrap);
+    sectionProfile(wrap);
+    sectionDoc(wrap, 'CV (cv.md) (#/cv)', '/api/cv', '/api/cv');
+    sectionDoc(wrap, 'Memory note (#/memory)', '/api/memory', '/api/memory');
+    sectionCvStudioNote(wrap);
+    sectionReadonly(wrap, 'Health (#/health)', '/api/health', function (j) {
+      return 'Status: <b>' + (j.ok ? 'OK' : 'issues') + '</b> · version ' + esc(j.version || '?') + (j.parentVersion ? ' / parent ' + esc(j.parentVersion) : '') +
+        '<br>Warnings: ' + esc((j.warnings || []).join('; ') || 'none') +
+        '<br>Checks: ' + esc(Object.keys(j.checks || {}).map(function (k) { var c = j.checks[k]; return k + '=' + (c && c.ok !== undefined ? (c.ok ? 'ok' : 'FAIL') : JSON.stringify(c)); }).join(', ').slice(0, 400));
+    });
+    sectionReadonly(wrap, 'LLM usage (#/usage)', '/api/usage', function (j) {
+      return 'Total LLM calls: <b>' + (j.totalCalls || 0) + '</b><br>Windows: ' + esc(Object.keys(j.windows || {}).map(function (w) { var x = j.windows[w]; return w + '=' + (x && (x.calls != null ? x.calls : JSON.stringify(x).slice(0, 40))); }).join(', ').slice(0, 400) || 'none');
+    });
+    sectionDocsAssistant(wrap);
+    sectionOrientation(wrap);
+    sectionHelp(wrap);
+  }
+
   function wireSetup() {
-    injectAiPanel();
+    buildNativeSetup();
     var btn = document.getElementById('saveBtn');
     if (btn) btn.addEventListener('click', function () {
       var settings = { includeTitles: (window.includeTitles || []).slice(), excludeTitles: (window.excludeTitles || []).slice(), searchTerms: (window.searchTerms || []).slice(), cities: (window.cities || []).map(function (c) { return c && c.name ? c.name : c; }), remoteUS: !!window.remoteUS };
       jPost('/api/compass/setup', { settings: settings }).then(function (r) { toastMsg(r.body && r.body.ok ? 'Search filters written to the REAL portals.yml ✓' : ('portals write failed: ' + (r.body && r.body.error)), r.body && r.body.ok ? 'success' : 'info'); }).catch(function (e) { toastMsg('portals write error: ' + e, 'info'); });
     });
-    banner('Setup Save → REAL portals.yml. AI provider/model/key/timeout managed natively here via /api/config (writes .env). Companies-to-watch + comp floor are demo (protected).');
+    banner('Setup MIGRATED — full config, portals (companies w/ source keys), profile, CV, memory, health, usage, docs-assistant, orientation, help all native here via their real endpoints. Comp floor stays demo.');
   }
 
   // ======================= dispatch ========================================
