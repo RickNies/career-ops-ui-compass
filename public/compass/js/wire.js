@@ -580,6 +580,160 @@
     banner('Setup MIGRATED — full config, portals (companies w/ source keys), profile, CV, memory, health, usage, docs-assistant, orientation, help all native here via their real endpoints. Comp floor stays demo.');
   }
 
+  // ======================= OUTREACH (AI networking plan) ===================
+  function mdInline(s) { return esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\*(.+?)\*/g, '<em>$1</em>').replace(/`([^`]+)`/g, '<code>$1</code>'); }
+  function mdBody(text) {
+    var out = '', inList = false;
+    String(text || '').split('\n').forEach(function (ln) {
+      var t = ln.trim();
+      if (/^[-*]\s+/.test(t) || /^\d+\.\s+/.test(t)) { if (!inList) { out += '<ul style="margin:6px 0;padding-left:20px">'; inList = true; } out += '<li>' + mdInline(t.replace(/^[-*]\s+/, '').replace(/^\d+\.\s+/, '')) + '</li>'; }
+      else { if (inList) { out += '</ul>'; inList = false; } if (t) out += '<p style="margin:6px 0">' + mdInline(t) + '</p>'; }
+    });
+    if (inList) out += '</ul>';
+    return out;
+  }
+  function linkedinUrl(kw) { return 'https://www.linkedin.com/search/results/people/?keywords=' + encodeURIComponent(kw); }
+  function cleanSearch(s) { return String(s || '').replace(/`/g, '').replace(/site:linkedin\.com\/in/ig, '').replace(/\s+/g, ' ').trim(); }
+  function contactCard(persona, titles, searchRaw) {
+    var kw = cleanSearch(searchRaw);
+    if (!kw) { var q = (String(persona).match(/"([^"]+)"/g) || []).map(function (x) { return x.replace(/"/g, ''); }); kw = q.length ? q.join(' ') : String(persona).replace(/[—:–].*$/, '').replace(/\*/g, '').trim().slice(0, 90); }
+    return '<div style="padding:11px 12px;border:1px solid #f0ead9;border-radius:10px;margin:8px 0">' +
+      '<div style="font-weight:600;color:#16324F">' + mdInline(persona) + '</div>' +
+      (titles ? '<div style="font-size:12.5px;color:#8a8172;margin:2px 0 6px">' + mdInline(titles) + '</div>' : '') +
+      (searchRaw ? '<div style="font:11.5px/1.5 ui-monospace,monospace;color:#6b6255;background:#faf7f0;border-radius:6px;padding:6px 8px;margin-bottom:7px;word-break:break-word">' + esc(String(searchRaw).replace(/`/g, '')) + '</div>' : '') +
+      '<a href="' + linkedinUrl(kw) + '" target="_blank" rel="noopener" class="btn btn--outline btn--sm">🔎 Search on LinkedIn</a></div>';
+  }
+  function renderContacts(body) {
+    var lines = String(body || '').split('\n').map(function (x) { return x.trim(); }).filter(Boolean);
+    var rows = lines.filter(function (l) { return /^\|/.test(l); });
+    if (rows.length >= 2) { // markdown table: | Persona | Titles | LinkedIn search string |
+      var header = rows[0].split('|').map(function (c) { return c.trim(); });
+      var sc = header.findIndex(function (c) { return /search|linkedin/i.test(c); });
+      var out = '';
+      for (var i = 1; i < rows.length; i++) {
+        var cells = rows[i].split('|').map(function (c) { return c.trim(); });
+        if (cells.join('').replace(/[:\-|]/g, '') === '') continue; // separator
+        var searchRaw = (sc >= 0 && cells[sc]) ? cells[sc] : cells[cells.length - 1] || cells[cells.length - 2] || '';
+        out += contactCard(cells[1] || '', cells[2] || '', searchRaw);
+      }
+      if (out) return out;
+    }
+    // bullet / paragraph fallback
+    var html = '<ul style="list-style:none;padding:0;margin:0">';
+    lines.forEach(function (ln) {
+      if (!/^[-*]\s+/.test(ln) && !/^\d+\.\s+/.test(ln)) { html += '<p style="margin:6px 0">' + mdInline(ln) + '</p>'; return; }
+      var text = ln.replace(/^[-*]\s+/, '').replace(/^\d+\.\s+/, '');
+      var code = (text.match(/`([^`]+)`/) || [])[1];
+      var quoted = (text.match(/"([^"]+)"/g) || []).map(function (q) { return q.replace(/"/g, ''); });
+      var kw = code ? cleanSearch(code) : (quoted.length ? quoted.join(' ') : text.replace(/[—:–].*$/, '').replace(/\([^)]*\)/g, '').trim().slice(0, 90));
+      html += '<li style="padding:9px 0;border-bottom:1px solid #f0ead9;display:flex;gap:10px;align-items:baseline;justify-content:space-between">' +
+        '<span>' + mdInline(text) + '</span>' +
+        '<a href="' + linkedinUrl(kw) + '" target="_blank" rel="noopener" class="btn btn--outline btn--sm" style="white-space:nowrap;flex:none">🔎 LinkedIn</a></li>';
+    });
+    return html + '</ul>';
+  }
+  function renderDrafts(body) {
+    return String(body || '').split(/\n\s*\n/).map(function (b) { return b.trim(); }).filter(Boolean).map(function (b) {
+      return '<div style="background:#faf7f0;border:1px solid #e6ddc9;border-radius:10px;padding:12px;margin:10px 0">' +
+        '<div style="font:13.5px/1.6 system-ui;color:#3a3428">' + mdInline(b).replace(/\n/g, '<br>') + '</div>' +
+        '<button class="btn btn--outline btn--sm compass-copy" type="button" data-copy="' + encodeURIComponent(b) + '" style="margin-top:8px">Copy message</button></div>';
+    }).join('');
+  }
+  function splitSections(md) {
+    var idx = [], re = /^#{1,4}\s+(.+)$/gm, m;
+    while ((m = re.exec(md))) idx.push({ title: m[1].trim(), start: m.index, end: m.index + m[0].length });
+    if (!idx.length) return [{ title: '', body: md }];
+    var out = [];
+    for (var i = 0; i < idx.length; i++) out.push({ title: idx[i].title, body: md.slice(idx[i].end, (i + 1 < idx.length) ? idx[i + 1].start : md.length).trim() });
+    return out;
+  }
+  function renderPlan(container, md) {
+    var secs = splitSections(md);
+    container.innerHTML = secs.map(function (s) {
+      var inner;
+      if (/who to contact|people to|personas?|contacts?/i.test(s.title)) inner = renderContacts(s.body);
+      else if (/draft|outreach|message|template|email/i.test(s.title)) inner = renderDrafts(s.body);
+      else inner = mdBody(s.body);
+      return '<div style="' + CARD + ';padding:18px 20px">' + (s.title ? '<h3 style="font:600 15px system-ui;color:#16324F;margin:0 0 8px">' + esc(s.title) + '</h3>' : '') + inner + '</div>';
+    }).join('');
+    container.querySelectorAll('.compass-copy').forEach(function (b) {
+      b.onclick = function () { var t = decodeURIComponent(b.getAttribute('data-copy')); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { b.textContent = 'Copied ✓'; setTimeout(function () { b.textContent = 'Copy message'; }, 1500); }, function () { toastMsg('Copy failed — select the text manually', 'info'); }); };
+    });
+  }
+  function wireOutreach() {
+    var main = document.querySelector('main .wrap') || document.querySelector('main') || document.body;
+    Array.prototype.slice.call(main.children).forEach(function (c) { c.style.display = 'none'; });
+    var root = el('div'); main.appendChild(root);
+    root.innerHTML =
+      '<h1 style="font:700 26px/1.2 var(--serif,Georgia);color:#16324F;margin:6px 0 4px">Find people to reach out to</h1>' +
+      '<div style="' + CARD + ';padding:18px 20px;margin-bottom:14px">' +
+      '<label style="' + LBL + '">Pick from your jobs<select id="oJob" style="' + INP + '"><option value="">— manual entry —</option></select></label>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+      '<label style="' + LBL + '">Company<input id="oCompany" type="text" style="' + INP + '"></label>' +
+      '<label style="' + LBL + '">Role (optional)<input id="oRole" type="text" style="' + INP + '"></label></div>' +
+      '<div style="display:flex;gap:8px;align-items:center;margin-top:12px"><button class="btn btn--primary btn--sm" id="oGen" type="button">Build networking plan (real AI — can take a few minutes)</button><span id="oStatus" style="font:12.5px system-ui;color:#6b6255"></span></div>' +
+      '</div>' +
+      '<div id="oSaveBar" style="display:none;margin-bottom:12px"><button class="btn btn--primary btn--sm" id="oSave" type="button">Save this plan</button> <span id="oSaveMsg" style="font:12px system-ui;color:#2f6f5b"></span></div>' +
+      '<div id="oOut"></div>' +
+      '<div style="' + CARD + ';padding:16px 20px;margin-top:14px"><h3 style="font:600 15px system-ui;color:#16324F;margin:0 0 8px">Saved plans</h3><div id="oSaved" style="font:13px system-ui;color:#6b6255">Loading…</div></div>';
+    var jobsRef = [];
+    jGet('/api/tracker').then(function (d) {
+      jobsRef = ((d && d.rows) || []).filter(function (r) { return !isDead(r.url); }).slice(0, 300);
+      var sel = document.getElementById('oJob');
+      jobsRef.forEach(function (r, i) { var o = document.createElement('option'); o.value = String(i); o.textContent = r.company + ' — ' + r.role; sel.appendChild(o); });
+    });
+    document.getElementById('oJob').onchange = function () {
+      var v = this.value; if (v === '') return;
+      var r = jobsRef[+v]; if (!r) return;
+      document.getElementById('oCompany').value = r.company || '';
+      document.getElementById('oRole').value = r.role || '';
+      this.setAttribute('data-url', r.url || '');
+    };
+    var lastPlan = null;
+    document.getElementById('oGen').onclick = function () {
+      var company = document.getElementById('oCompany').value.trim();
+      var role = document.getElementById('oRole').value.trim();
+      if (!company) { toastMsg('Enter or pick a company first', 'info'); return; }
+      var status = document.getElementById('oStatus'); status.textContent = 'Fetching JD…';
+      var url = document.getElementById('oJob').getAttribute('data-url') || '';
+      var jdP = url ? jGet('/api/pipeline/preview?url=' + encodeURIComponent(url)).then(function (r) { return (r && r.text) || ''; }).catch(function () { return ''; }) : Promise.resolve('');
+      jdP.then(function (jd) {
+        status.textContent = 'Building your plan on the local model (this can take a few minutes)…';
+        return jPost('/api/networking/plan', { company: company, role: role, jd: jd, run: true });
+      }).then(function (r) {
+        var b = r.body;
+        if (b && b.markdown) {
+          status.textContent = 'Done ✓ (' + (b.mode || 'AI') + ')';
+          lastPlan = { company: company, role: role, plan: b.markdown };
+          renderPlan(document.getElementById('oOut'), b.markdown);
+          var bar = document.getElementById('oSaveBar'); bar.style.display = 'block';
+        } else if (b && b.prompt && b.mode === 'manual') {
+          status.textContent = 'No live provider — copy the prompt into any LLM:';
+          document.getElementById('oOut').innerHTML = '<div style="' + CARD + ';padding:16px"><div style="white-space:pre-wrap;font:12.5px/1.6 ui-monospace,monospace">' + esc(b.prompt) + '</div></div>';
+        } else { status.textContent = 'Failed: ' + ((b && b.error) || r.status); }
+      }).catch(function (e) { status.textContent = 'Error: ' + e; });
+    };
+    document.getElementById('oSave').onclick = function () {
+      if (!lastPlan) return;
+      jPost('/api/networking/save', lastPlan).then(function (r) {
+        var m = document.getElementById('oSaveMsg');
+        if (r.body && r.body.ok) { m.textContent = 'Saved as ' + r.body.name + ' ✓'; loadSaved(); }
+        else m.textContent = 'Save failed: ' + ((r.body && r.body.error) || r.status);
+      });
+    };
+    function loadSaved() {
+      jGet('/api/networking/plans').then(function (d) {
+        var plans = (d && d.plans) || [];
+        var box = document.getElementById('oSaved');
+        if (!plans.length) { box.textContent = 'No saved plans yet.'; return; }
+        box.innerHTML = plans.map(function (p) { return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0ead9"><span>' + esc(p.name) + '</span><button class="btn btn--outline btn--sm" data-open="' + esc(p.name) + '" type="button">Open</button></div>'; }).join('');
+        box.querySelectorAll('[data-open]').forEach(function (btn) { btn.onclick = function () { jGet('/api/networking/plans/' + encodeURIComponent(btn.getAttribute('data-open'))).then(function (j) { renderPlan(document.getElementById('oOut'), (j && j.markdown) || ''); document.getElementById('oStatus').textContent = 'Opened ' + btn.getAttribute('data-open'); window.scrollTo(0, 0); }); }; });
+      });
+    }
+    loadSaved();
+    banner('AI networking plan — who to contact + clickable LinkedIn people-search links + drafted messages, grounded in your CV/profile. It finds the RIGHT PEOPLE TO SEARCH FOR; it does NOT scrape names or emails. Local model is slow (minutes).');
+  }
+
   // ======================= dispatch ========================================
   loadDead().then(function () {
     if (page === 'jobs.html') wireJobs();
@@ -588,6 +742,7 @@
     else if (page === 'saved.html') wireSaved();
     else if (page === 'documents.html') wireDocs();
     else if (page === 'setup.html') wireSetup();
+    else if (page === 'outreach.html') wireOutreach();
     else banner('Static preview page (not wired).');
   });
 })();
