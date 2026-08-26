@@ -200,25 +200,27 @@
 
     <div class="grid">
       <div>
+        <!-- LIVE DATA — all fields below are filled by js/wire.js (wireDetail)
+             from the resolved tracker row + fit-analysis/salary/liveness.
+             No demo company/role/salary ships in the source. -->
         <section class="head">
           <div class="head-top">
-            <span class="logo" style="--mc:#B5623B" data-mono="HM"><img src="https://logo.clearbit.com/horizonmedia.com" alt="Horizon Media logo" onerror="this.parentNode.classList.add('failed');this.remove()"></span>
+            <span class="logo" data-mono="•"><img alt="" onerror="this.parentNode.classList.add('failed');this.remove()"></span>
             <div>
-              <h1>Director, Finance Business Manager</h1>
-              <div class="company">Horizon Media</div>
+              <h1>Loading…</h1>
+              <div class="company"></div>
             </div>
           </div>
           <div class="meta">
-            <span class="pin"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>New York, NY · On-site</span>
-            <span>$185,000–$215,000</span>
+            <span class="pin"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>Location n/a</span>
+            <span>Salary not listed</span>
             <span>Full-time</span>
-            <span>Posted 2 days ago</span>
-            <span class="badge badge--live" data-live="open"><span class="tk"></span>Open · accepting applications</span>
+            <span class="badge" data-live="unknown"><span class="tk"></span>Checking…</span>
           </div>
           <div class="badges">
-            <a class="tagchip tc-cat" href="jobs.html?cat=Media%20%26%20Entertainment"><span class="tk"></span>Media &amp; Entertainment</a>
-            <a class="tagchip tc-func" href="jobs.html?func=Finance%20Business%20Partner"><span class="tk"></span>Finance Business Partner</a>
-            <a class="tagchip tc-lvl" href="jobs.html?level=Director"><span class="tk"></span>Director</a>
+            <a class="tagchip tc-cat" href="jobs.html"><span class="tk"></span><span class="cat-v">—</span></a>
+            <a class="tagchip tc-func" href="jobs.html"><span class="tk"></span><span class="func-v">—</span></a>
+            <a class="tagchip tc-lvl" href="jobs.html"><span class="tk"></span><span class="lvl-v">—</span></a>
             <span class="tag-hint">Tap a tag to see similar roles</span>
           </div>
         </section>
@@ -227,47 +229,30 @@
         <section class="card">
           <h2>How you match <span class="em">this role</span></h2>
           <div class="match-head">
-            <div class="match-ring">94</div>
+            <div class="match-ring">—</div>
             <div>
-              <div class="t">Strong fit for your background</div>
-              <div class="d">Based on your resume, profile, and what you've told us you're looking for.</div>
+              <div class="t">Checking your match…</div>
+              <div class="d">Based on your résumé, profile, and what you've told us you're looking for.</div>
             </div>
           </div>
 
           <div class="sub-label">What lines up well</div>
           <ul class="mlist">
-            <li><span class="ic ic-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span><span><b>Content &amp; media finance</b> — your 6+ years at Warner Bros. Discovery map directly to running an agency's finance business.</span></li>
-            <li><span class="ic ic-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span><span><b>CPA credential</b> — explicitly preferred in the posting, and you hold it.</span></li>
-            <li><span class="ic ic-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span><span><b>FP&amp;A leadership</b> — budgeting, forecasting, and monthly reporting are already core to your current role.</span></li>
-            <li><span class="ic ic-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span><span><b>New York based</b> — this is an on-site NYC role, your top location preference.</span></li>
+            <li><span>Loading your match analysis…</span></li>
           </ul>
 
           <div class="sub-label">Worth a closer look</div>
           <ul class="mlist">
-            <li><span class="ic ic-gap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 8v5M12 17h.01"/></svg></span><span><b>Agency-side experience</b> — you've worked in-house at a studio; the role is at a media agency. Your resume doesn't mention agency clients, so it's worth addressing in your cover letter.</span></li>
-            <li><span class="ic ic-gap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 8v5M12 17h.01"/></svg></span><span><b>Direct team size</b> — the posting mentions managing a team of 5+. Highlighting the analysts you've mentored would strengthen your case.</span></li>
+            <li><span>—</span></li>
           </ul>
         </section>
 
-        <!-- Job description -->
+        <!-- Job description — real posting text fetched live by wireDetail
+             (/api/pipeline/preview), with a graceful fallback to the AI "why". -->
         <section class="card">
           <h2>The role</h2>
           <div class="jd">
-            <p>Horizon Media is looking for a Director, Finance Business Manager to serve as the finance lead for one of our largest client portfolios. You'll be the trusted financial partner to agency leadership — owning the P&amp;L, driving the annual plan, and turning numbers into decisions.</p>
-            <h3>What you'll do</h3>
-            <ul>
-              <li>Own budgeting, forecasting, and monthly close for a $200M+ client portfolio.</li>
-              <li>Partner with account leads to improve margin and resource planning.</li>
-              <li>Build and present financial reporting to senior leadership.</li>
-              <li>Lead and mentor a team of 5 finance analysts.</li>
-            </ul>
-            <h3>What we're looking for</h3>
-            <ul>
-              <li>8+ years of progressive finance experience, ideally in media, entertainment, or advertising.</li>
-              <li>CPA or MBA strongly preferred.</li>
-              <li>Advanced FP&amp;A skills — modeling, variance analysis, and executive reporting.</li>
-              <li>Experience managing and developing a team.</li>
-            </ul>
+            <p style="color:#8a8172">Loading the posting…</p>
           </div>
         </section>
       </div>
@@ -276,11 +261,11 @@
       <aside class="rail">
         <div class="rail-card">
           <div class="fit-inline">
-            <div class="r">94</div>
-            <div class="txt">Strong fit<small>for your background</small></div>
+            <div class="r">—</div>
+            <div class="txt">Checking fit<small>for your background</small></div>
           </div>
           <a class="btn apply" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>Apply now</a>
-          <button class="btn save-btn on" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.8 8.6a5 5 0 0 0-8.8-3.2A5 5 0 0 0 3.2 8.6c0 3.8 4.5 7 8.8 10.4 4.3-3.4 8.8-6.6 8.8-10.4Z"/></svg>Saved</button>
+          <button class="btn save-btn" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.8 8.6a5 5 0 0 0-8.8-3.2A5 5 0 0 0 3.2 8.6c0 3.8 4.5 7 8.8 10.4 4.3-3.4 8.8-6.6 8.8-10.4Z"/></svg>Save</button>
           <div class="verdict-row">
             <button class="vbtn2 good" id="goodBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6L9 17l-5-5"/></svg>Good fit</button>
             <button class="vbtn2 bad" id="badBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M18 6 6 18M6 6l12 12"/></svg>Pass</button>
@@ -293,10 +278,8 @@
 
           <div class="rail-sep"></div>
 
-          <a class="btn" href="documents.html#tailor"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10"/><path d="M14 4l6 6-2 2-6-6z"/></svg>Open in Tailoring</a>
-          <a class="btn" href="documents.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Match to your résumé</a>
-          <a class="btn" href="documents.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h6"/></svg>Write a cover letter</a>
-          <a class="btn" href="documents.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16v14H4z"/><path d="M4 6l8 6 8-6"/></svg>Draft application email</a>
+          <a class="btn" href="documents.html#tailor"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10"/><path d="M14 4l6 6-2 2-6-6z"/></svg>Tailor your résumé</a>
+          <a class="btn" href="documents.html#cover"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h6"/></svg>Write a cover letter</a>
           <a class="btn" href="outreach.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M17 9v6M14 12h6"/></svg>Find a contact</a>
 
           <p class="rail-note">Everything you create here is saved under Documents, tied to this job.</p>
@@ -308,7 +291,10 @@
 <script>
 /* Good / Pass review with optional reason — persists to localStorage by job id,
    shared with the Jobs feed (same "compass_reviews" store). */
-var JOB_ID = "j1"; /* Director, Finance Business Manager — Horizon Media */
+/* js/wire.js (wireDetail) resolves the real role from ?job=<slug> (or the
+   session's current job) and sets window.JOB_ID to that row's id, so the
+   review store below keys off the REAL job. No demo default. */
+var JOB_ID = "";
 var REVK = "compass_reviews";
 var REASONS = {
   good:["Great fit","Dream company","Right level","Great comp"],

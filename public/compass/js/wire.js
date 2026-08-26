@@ -706,7 +706,14 @@
       boot = sessionJob ? Promise.resolve(sessionJob) : jGet('/api/tracker?pageSize=1&page=1').then(function (d) { return d.rows && d.rows[0] ? mapRow(d.rows[0]) : null; });
     }
     boot.then(function (job) {
-      if (!job) { banner('No tracker row to show.'); return; }
+      if (!job) {
+        banner('No tracker row to show.');
+        var h1x = document.querySelector('.head h1'); if (h1x) h1x.textContent = 'Role not found';
+        var cox = document.querySelector('.head .company'); if (cox) cox.textContent = '';
+        var jdx = document.querySelector('.jd'); if (jdx) jdx.innerHTML = '<p style="color:#8a8172">We couldn\'t find this role in your tracker. It may have been removed. <a href="jobs.html">Back to your jobs →</a></p>';
+        var mhx = document.querySelector('.match-head .t'); if (mhx) mhx.textContent = '—';
+        return;
+      }
       window.JOB_ID = job.id || window.JOB_ID;
       setCurrentJob(job); // so "Open in Tailoring" carries this job's identity
       setJobUrl('job-detail.html', job); // shareable slug URL in the address bar
@@ -714,6 +721,25 @@
       var co = document.querySelector('.head .company'); if (co) co.textContent = job.company;
       var logo = document.querySelector('.head .logo'); if (logo) { logo.setAttribute('data-mono', job.mono); logo.style.setProperty('--mc', job.color); var img = logo.querySelector('img'); if (img) { img.src = 'https://logo.clearbit.com/' + job.domain; img.alt = job.company + ' logo'; } }
       var pin = document.querySelector('.meta .pin'); if (pin && pin.lastChild && pin.lastChild.nodeType === 3) pin.lastChild.textContent = (job.loc || 'Location n/a') + ' · ' + job.work;
+      // Real cat/func/level tag chips (derived per-job by mapRow) + their filter links.
+      (function () {
+        var chips = [['.tc-cat .cat-v', '.tc-cat', 'cat', job.cat], ['.tc-func .func-v', '.tc-func', 'func', job.func], ['.tc-lvl .lvl-v', '.tc-lvl', 'level', job.level]];
+        chips.forEach(function (c) {
+          var v = document.querySelector(c[0]); if (v && c[3]) v.textContent = c[3];
+          var a = document.querySelector(c[1]); if (a && c[3]) a.setAttribute('href', 'jobs.html?' + c[2] + '=' + encodeURIComponent(c[3]));
+        });
+      })();
+      // Real Save bookmark: reflect current state + toggle via /api/compass/saved.
+      (function () {
+        var sb = document.querySelector('.save-btn'); if (!sb) return;
+        function paintSave() { var on = bookmarkFor(job.url); sb.classList.toggle('on', on); sb.setAttribute('aria-pressed', on ? 'true' : 'false'); var svg = sb.querySelector('svg'); sb.textContent = ''; if (svg) sb.appendChild(svg); sb.appendChild(document.createTextNode(on ? 'Saved' : 'Save')); }
+        paintSave();
+        sb.addEventListener('click', function () {
+          if (!job.url) { toastMsg('No posting URL on this row', 'info'); return; }
+          var next = !bookmarkFor(job.url); sb.disabled = true;
+          setBookmark(job.url, next).then(function () { paintSave(); toastMsg(next ? 'Saved to My Jobs' : 'Removed bookmark', 'success'); }).catch(function () { toastMsg('Could not update bookmark', 'info'); }).finally(function () { sb.disabled = false; });
+        });
+      })();
       // SINGLE SOURCE OF TRUTH for the fit score: fit-analysis /100 (GET /api/compass/fit).
       // Paint the SAME number on the "How you match" ring AND the right-rail ring.
       var ring = document.querySelector('.match-ring');
@@ -750,6 +776,17 @@
           if (mlists[0]) mlists[0].innerHTML = (fit.strengths || []).map(function (s) { return '<li><span class="ic ic-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span><span>' + esc(s) + '</span></li>'; }).join('') || '<li><span>—</span></li>';
           if (mlists[1]) mlists[1].innerHTML = (fit.gaps || []).map(function (s) { return '<li><span class="ic ic-gap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 8v5M12 17h.01"/></svg></span><span>' + esc(s) + '</span></li>'; }).join('') || '<li><span>—</span></li>';
         }
+      } else {
+        // No AI fit-analysis for this role yet — clear the loading placeholders
+        // so nothing reads as "stuck loading" (the numeric ring still shows the
+        // row's derived fit above).
+        var mh0 = document.querySelector('.match-head .t');
+        if (mh0) mh0.textContent = 'No detailed match analysis for this role yet.';
+        var mh0d = document.querySelector('.match-head .d');
+        if (mh0d) mh0d.textContent = 'The score above is your quick fit; run this role through Tailoring for a deeper read.';
+        var ml0 = document.querySelectorAll('.mlist');
+        if (ml0[0]) ml0[0].innerHTML = '<li><span style="color:#8a8172">Not analysed yet.</span></li>';
+        if (ml0[1]) ml0[1].innerHTML = '<li><span style="color:#8a8172">—</span></li>';
       }
 
       // Apply now → open the real posting in a new tab, then offer to mark applied
