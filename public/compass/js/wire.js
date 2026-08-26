@@ -214,7 +214,7 @@
     { href: 'dashboard.html', label: 'Dashboard' },
     { href: 'jobs.html', label: 'Jobs' },
     { href: 'saved.html', label: 'My Jobs' },
-    { href: 'documents.html', label: 'Documents' },
+    { href: 'documents.html', label: 'Tailoring' },
     { href: 'outreach.html', label: 'Outreach' },
     { href: 'library.html', label: 'Library' },
     { href: 'setup.html', label: 'Setup' }
@@ -321,6 +321,14 @@
       a.addEventListener('click', function (e) { e.stopPropagation(); }); // don't trigger the card→internal nav
       if (viewBtn && viewBtn.parentNode) viewBtn.parentNode.insertBefore(a, viewBtn.nextSibling);
       else side.appendChild(a);
+      // "Open in Tailoring" — set this job current, then jump to the Tailoring page focused on it.
+      var t = document.createElement('a');
+      t.className = 'btn btn--outline btn--sm compass-tailor';
+      t.href = 'documents.html#tailor';
+      t.style.cssText = 'margin-top:8px;white-space:nowrap';
+      t.innerHTML = 'Open in Tailoring';
+      t.addEventListener('click', function (e) { e.stopPropagation(); setCurrentJob(job); });
+      a.parentNode.insertBefore(t, a.nextSibling);
       // AI fit-analysis: colored verdict pill (replaces the generic fit label) +
       // an expandable strengths/gaps. Score /100 is already the ring number.
       if (job.fitScored) {
@@ -500,6 +508,7 @@
     boot.then(function (job) {
       if (!job) { banner('No tracker row to show.'); return; }
       window.JOB_ID = job.id || window.JOB_ID;
+      setCurrentJob(job); // so "Open in Tailoring" carries this job's identity
       var h1 = document.querySelector('.head h1'); if (h1) h1.textContent = job.title;
       var co = document.querySelector('.head .company'); if (co) co.textContent = job.company;
       var logo = document.querySelector('.head .logo'); if (logo) { logo.setAttribute('data-mono', job.mono); logo.style.setProperty('--mc', job.color); var img = logo.querySelector('img'); if (img) { img.src = 'https://logo.clearbit.com/' + job.domain; img.alt = job.company + ' logo'; } }
@@ -724,10 +733,74 @@
     };
     loadVersions();
   }
+  // --- Tailoring job picker: search her tracker jobs by title/company ---
+  var __trackerRows = null;
+  function loadTrackerRows() {
+    if (__trackerRows) return Promise.resolve(__trackerRows);
+    return jGet('/api/tracker').then(function (d) { __trackerRows = ((d && d.rows) || []).filter(function (r) { return !isDead(r.url); }); return __trackerRows; });
+  }
+  function buildTailoringHeader(onPick) {
+    var ctx = document.querySelector('.context');
+    if (!ctx) return;
+    var cur = getCurrentJob();
+    ctx.innerHTML =
+      '<div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h9M4 12h6"/><path d="M15 5l4 4-7 7-4 1 1-4z"/></svg></div>' +
+      '<div style="flex:1;min-width:0">' +
+      '<div class="t" id="tailorJobT">' + (cur ? esc(cur.title || cur.role || 'Selected job') + ' — ' + esc(cur.company || '') : 'Pick a job to tailor for') + '</div>' +
+      '<div class="d">Working from your résumé. Search your tracker to choose which job to tailor for.</div></div>' +
+      '<div style="position:relative"><button class="btn btn--outline btn--sm" id="tailorPickBtn" type="button">' + (cur ? 'Change job' : 'Choose a job') + '</button>' +
+      '<div id="tailorPicker" style="display:none;position:absolute;right:0;top:calc(100% + 8px);z-index:40;width:min(420px,86vw);background:#fff;border:1px solid #e6ddc9;border-radius:12px;box-shadow:0 8px 28px rgba(22,50,79,.14);padding:12px">' +
+      '<input id="tailorSearch" type="search" placeholder="Search by title or company…" autocomplete="off" style="width:100%;padding:9px 11px;border:1px solid #d8cdb8;border-radius:9px;font:13.5px system-ui;box-sizing:border-box">' +
+      '<div id="tailorResults" style="margin-top:8px;max-height:300px;overflow:auto"></div></div></div>';
+    var pickBtn = ctx.querySelector('#tailorPickBtn');
+    var picker = ctx.querySelector('#tailorPicker');
+    var search = ctx.querySelector('#tailorSearch');
+    var results = ctx.querySelector('#tailorResults');
+    function renderResults(q) {
+      loadTrackerRows().then(function (rows) {
+        var qq = (q || '').trim().toLowerCase();
+        var list = rows.filter(function (r) { return !qq || (String(r.role || '') + ' ' + String(r.company || '')).toLowerCase().indexOf(qq) >= 0; }).slice(0, 12);
+        if (!list.length) { results.innerHTML = '<div style="padding:12px;color:#8a8172;font:13px system-ui">No matching tracker jobs.</div>'; return; }
+        results.innerHTML = list.map(function (r, i) {
+          var f = fitFor(r.url);
+          return '<button type="button" class="tailor-pick-row" data-num="' + esc(String(r.num)) + '" style="display:flex;gap:10px;align-items:center;width:100%;text-align:left;background:#fff;border:1px solid #f0ece2;border-radius:9px;padding:8px 10px;margin-bottom:6px;cursor:pointer">' +
+            '<span style="flex:1;min-width:0"><span style="display:block;font:600 13px system-ui;color:#16324F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(r.role || '(untitled)') + '</span>' +
+            '<span style="display:block;font:12px system-ui;color:#8a8172;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(r.company || '') + (r.location ? ' · ' + esc(r.location) : '') + '</span></span>' +
+            (f && typeof f.score === 'number' ? '<span style="flex:none;font:600 12px system-ui;color:#16324F">' + f.score + '<span style="font-size:9px;color:#b0a790">/100</span></span>' : '') + '</button>';
+        }).join('');
+        results.querySelectorAll('.tailor-pick-row').forEach(function (b) {
+          b.onclick = function () {
+            var num = b.getAttribute('data-num');
+            var row = rows.filter(function (r) { return String(r.num) === num; })[0];
+            if (!row) return;
+            var job = mapRow(row); setCurrentJob(job);
+            var t = ctx.querySelector('#tailorJobT'); if (t) t.textContent = (job.title || 'Selected job') + ' — ' + (job.company || '');
+            pickBtn.textContent = 'Change job';
+            picker.style.display = 'none';
+            if (typeof onPick === 'function') onPick(job);
+          };
+        });
+      });
+    }
+    pickBtn.onclick = function () {
+      var open = picker.style.display === 'none';
+      picker.style.display = open ? 'block' : 'none';
+      if (open) { renderResults(''); search.value = ''; search.focus(); }
+    };
+    search.oninput = function () { renderResults(search.value); };
+    document.addEventListener('click', function (e) { if (picker.style.display !== 'none' && !ctx.contains(e.target)) picker.style.display = 'none'; }, true);
+  }
   function wireDocs() {
-    setupDocPanel('#panelTailor', 'tailor', 'Redo the tailoring');
+    buildTailoringHeader(function () {
+      // Re-point both panels at the newly picked job.
+      setupDocPanel('#panelTailor', 'tailor', 'Tailor your résumé');
+      setupDocPanel('#panelCover', 'cover', 'Generate cover letter');
+    });
+    setupDocPanel('#panelTailor', 'tailor', 'Tailor your résumé');
     setupDocPanel('#panelCover', 'cover', 'Generate cover letter');
-    banner('Documents LIVE — cover letter (real letter, NOT a résumé) + tailored résumé. Each run = a new version (switcher on top); output is rich-rendered with per-section Copy and downloads; checklist reports sit at the bottom. Running on ' + llmDesc() + '.');
+    // Focused workspace: land on the Tailor tab (unless a specific hash targets another).
+    if (!location.hash || location.hash === '#tailor') { var tt = document.getElementById('tabTailor'); if (tt) tt.click(); }
+    banner('Tailoring LIVE — search your tracker to pick a job, then tailor your résumé (+ cover letter, a separate real letter). Each run = a new version; output is rich-rendered with per-section Copy and downloads. Running on ' + llmDesc() + '.');
   }
 
   // ======================= SETUP (full native migration) ===================
