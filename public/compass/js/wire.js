@@ -919,6 +919,49 @@
     search.oninput = function () { renderResults(search.value); };
     document.addEventListener('click', function (e) { if (picker.style.display !== 'none' && !ctx.contains(e.target)) picker.style.display = 'none'; }, true);
   }
+  // Compact "Already tailored" list on the Tailoring page — jump back to roles
+  // you've already tailored. One row per job (latest artifact), newest first,
+  // capped; click reopens that job's Tailoring via its slug deep-link.
+  function buildTailoredList() {
+    var ctx = document.querySelector('.context');
+    var anchor = ctx || document.querySelector('.tabs');
+    if (!anchor || !anchor.parentNode) return;
+    var wrap = document.getElementById('compassTailoredList');
+    if (!wrap) { wrap = document.createElement('section'); wrap.id = 'compassTailoredList'; wrap.style.cssText = 'margin:0 0 16px'; anchor.parentNode.insertBefore(wrap, anchor.nextSibling); }
+    wrap.innerHTML = '<div style="font:700 11px system-ui;letter-spacing:.05em;text-transform:uppercase;color:#b0a790;margin:0 0 7px">Already tailored</div><div id="compassTailoredRows" style="font:13px system-ui;color:#8a8172">Loading…</div>';
+    Promise.all([jGet('/api/compass/jobs'), jGet('/api/tracker')]).then(function (arr) {
+      var jobs = ((arr[0] && arr[0].jobs) || []).filter(function (j) { return j.type === 'tailor' && j.status === 'done'; });
+      var rows = (arr[1] && arr[1].rows) || [];
+      var rowByUrl = {}; rows.forEach(function (r) { if (r.url) rowByUrl[normUrl(r.url)] = r; });
+      // Join each artifact to its tracker row by url so the slug (with tracker #)
+      // resolves reliably — the artifact's own company/role may differ slightly.
+      var byKey = {};
+      jobs.forEach(function (j) {
+        var row = j.url ? rowByUrl[normUrl(j.url)] : null;
+        var company = (row && row.company) || j.company || '';
+        var role = (row && row.role) || j.role || '';
+        var num = row && row.num != null ? row.num : null;
+        var url = j.url || (row && row.url) || '';
+        var key = (kebab(company) + '|' + kebab(role)) || j.id;
+        var ent = { company: company, role: role, num: num, url: url, created: j.finished || j.created };
+        var prev = byKey[key]; if (!prev || String(ent.created) > String(prev.created)) byKey[key] = ent;
+      });
+      var list = Object.keys(byKey).map(function (k) { return byKey[k]; }).sort(function (a, b) { return String(b.created).localeCompare(String(a.created)); }).slice(0, 12);
+      var rowsEl = document.getElementById('compassTailoredRows');
+      if (!rowsEl) return;
+      if (!list.length) { rowsEl.innerHTML = '<div style="padding:12px 14px;background:#fff;border:1px dashed #e6ddc9;border-radius:10px;color:#8a8172">No tailored résumés yet — pick a job above to start.</div>'; return; }
+      rowsEl.innerHTML = list.map(function (e) {
+        var slug = jobSlug({ company: e.company, role: e.role, num: e.num });
+        var f = fitFor(e.url);
+        var dt = e.created ? new Date(e.created).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+        return '<a href="documents.html?job=' + encodeURIComponent(slug) + '" style="display:flex;align-items:center;gap:10px;text-decoration:none;background:#fff;border:1px solid #ece5d6;border-radius:10px;padding:8px 12px;margin-bottom:6px">' +
+          '<span style="flex:1;min-width:0"><span style="display:block;font:600 13px system-ui;color:#16324F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(e.company || '—') + ' · ' + esc(e.role || '') + '</span>' +
+          '<span style="font:11.5px system-ui;color:#8a8172">tailored ' + esc(dt) + '</span></span>' +
+          (f && typeof f.score === 'number' ? '<span style="flex:none;font:600 12px system-ui;color:#16324F">' + f.score + '<span style="font-size:9px;color:#b0a790">/100</span></span>' : '') +
+          '<span style="flex:none;color:#b0a790;font-size:15px">→</span></a>';
+      }).join('');
+    }).catch(function () { });
+  }
   function wireDocs() {
     // ?job=<slug> is the source of truth for a deep-linked/bookmarked Tailoring page.
     var slug = jobParam();
@@ -929,6 +972,7 @@
         setupTailorPanel('#panelTailor');
         setupDocPanel('#panelCover', 'cover', 'Generate cover letter');
       });
+      buildTailoredList();
       setupTailorPanel('#panelTailor');
       setupDocPanel('#panelCover', 'cover', 'Generate cover letter');
       // Focused workspace: land on the Tailor tab (unless a specific hash targets another).
