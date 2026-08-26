@@ -1451,10 +1451,14 @@
   function applyDiffHighlight(root, on, base) {
     var blocks = root.querySelectorAll('.lib-md li, .lib-md p, .lib-md h3');
     blocks.forEach(function (el) {
+      // Never highlight the "What changed & why" changelog section — it describes
+      // the edits (so nothing there matches the résumé baseline). Leave it untouched.
+      var card = el.closest ? el.closest('section') : null;
+      if (card) { var ch = card.querySelector('.lib-h'); if (ch && /what changed|changed\s*&\s*why|changes?\b.*\bwhy/i.test(ch.textContent || '')) return; }
       if (el.__diffOrig == null) el.__diffOrig = el.innerHTML; // stash the clean render once
-      // always start from the clean render
+      // always start from the clean render + clear any prior box styling
       el.innerHTML = el.__diffOrig;
-      el.style.borderLeft = ''; el.style.paddingLeft = ''; el.style.background = ''; el.style.borderRadius = '';
+      el.style.borderLeft = ''; el.style.padding = ''; el.style.paddingLeft = ''; el.style.background = ''; el.style.borderRadius = ''; el.style.margin = '';
       if (!on) return;
       var n = diffNormLine(el.textContent);
       if (!n || base.set[n]) return; // empty or unchanged (verbatim in baseline)
@@ -1467,18 +1471,19 @@
         var score = hit / Math.max(elTok.length, 1);
         if (score > bestScore) { bestScore = score; best = bset; }
       }
-      el.style.borderLeft = '3px solid #ffb300'; el.style.paddingLeft = '8px'; el.style.background = '#fffdf0'; el.style.borderRadius = '4px';
+      // Box the WHOLE changed bullet/line in a highlighter-yellow box.
+      el.style.background = '#fff3b0'; el.style.borderLeft = '3px solid #f4b400';
+      el.style.padding = '4px 9px'; el.style.borderRadius = '5px'; el.style.margin = '4px 0';
+      el.classList.add('diff-box');
+      // Within the box, bold-emphasize the specific words that changed.
       if (best && bestScore >= 0.4) {
-        // reworded line — highlight only the words not present in the matched baseline line
         var parts = el.textContent.split(/(\s+)/);
         el.innerHTML = parts.map(function (w) {
           if (!w || /^\s+$/.test(w)) return esc(w);
-          return best[diffNormWord(w)] ? esc(w) : '<span style="background:#ffe89e;border-radius:3px">' + esc(w) + '</span>';
+          return best[diffNormWord(w)] ? esc(w) : '<span style="background:#ffdd57;font-weight:600;border-radius:2px;padding:0 1px">' + esc(w) + '</span>';
         }).join('');
-      } else {
-        // new/heavily-changed line — highlight the whole thing
-        el.innerHTML = '<span style="background:#ffe89e;border-radius:3px">' + el.__diffOrig + '</span>';
       }
+      // else: a brand-new / heavily-changed line — the yellow box alone marks it.
     });
   }
   function renderWorkspace(container, md, type) {
@@ -1528,19 +1533,21 @@
     // stay clean — they read ta.value / md, never this highlighted DOM.
     var diffBtn = copyRow.querySelector('[data-a=showdiff]');
     if (diffBtn) {
-      var diffOn = false, hint = copyRow.querySelector('[data-diffhint]');
-      diffBtn.onclick = function () {
-        diffOn = !diffOn;
-        diffBtn.textContent = diffOn ? 'Hide changes' : 'Show changes';
-        diffBtn.setAttribute('aria-pressed', String(diffOn));
-        if (!diffOn) { applyDiffHighlight(col, false, { set: {}, lineTokens: [] }); hint.textContent = ''; return; }
+      var hint = copyRow.querySelector('[data-diffhint]');
+      function setDiff(on) {
+        diffBtn.textContent = on ? 'Hide changes' : 'Show changes';
+        diffBtn.setAttribute('aria-pressed', String(on));
+        if (!on) { applyDiffHighlight(col, false, { set: {}, lineTokens: [] }); hint.textContent = ''; return; }
         hint.textContent = 'comparing to your résumé…';
         loadCvBaseline().then(function (base) {
           applyDiffHighlight(col, true, base);
-          var n = col.querySelectorAll('.lib-md [style*="ffe89e"]').length;
-          hint.textContent = n ? 'highlighting tailored changes vs your résumé' : 'no line-level changes detected';
+          var n = col.querySelectorAll('.lib-md .diff-box').length;
+          hint.textContent = n ? n + ' change' + (n === 1 ? '' : 's') + ' highlighted vs your résumé' : 'no line-level changes detected';
         });
-      };
+      }
+      var diffOn = true;                       // ON by default so changes are obvious
+      diffBtn.onclick = function () { diffOn = !diffOn; setDiff(diffOn); };
+      setDiff(true);
     }
   }
   function libPoll(id, container, type, token) {
