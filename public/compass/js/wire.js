@@ -432,7 +432,11 @@
       var co = document.querySelector('.head .company'); if (co) co.textContent = job.company;
       var logo = document.querySelector('.head .logo'); if (logo) { logo.setAttribute('data-mono', job.mono); logo.style.setProperty('--mc', job.color); var img = logo.querySelector('img'); if (img) { img.src = 'https://logo.clearbit.com/' + job.domain; img.alt = job.company + ' logo'; } }
       var pin = document.querySelector('.meta .pin'); if (pin && pin.lastChild && pin.lastChild.nodeType === 3) pin.lastChild.textContent = (job.loc || 'Location n/a') + ' · ' + job.work;
-      var ring = document.querySelector('.match-ring'); if (ring) ring.textContent = job.fit;
+      // SINGLE SOURCE OF TRUTH for the fit score: fit-analysis /100 (GET /api/compass/fit).
+      // Paint the SAME number on the "How you match" ring AND the right-rail ring.
+      var ring = document.querySelector('.match-ring');
+      var railR = document.querySelector('.fit-inline .r');
+      var railTxt = document.querySelector('.fit-inline .txt');
       // Real salary band + still-open badge in the meta.
       var meta = document.querySelector('.meta');
       if (meta) {
@@ -445,8 +449,18 @@
       // AI fit-analysis on job-detail: real /100 score, colored verdict pill, why,
       // and the real strengths/gaps (replacing the demo "How you match" lists).
       var fit = fitFor(job.url) || (job.fitScored ? { score: job.fit, verdict: job.verdict, why: job.why, strengths: job.strengths, gaps: job.gaps } : null);
+      // Canonical score: fit-analysis score when present, else the row's derived fit.
+      var canonScore = (fit && typeof fit.score === 'number') ? fit.score
+        : (typeof job.fit === 'number' ? job.fit : null);
+      if (canonScore != null) {
+        if (ring) ring.textContent = canonScore;
+        if (railR) railR.textContent = canonScore;
+      }
+      // Keep the rail verdict label consistent with the fit verdict.
+      if (railTxt && fit && fit.verdict) {
+        railTxt.innerHTML = esc(fit.verdict) + '<small>for your background</small>';
+      }
       if (fit && typeof fit.score === 'number') {
-        if (ring) ring.textContent = fit.score;
         var mh = document.querySelector('.match-head .t');
         if (mh) mh.innerHTML = (fit.verdict ? verdictPill(fit.verdict) + ' ' : '') + esc(fit.why || mh.textContent);
         var mlists = document.querySelectorAll('.mlist');
