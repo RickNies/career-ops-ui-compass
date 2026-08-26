@@ -111,6 +111,37 @@
   }
   function setCurrentJob(job) { try { sessionStorage.setItem('compass_current_job', JSON.stringify(job)); } catch (e) {} }
   function getCurrentJob() { try { return JSON.parse(sessionStorage.getItem('compass_current_job') || 'null'); } catch (e) { return null; } }
+  // ── Bookmarkable per-job slugs: kebab(company)-kebab(title)-<trackerNum> ──
+  // The trailing number makes it uniquely resolvable; the words make it readable.
+  function kebab(s) { return String(s == null ? '' : s).toLowerCase().replace(/[^\w\s-]/g, '').trim().replace(/[\s_]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, ''); }
+  function jobSlug(job) {
+    if (!job) return '';
+    var parts = [kebab(job.company || ''), kebab(job.title || job.role || '')].filter(Boolean);
+    var num = (job.num != null && job.num !== '') ? String(job.num) : '';
+    var base = parts.join('-');
+    return (base ? base + (num ? '-' + num : '') : (num ? 'job-' + num : '')) || '';
+  }
+  function slugTrailingNum(slug) { var m = String(slug || '').match(/-(\d+)$/); return m ? m[1] : null; }
+  function jobParam() { var m = location.search.match(/[?&]job=([^&]+)/); return m ? decodeURIComponent(m[1]) : ''; }
+  // Resolve a slug back to a mapped job via the tracker (trailing num first, then
+  // company+title fallback). Returns Promise<job|null>.
+  function resolveJobSlug(slug) {
+    if (!slug) return Promise.resolve(null);
+    return jGet('/api/tracker').then(function (d) {
+      var rows = (d && d.rows) || [];
+      var num = slugTrailingNum(slug);
+      var row = null;
+      if (num != null) row = rows.filter(function (r) { return String(r.num) === String(num); })[0];
+      if (!row) {
+        var base = String(slug).replace(/-\d+$/, '');
+        row = rows.filter(function (r) { return (kebab(r.company || '') + '-' + kebab(r.role || '')) === base; })[0];
+      }
+      return row ? mapRow(row) : null;
+    }).catch(function () { return null; });
+  }
+  // Rewrite the address bar to the shareable slug URL for `page` (no reload).
+  function setJobUrl(page, job) { try { if (job) history.replaceState(null, '', page + '?job=' + encodeURIComponent(jobSlug(job))); } catch (e) {} }
+  function jobHref(page, job) { return page + '?job=' + encodeURIComponent(jobSlug(job)); }
 
   // Liveness store (annotate-only): url → live|dead|unknown. Dead rows are hidden;
   // for shown jobs the full state drives the "still open?" badge.
@@ -344,7 +375,9 @@
       if (!side || side.querySelector('.compass-ext')) return;
       var job = (window.JOBS || []).find(function (x) { return x.id === card.getAttribute('data-id'); });
       if (!job || !job.url) return;
+      // Point the card's internal "View" link at the bookmarkable slug URL.
       var viewBtn = side.querySelector('.view');
+      card.querySelectorAll('a[href="job-detail.html"], a[href^="job-detail.html"]').forEach(function (v) { v.setAttribute('href', jobHref('job-detail.html', job)); });
       var a = document.createElement('a');
       a.className = 'btn btn--outline btn--sm compass-ext';
       a.href = job.url; a.target = '_blank'; a.rel = 'noopener';
@@ -353,10 +386,10 @@
       a.addEventListener('click', function (e) { e.stopPropagation(); }); // don't trigger the card→internal nav
       if (viewBtn && viewBtn.parentNode) viewBtn.parentNode.insertBefore(a, viewBtn.nextSibling);
       else side.appendChild(a);
-      // "Open in Tailoring" — set this job current, then jump to the Tailoring page focused on it.
+      // "Open in Tailoring" — bookmarkable slug URL to the Tailoring page focused on this job.
       var t = document.createElement('a');
       t.className = 'btn btn--outline btn--sm compass-tailor';
-      t.href = 'documents.html#tailor';
+      t.href = jobHref('documents.html', job);
       t.style.cssText = 'margin-top:8px;white-space:nowrap';
       t.innerHTML = 'Open in Tailoring';
       t.addEventListener('click', function (e) { e.stopPropagation(); setCurrentJob(job); });
@@ -504,8 +537,8 @@
     return '<div class="match" data-num="' + esc(row.num) + '">' +
       '<div class="fitmini ' + cls + '">' + fit + '</div>' +
       '<span class="logo" style="--mc:' + colorFor(row.company) + '" data-mono="' + esc(initials(row.company)) + '"><img src="https://logo.clearbit.com/' + esc(hostFrom(row.url)) + '" alt="' + esc(row.company) + ' logo" onerror="this.parentNode.classList.add(\'failed\');this.remove()"></span>' +
-      '<div class="minfo"><div class="t"><a href="job-detail.html">' + esc(row.role) + '</a></div><div class="m"><span>' + esc(row.company) + '</span><span>' + esc(loc) + '</span></div></div>' +
-      '<a class="btn btn--outline btn--sm go" href="job-detail.html">View<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>' +
+      '<div class="minfo"><div class="t"><a href="' + esc(jobHref('job-detail.html', { company: row.company, role: row.role, num: row.num })) + '">' + esc(row.role) + '</a></div><div class="m"><span>' + esc(row.company) + '</span><span>' + esc(loc) + '</span></div></div>' +
+      '<a class="btn btn--outline btn--sm go" href="' + esc(jobHref('job-detail.html', { company: row.company, role: row.role, num: row.num })) + '">View<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>' +
       '</div>';
   }
   function wireDash() {
@@ -535,12 +568,23 @@
 
   // ======================= JOB DETAIL ======================================
   function wireDetail() {
-    var job = getCurrentJob();
-    var boot = job ? Promise.resolve(job) : jGet('/api/tracker?pageSize=1&page=1').then(function (d) { return d.rows && d.rows[0] ? mapRow(d.rows[0]) : null; });
+    // ?job=<slug> is the SOURCE OF TRUTH for deep links (works with no sessionStorage);
+    // sessionStorage is only a fast path; tracker[0] is the last-ditch fallback.
+    var slug = jobParam();
+    var sessionJob = getCurrentJob();
+    var boot;
+    if (slug) {
+      boot = resolveJobSlug(slug).then(function (j) {
+        return j || sessionJob || jGet('/api/tracker?pageSize=1&page=1').then(function (d) { return d.rows && d.rows[0] ? mapRow(d.rows[0]) : null; });
+      });
+    } else {
+      boot = sessionJob ? Promise.resolve(sessionJob) : jGet('/api/tracker?pageSize=1&page=1').then(function (d) { return d.rows && d.rows[0] ? mapRow(d.rows[0]) : null; });
+    }
     boot.then(function (job) {
       if (!job) { banner('No tracker row to show.'); return; }
       window.JOB_ID = job.id || window.JOB_ID;
       setCurrentJob(job); // so "Open in Tailoring" carries this job's identity
+      setJobUrl('job-detail.html', job); // shareable slug URL in the address bar
       var h1 = document.querySelector('.head h1'); if (h1) h1.textContent = job.title;
       var co = document.querySelector('.head .company'); if (co) co.textContent = job.company;
       var logo = document.querySelector('.head .logo'); if (logo) { logo.setAttribute('data-mono', job.mono); logo.style.setProperty('--mc', job.color); var img = logo.querySelector('img'); if (img) { img.src = 'https://logo.clearbit.com/' + job.domain; img.alt = job.company + ' logo'; } }
@@ -682,7 +726,7 @@
       function bindRows() {
         wrap.querySelectorAll('.c-srow').forEach(function (el) {
           var i = +el.getAttribute('data-i'); var r = mine[i];
-          el.addEventListener('click', function (e) { if (e.target.tagName === 'SELECT' || (e.target.closest && (e.target.closest('.compass-ext') || e.target.closest('.c-srow-remove')))) return; setCurrentJob(mapRow(r)); location.href = 'job-detail.html'; });
+          el.addEventListener('click', function (e) { if (e.target.tagName === 'SELECT' || (e.target.closest && (e.target.closest('.compass-ext') || e.target.closest('.c-srow-remove')))) return; var mj = mapRow(r); setCurrentJob(mj); location.href = jobHref('job-detail.html', mj); });
           var sel = el.querySelector('select');
           if (sel) sel.addEventListener('change', function () {
             var v = sel.value;
@@ -876,16 +920,21 @@
     document.addEventListener('click', function (e) { if (picker.style.display !== 'none' && !ctx.contains(e.target)) picker.style.display = 'none'; }, true);
   }
   function wireDocs() {
-    buildTailoringHeader(function () {
-      // Re-point both panels at the newly picked job.
+    // ?job=<slug> is the source of truth for a deep-linked/bookmarked Tailoring page.
+    var slug = jobParam();
+    var prep = slug ? resolveJobSlug(slug).then(function (j) { if (j) { setCurrentJob(j); setJobUrl('documents.html', j); } }) : Promise.resolve();
+    prep.then(function () {
+      buildTailoringHeader(function (job) {
+        setJobUrl('documents.html', job); // shareable slug URL on pick
+        setupTailorPanel('#panelTailor');
+        setupDocPanel('#panelCover', 'cover', 'Generate cover letter');
+      });
       setupTailorPanel('#panelTailor');
       setupDocPanel('#panelCover', 'cover', 'Generate cover letter');
+      // Focused workspace: land on the Tailor tab (unless a specific hash targets another).
+      if (!location.hash || location.hash === '#tailor') { var tt = document.getElementById('tabTailor'); if (tt) tt.click(); }
+      banner('Tailoring LIVE — search your tracker to pick a job, then tailor your résumé (+ cover letter, a separate real letter). Each run = a new version; output is rich-rendered with per-section Copy and downloads. Running on ' + llmDesc() + '.');
     });
-    setupTailorPanel('#panelTailor');
-    setupDocPanel('#panelCover', 'cover', 'Generate cover letter');
-    // Focused workspace: land on the Tailor tab (unless a specific hash targets another).
-    if (!location.hash || location.hash === '#tailor') { var tt = document.getElementById('tabTailor'); if (tt) tt.click(); }
-    banner('Tailoring LIVE — search your tracker to pick a job, then tailor your résumé (+ cover letter, a separate real letter). Each run = a new version; output is rich-rendered with per-section Copy and downloads. Running on ' + llmDesc() + '.');
   }
 
   // ======================= SETUP (full native migration) ===================
@@ -1666,8 +1715,9 @@
   // the Jobs feed (sessionStorage 'compass_current_job' → job-detail.html).
   function libViewJobDetail(g) {
     var url = g.items.map(function (i) { return i.url; }).find(Boolean) || '';
-    setCurrentJob({ id: 'lib-' + g.key, title: g.role || g.company, role: g.role || '', company: g.company || '', url: url, mono: initials(g.company), color: colorFor(g.company), domain: hostFrom(url), loc: '', work: '', fit: '', why: '', open: true });
-    location.href = 'job-detail.html';
+    var lj = { id: 'lib-' + g.key, title: g.role || g.company, role: g.role || '', company: g.company || '', url: url, mono: initials(g.company), color: colorFor(g.company), domain: hostFrom(url), loc: '', work: '', fit: '', why: '', open: true };
+    setCurrentJob(lj);
+    location.href = jobHref('job-detail.html', lj);
   }
   function wireLibrary() {
     var root = document.getElementById('libRoot');
@@ -1738,11 +1788,11 @@
         accIndex[key + '||' + type] = { expand: expand, el: acc };
       });
 
-      // Deep-link: library.html?job=<id> → expand that artifact's accordion + select the version.
+      // Deep-link: library.html?job=<artifact-id OR job slug> → expand + select.
       var qJob = (location.search.match(/[?&]job=([^&]+)/) || [])[1];
       if (qJob) {
         qJob = decodeURIComponent(qJob);
-        order.some(function (k) {
+        var matched = order.some(function (k) {
           return groups[k].items.some(function (it) {
             if (it.kind === 'job' && it.id === qJob) {
               var entry = accIndex[k + '||' + it.type];
@@ -1752,6 +1802,19 @@
             return false;
           });
         });
+        // Fallback: treat qJob as a company-role slug → expand that job's first artifact.
+        if (!matched) {
+          var base = String(qJob).replace(/-\d+$/, '');
+          order.some(function (k) {
+            var g = groups[k];
+            if ((kebab(g.company || '') + '-' + kebab(g.role || '')) === base) {
+              var it0 = g.items[0]; var entry = it0 && accIndex[k + '||' + it0.type];
+              if (entry) { entry.expand(); setTimeout(function () { entry.el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 60); }
+              return true;
+            }
+            return false;
+          });
+        }
         return;
       }
       // else auto-expand the first running/queued artifact

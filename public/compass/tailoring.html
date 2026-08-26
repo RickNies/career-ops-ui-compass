@@ -1,0 +1,6 @@
+<!-- Tailoring deep-link alias → the canonical Tailoring page is documents.html.
+     Preserves ?job=<slug> (and any hash) so tailoring.html?job=<slug> bookmarks work. -->
+<title>Mango Jobs — Tailoring</title>
+<link rel="icon" href="/compass/img/mascot.svg">
+<script>location.replace('documents.html' + location.search + (location.hash || '#tailor'));</script>
+<noscript><a href="documents.html">Open Tailoring</a></noscript>
