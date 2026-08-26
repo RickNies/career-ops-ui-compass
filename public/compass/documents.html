@@ -189,165 +189,37 @@
 
   <main class="wrap">
     <h1 class="sr">Tailoring</h1>
+    <!-- Header is replaced live by js/wire.js (buildTailoringHeader) with a real
+         tracker job picker. No demo job/résumé filename in the source. -->
     <div class="context">
       <div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h9l5 5v13H6z"/><path d="M14 3v6h6"/></svg></div>
       <div>
-        <div class="t">Director, Finance Business Manager — Horizon Media</div>
-        <div class="d">Working from your resume: <b>Nicole Doan, CPA — resume 2026.pdf</b></div>
+        <div class="t">Pick a job to tailor for</div>
+        <div class="d">Working from your résumé. Search your tracker to choose which job to tailor for.</div>
       </div>
       <a class="change" href="jobs.html">Change job</a>
     </div>
 
     <div class="tabs" role="tablist" aria-label="Documents">
-      <button class="tab active" id="tabMatch" role="tab" aria-selected="true" aria-controls="panelMatch" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Match to your résumé</button>
-      <button class="tab" id="tabTailor" role="tab" aria-selected="false" aria-controls="panelTailor" tabindex="-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h9M4 12h6"/><path d="M15 5l4 4-7 7-4 1 1-4z"/></svg>Tailor your résumé</button>
+      <button class="tab active" id="tabTailor" role="tab" aria-selected="true" aria-controls="panelTailor" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h9M4 12h6"/><path d="M15 5l4 4-7 7-4 1 1-4z"/></svg>Tailor your résumé</button>
       <button class="tab" id="tabCover" role="tab" aria-selected="false" aria-controls="panelCover" tabindex="-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h6"/></svg>Cover letter</button>
-      <button class="tab" id="tabEmail" role="tab" aria-selected="false" aria-controls="panelEmail" tabindex="-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16v14H4z"/><path d="M4 6l8 6 8-6"/></svg>Application email</button>
     </div>
 
-    <!-- ============ TAB 1: MATCH ============ -->
-    <section id="panelMatch" role="tabpanel" aria-labelledby="tabMatch" tabindex="0">
-      <div class="match-top">
-        <div class="ring">94</div>
-        <div>
-          <h2>Your resume is a strong match</h2>
-          <div class="d">We compared your resume to this job description in plain English. Here's what stands out and what to shore up before you apply.</div>
-        </div>
-      </div>
-
-      <div class="two">
-        <div class="panel">
-          <h3><span class="b b-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>Where you're strong</h3>
-          <ul class="plist">
-            <li><span class="m yes">✓</span><span>Your <b>6+ years in content &amp; media finance</b> at Warner Bros. Discovery matches their media-industry requirement.</span></li>
-            <li><span class="m yes">✓</span><span>You hold a <b>CPA</b> — they list it as strongly preferred.</span></li>
-            <li><span class="m yes">✓</span><span>Your resume shows <b>full-cycle FP&amp;A</b>: budgeting, forecasting, and monthly close — exactly the core duties listed.</span></li>
-            <li><span class="m yes">✓</span><span>You've <b>presented to senior leadership</b>, which they call out as essential.</span></li>
-            <li><span class="m yes">✓</span><span>You're <b>New York based</b> — this is an on-site NYC role.</span></li>
-          </ul>
-        </div>
-
-        <div class="panel">
-          <h3><span class="b b-gap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 8v5M12 17h.01"/></svg></span>Where to strengthen</h3>
-          <ul class="plist">
-            <li><span class="m gap">!</span><span>The role is <b>agency-side</b>; your experience is in-house at a studio. Consider a line on transferable client-P&amp;L work.</span></li>
-            <li><span class="m gap">!</span><span>They want experience <b>managing a team of 5+</b>. Your resume mentions mentoring — make the team size explicit.</span></li>
-            <li><span class="m gap">!</span><span>Posting asks for <b>8+ years</b>; you're at ~7. Lead with impact and scope to offset the gap.</span></li>
-          </ul>
-          <div class="tip"><b>Suggestion:</b> Address the agency-side point directly in your cover letter — we can draft that for you in one click.</div>
-        </div>
-      </div>
+    <!-- ============ TAILOR YOUR RÉSUMÉ ============
+         LIVE DATA — js/wire.js (setupTailorPanel) replaces this panel with the
+         real tailoring flow (POST /api/cv-studio/tailor via the background job
+         queue), rendering actual versions from your real résumé + the picked
+         job. No demo résumé/contact info ships in the source. -->
+    <section id="panelTailor" role="tabpanel" aria-labelledby="tabTailor" tabindex="0">
+      <div class="doc-loading" style="color:#8a8172;font:14px system-ui;padding:26px 4px">Pick a job above, then tailor your résumé for it.</div>
     </section>
 
-    <!-- ============ TAB (Iteration 6): TAILOR YOUR RÉSUMÉ ============ -->
-    <section id="panelTailor" role="tabpanel" aria-labelledby="tabTailor" tabindex="0" hidden>
-      <div class="tailor-intro">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 7h9M4 12h6"/><path d="M15 5l4 4-7 7-4 1 1-4z"/></svg></div>
-        <div>
-          <h2>A version of your résumé, tuned for this job</h2>
-          <div class="d">We kept everything true to your real experience and simply moved the most relevant wins to the top and matched your wording to what this posting asks for. Review it, then download a clean PDF to send.</div>
-        </div>
-      </div>
-
-      <div class="doc-toolbar">
-        <div class="lead"><b style="font-family:var(--serif);font-size:16px;color:var(--ink)">Tailored résumé</b> &nbsp;·&nbsp; adjusted for <b>Director, Finance Business Manager — Horizon Media</b>. Nothing was invented — just re-emphasized.</div>
-        <div class="right">
-          <button class="btn btn--outline btn--sm regen" id="tailorRewrite" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v5h-5"/></svg>Redo the tailoring</button>
-          <button class="btn btn--primary btn--sm" id="tailorPdf" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M5 21h14"/></svg>Download PDF</button>
-        </div>
-      </div>
-
-      <div class="resume-sheet">
-        <div class="rs-name">Nicole Doan, CPA</div>
-        <div class="rs-contact">New York, NY · nicole.doan@gmail.com · (212) 555-0147</div>
-
-        <div class="rs-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Adjusted for this role — emphasis on media FP&amp;A, business partnering &amp; team leadership</div>
-
-        <h3>Summary</h3>
-        <p style="font-size:14px;line-height:1.65;margin:0 0 4px">CPA and <span class="hl">media &amp; content finance</span> leader with 7 years running full-cycle <span class="hl">FP&amp;A</span> for a $200M+ portfolio at Warner Bros. Discovery — <span class="hl">partnering directly with business leaders</span> and <span class="hl">presenting to senior leadership</span> every cycle.</p>
-
-        <h3>Skills emphasized for this job</h3>
-        <div class="skillset">
-          <span class="badge badge--lvl"><span class="tk"></span>FP&amp;A leadership</span>
-          <span class="badge badge--lvl"><span class="tk"></span>Budgeting &amp; forecasting</span>
-          <span class="badge badge--lvl"><span class="tk"></span>Content / media P&amp;L</span>
-          <span class="badge badge--lvl"><span class="tk"></span>Finance business partnering</span>
-          <span class="badge badge--lvl"><span class="tk"></span>Executive reporting</span>
-          <span class="badge badge--lvl"><span class="tk"></span>Team leadership</span>
-          <span class="badge badge--lvl"><span class="tk"></span>CPA</span>
-        </div>
-
-        <h3>Experience</h3>
-        <div class="rs-role">Senior Manager, Content Finance — Warner Bros. Discovery</div>
-        <div class="rs-where">New York, NY · 2019 – present</div>
-        <ul>
-          <li>Own <span class="hl">budgeting, forecasting, and monthly close</span> for a <span class="hl">$200M+ content portfolio</span>, the core of this role's day-to-day.</li>
-          <li>Serve as the <span class="hl">finance business partner</span> to content and operations leads, translating portfolio economics into decisions.</li>
-          <li><span class="hl">Present financial results and recommendations to senior leadership</span> each planning cycle.</li>
-          <li><span class="hl">Mentored and developed a team of 4 analysts</span> into confident business partners.</li>
-        </ul>
-      </div>
-
-      <div class="adjust">
-        <h3><span class="b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 7h9M4 12h6"/><path d="M15 5l4 4-7 7-4 1 1-4z"/></svg></span>What we adjusted, and why</h3>
-        <div class="lead">Small, honest wording changes so the résumé speaks to what Horizon Media is asking for.</div>
-        <div class="ba">
-          <div class="ba-line"><span class="ba-k before">Before</span><span class="ba-before">Managed reporting for the content team.</span></div>
-          <div class="ba-line"><span class="ba-k after">After</span><span class="ba-after"><b>Present financial results and recommendations to senior leadership</b> each planning cycle. <span style="color:var(--muted)">— matches their "present to senior leadership" requirement.</span></span></div>
-        </div>
-        <div class="ba">
-          <div class="ba-line"><span class="ba-k before">Before</span><span class="ba-before">Mentored junior analysts.</span></div>
-          <div class="ba-line"><span class="ba-k after">After</span><span class="ba-after"><b>Mentored and developed a team of 4 analysts</b> into confident business partners. <span style="color:var(--muted)">— makes your team leadership explicit for their "manage a team of 5+" ask.</span></span></div>
-        </div>
-        <div class="ba">
-          <div class="ba-line"><span class="ba-k before">Before</span><span class="ba-before">Handled FP&amp;A for content titles.</span></div>
-          <div class="ba-line"><span class="ba-k after">After</span><span class="ba-after">Serve as the <b>finance business partner</b> to content and operations leads. <span style="color:var(--muted)">— mirrors the "Finance Business Manager" framing of the role.</span></span></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ============ TAB 2: COVER LETTER ============ -->
+    <!-- ============ COVER LETTER ============
+         LIVE DATA — js/wire.js (setupDocPanel) replaces this panel with the real
+         cover-letter generator (POST /api/mode/cover via the background job
+         queue). No demo letter/contact info in the source. -->
     <section id="panelCover" role="tabpanel" aria-labelledby="tabCover" tabindex="0" hidden>
-      <div class="doc-toolbar">
-        <div class="lead"><b style="font-family:var(--serif);font-size:16px;color:var(--ink)">Cover letter</b> &nbsp;·&nbsp; drafted from your resume and this job. Edit anything before you send.</div>
-        <div class="right">
-          <button class="btn btn--outline btn--sm regen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v5h-5"/></svg>Rewrite</button>
-          <button class="btn btn--outline btn--sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 4h9l3 3v13H8z"/><path d="M6 8H4v12h11"/></svg>Copy</button>
-          <button class="btn btn--primary btn--sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M5 21h14"/></svg>Download</button>
-        </div>
-      </div>
-
-      <div class="letter">
-        <p>Dear Horizon Media Hiring Team,</p>
-        <p>I'm writing to express my strong interest in the Director, Finance Business Manager role. As a CPA with over six years leading finance for content and media at Warner Bros. Discovery, I've spent my career turning complex portfolio economics into decisions leadership can act on — exactly the partnership this role calls for.</p>
-        <p>In my current position I own <span class="hl">budgeting, forecasting, and monthly close for a content slate exceeding $200M</span>, and I present results and recommendations directly to senior leadership each cycle. While my experience has been in-house at a studio rather than agency-side, the core discipline is the same: <span class="hl">protecting margin, planning resources, and being the finance voice a business team trusts.</span></p>
-        <p>I'm also proud of the team I've helped build, having mentored and developed a group of analysts into confident business partners — and I'm excited by the opportunity to lead a finance team of my own at Horizon.</p>
-        <p>I'd welcome the chance to discuss how my background in media finance can support your client portfolios. Thank you for your consideration.</p>
-        <p class="sig">Warm regards,<br>Nicole Doan, CPA</p>
-      </div>
-    </section>
-
-    <!-- ============ TAB 3: APPLICATION EMAIL ============ -->
-    <section id="panelEmail" role="tabpanel" aria-labelledby="tabEmail" tabindex="0" hidden>
-      <div class="doc-toolbar">
-        <div class="lead"><b style="font-family:var(--serif);font-size:16px;color:var(--ink)">Application email</b> &nbsp;·&nbsp; a short note to send with your application.</div>
-        <div class="right">
-          <button class="btn btn--outline btn--sm regen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v5h-5"/></svg>Rewrite</button>
-          <button class="btn btn--outline btn--sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 4h9l3 3v13H8z"/><path d="M6 8H4v12h11"/></svg>Copy</button>
-          <button class="btn btn--primary btn--sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16v14H4z"/><path d="M4 6l8 6 8-6"/></svg>Open in email</button>
-        </div>
-      </div>
-
-      <div class="letter" style="font-family:var(--sans);font-size:14.5px;line-height:1.65">
-        <div class="email-head">
-          <div class="fld"><span class="k">Subject</span><span class="v">Application — Director, Finance Business Manager (Nicole Doan, CPA)</span></div>
-          <div class="fld"><span class="k">To</span><span class="v">careers@horizonmedia.com</span></div>
-        </div>
-        <p>Hello,</p>
-        <p>Please find my application for the Director, Finance Business Manager position attached. I'm a CPA with 6+ years leading content and media finance at Warner Bros. Discovery, where I own FP&amp;A for a $200M+ portfolio and partner closely with business leaders.</p>
-        <p>I'd be glad to share more about how that experience translates to your client portfolios. Thank you for your time and consideration.</p>
-        <p class="sig">Best regards,<br>Nicole Doan, CPA<br>New York, NY · (555) 018-2246</p>
-      </div>
+      <div class="doc-loading" style="color:#8a8172;font:14px system-ui;padding:26px 4px">Pick a job above, then generate a cover letter for it.</div>
     </section>
 
   </main>
@@ -407,7 +279,7 @@ if(tailorRewrite){
 }
 /* open the Tailor tab when arriving from job-detail's "Tailor your résumé for this job" link */
 function openTabFromHash(){
-  var map={"#tailor":"tabTailor","#cover":"tabCover","#email":"tabEmail","#match":"tabMatch"};
+  var map={"#tailor":"tabTailor","#cover":"tabCover"};
   var id=map[location.hash];
   if(id){ var t=document.getElementById(id); if(t) docTabs.select(t, false); }
 }
