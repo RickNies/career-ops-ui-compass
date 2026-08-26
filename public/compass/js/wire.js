@@ -10,6 +10,44 @@
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
   function hostFrom(url) { try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return ''; } }
   function normUrl(u) { return String(u || '').split('#')[0].replace(/\/+$/, ''); }
+  // Best-effort formatter for scraped JD plain text -> readable paragraphs +
+  // bullet (-•*–) / numbered lists + light headings. Everything is esc()'d.
+  function jdToHtml(raw) {
+    var text = String(raw || '').replace(/\r\n?/g, '\n').replace(/ /g, ' ').replace(/\n{3,}/g, '\n\n');
+    var lines = text.split('\n');
+    function isBullet(l) { return /^\s*[-•*–▪·◦]\s+/.test(l); }
+    function isNum(l) { return /^\s*\d{1,2}[.)]\s+/.test(l); }
+    function stripBullet(l) { return l.replace(/^\s*[-•*–▪·◦]\s+/, ''); }
+    function stripNum(l) { return l.replace(/^\s*\d{1,2}[.)]\s+/, ''); }
+    function isHeading(l) {
+      var t = l.trim();
+      if (!t || t.length > 64) return false;
+      if (/[.,;]$/.test(t)) return false;
+      if (/:$/.test(t)) return true;
+      var letters = t.replace(/[^A-Za-z]/g, '');
+      return letters.length >= 3 && letters === letters.toUpperCase();
+    }
+    var out = [], para = [], i = 0;
+    function flushPara() { if (para.length) { out.push('<p>' + esc(para.join(' ').trim()) + '</p>'); para = []; } }
+    while (i < lines.length) {
+      var line = lines[i], t = line.trim();
+      if (!t) { flushPara(); i++; continue; }
+      if (isBullet(line) || isNum(line)) {
+        flushPara();
+        var ordered = isNum(line), typ = ordered ? isNum : isBullet, items = [];
+        while (i < lines.length && lines[i].trim() && typ(lines[i])) {
+          items.push((ordered ? stripNum(lines[i]) : stripBullet(lines[i])).trim());
+          i++;
+        }
+        out.push('<' + (ordered ? 'ol' : 'ul') + '>' + items.map(function (it) { return '<li>' + esc(it) + '</li>'; }).join('') + '</' + (ordered ? 'ol' : 'ul') + '>');
+        continue;
+      }
+      if (isHeading(line) && !para.length) { flushPara(); out.push('<h3>' + esc(t.replace(/:$/, '')) + '</h3>'); i++; continue; }
+      para.push(t); i++;
+    }
+    flushPara();
+    return out.join('') || '<p>' + esc(text.trim()) + '</p>';
+  }
   function initials(name) {
     var w = String(name || '').replace(/[^A-Za-z0-9 ]/g, ' ').trim().split(/\s+/).filter(Boolean);
     if (!w.length) return '?';
@@ -498,7 +536,7 @@
         jGet('/api/pipeline/preview?url=' + encodeURIComponent(job.url)).then(function (prev) {
           var txt = (prev && prev.text) || '';
           if (txt && txt.length > 20 && !/^\(/.test(txt)) {
-            jd.innerHTML = '<p style="white-space:pre-wrap">' + esc(txt.slice(0, 6000)) + '</p>' +
+            jd.innerHTML = jdToHtml(txt.slice(0, 8000)) +
               '<p style="margin-top:10px"><a class="btn btn--outline btn--sm" href="' + esc(job.url) + '" target="_blank" rel="noopener">Open original posting ↗</a></p>';
           } else {
             jd.innerHTML = '<p>' + esc(job.why) + '</p><p style="color:#8a8172;margin-top:8px">Live preview was thin (JS-rendered board: ' + esc(txt || 'no text') + '). <a href="' + esc(job.url) + '" target="_blank" rel="noopener">Open original ↗</a></p>';

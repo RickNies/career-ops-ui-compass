@@ -78,6 +78,8 @@
   .back:hover{color:var(--ink)}
 
   .grid{display:grid;grid-template-columns:1fr 320px;gap:22px;align-items:start}
+  /* keep the 1fr content column from expanding past its track when the JD has long unbroken tokens/URLs (which was overlapping the rail) */
+  .grid>div{min-width:0}
 
   .head{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:24px}
   .head-top{display:flex;gap:16px;align-items:flex-start}
@@ -118,7 +120,7 @@
   .sub-label{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:18px 0 4px}
   .sub-label:first-child{margin-top:0}
 
-  .jd{color:var(--ink-soft);font-size:14.5px}
+  .jd{color:var(--ink-soft);font-size:14.5px;min-width:0;max-width:100%;overflow-wrap:anywhere;word-break:break-word}
   .jd p{margin:0 0 12px}
   .jd h3{font-family:var(--serif);font-size:15.5px;color:var(--ink);margin:18px 0 8px}
   .jd ul{margin:0 0 12px;padding-left:20px}
