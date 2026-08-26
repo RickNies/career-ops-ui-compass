@@ -1269,14 +1269,26 @@
     var card = runs.closest('.card') || runs.parentNode;
     if (!document.getElementById('compassRunsCompact')) {
       var st = document.createElement('style'); st.id = 'compassRunsCompact';
-      st.textContent = '.runs .run-row{padding:7px 0 !important}.runs .run-t{font-size:13px !important}.runs .run-d{font-size:11.5px !important}.runs .run-sched{font-size:11.5px !important;color:#8a8172}.runs .run-status .badge{font-size:10.5px !important;padding:2px 8px !important}#compassRunsMeta{font:12px system-ui;color:#6b6255;margin:2px 0 10px}';
+      st.textContent =
+        '.runs{border:1px solid #ece5d6;border-radius:14px;background:#fff;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.04)}' +
+        '.runs .run-row{display:flex;align-items:center;gap:14px;padding:12px 16px !important;border-top:1px solid #f3eee1;margin:0 !important}' +
+        '.runs .run-row:first-child{border-top:0 !important}' +
+        '.runs .run-ic{flex:none}' +
+        '.runs .run-main{flex:1 1 auto;min-width:0}' +
+        '.runs .run-t{font-size:13.5px !important;font-weight:600;line-height:1.25}' +
+        '.runs .run-d{font-size:11.5px !important;color:#8a8172;line-height:1.3}' +
+        '.runs .run-sched{flex:none;font-size:11.5px !important;color:#8a8172;white-space:nowrap;text-align:right;margin:0 !important}' +
+        '.runs .run-status{flex:none;min-width:190px;display:flex;justify-content:flex-end;align-items:center;text-align:right;margin:0 !important}' +
+        '.runs .run-status .badge{font-size:10.5px !important;padding:3px 9px !important;white-space:nowrap}' +
+        '@media(max-width:640px){.runs .run-row{flex-wrap:wrap}.runs .run-sched,.runs .run-status{margin-left:48px !important;text-align:left;justify-content:flex-start;min-width:0}}' +
+        '#compassRunsMeta{font:12px system-ui;color:#6b6255;margin:2px 0 10px}';
       document.head.appendChild(st);
     }
     jGet('/api/compass/runs').then(function (r) {
       if (r && r.lastNew) {
         var h = document.getElementById('compassRunsMeta');
         if (!h) { h = document.createElement('div'); h.id = 'compassRunsMeta'; var hint = card.querySelector('.hint'); if (hint) hint.parentNode.insertBefore(h, hint.nextSibling); else runs.parentNode.insertBefore(h, runs); }
-        h.innerHTML = 'Last new jobs added: <b>' + esc(r.lastNew.date) + '</b> · ' + (+r.lastNew.count || 0) + ' new';
+        h.innerHTML = 'Last new jobs added: <b>' + esc(r.lastNew.date) + '</b> · ' + (+r.lastNew.count || 0) + ' total new';
       }
       // Map each row to its pipeline by MATCHING THE ROW LABEL (robust to row
       // count/order) rather than by a fixed positional index.
@@ -1291,13 +1303,16 @@
         if (/\bfit\b|score/.test(t)) return 'fitscore';
         return null;
       }
+      var perLoop = (r && r.perLoopNew) || {};
       runs.querySelectorAll('.run-row').forEach(function (row) {
         var stt = row.querySelector('.run-status'); if (!stt) return;
         var label = (row.querySelector('.run-t') || {}).textContent || row.textContent;
         var key = logKeyForLabel(label);
         var iso = key && logs[key];
-        if (iso) stt.innerHTML = '<span class="badge badge--live"><span class="tk"></span>Last ran ' + esc(fmtRan(iso)) + '</span>';
-        else stt.innerHTML = '<span style="font:11px system-ui;color:#b0a790">on schedule</span>';
+        var n = key && perLoop[key] ? +perLoop[key] : 0;
+        var newTxt = n > 0 ? ' · ' + n + ' new' : '';
+        if (iso) stt.innerHTML = '<span class="badge badge--live"><span class="tk"></span>Last ran ' + esc(fmtRan(iso)) + esc(newTxt) + '</span>';
+        else stt.innerHTML = '<span style="font:11px system-ui;color:#b0a790">on schedule' + esc(newTxt) + '</span>';
       });
     }).catch(function () { });
   }

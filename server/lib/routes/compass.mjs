@@ -326,8 +326,16 @@ export function registerCompassRoutes(app) {
   // Real "where your search runs" data: newest scan date + how many jobs landed
   // that day (from data/scan-history.tsv), and genuine last-ran times from the
   // cron log mtimes. Cheap: one file read + a few stat()s. No fabricated "ran today".
+  // Map a scan-history source to its dashboard loop ("where your search runs").
+  function loopForSource(src) {
+    src = String(src || '').toLowerCase();
+    if (src === 'linkedin') return 'linkedin';
+    if (src === 'builtin' || src === 'cryptojobslist' || src === 'dailyremote') return 'scrape';
+    if (src === 'greenhouse' || src === 'lever' || src === 'ashby' || src === 'workday') return 'discover';
+    return 'scan'; // consider, getro, wttj, amazon, himalayas, rippling, a16z-*, etc.
+  }
   app.get('/api/compass/runs', (_req, res) => {
-    const out = { ok: true, lastNew: null, logs: {} };
+    const out = { ok: true, lastNew: null, logs: {}, perLoopNew: { scan: 0, scrape: 0, discover: 0, linkedin: 0 } };
     try {
       const tsv = readFileSync(DATA_ROOT + '/data/scan-history.tsv', 'utf8');
       const dayCount = {};
@@ -338,7 +346,16 @@ export function registerCompassRoutes(app) {
         dayCount[d] = (dayCount[d] || 0) + 1;
         if (d > maxDate) maxDate = d;
       });
-      if (maxDate) out.lastNew = { date: maxDate, count: dayCount[maxDate] || 0 };
+      if (maxDate) {
+        out.lastNew = { date: maxDate, count: dayCount[maxDate] || 0 };
+        // Per-loop NEW counts for the newest day, grouped by source → loop.
+        tsv.split('\n').forEach((ln) => {
+          const c = ln.split('\t');
+          if (c[0] !== maxDate) return;
+          const loop = loopForSource(c[1]);
+          out.perLoopNew[loop] = (out.perLoopNew[loop] || 0) + 1;
+        });
+      }
     } catch { /* no scan-history yet */ }
     // Genuine last-ran timestamps from cron log mtimes (real, per pipeline).
     const LOGS = {
