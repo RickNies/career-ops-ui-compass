@@ -90,7 +90,7 @@
       num: row.num, title: title, company: row.company || '', domain: hostFrom(row.url),
       mono: initials(row.company || ''), color: colorFor(row.company || ''),
       loc: row.location || '', locKey: locKeyFor(row.location), work: /remote/i.test(row.location || '') ? 'Remote' : 'On-site',
-      salMin: null, salMax: null, fit: scoreToFit(row), age: 0, isNew: false, saved: false,
+      salMin: null, salMax: null, fit: scoreToFit(row), age: 0, isNew: false, saved: bookmarkFor(row.url),
       cat: row.status || 'Evaluated', func: funcFor(title), level: levelFor(title),
       why: row.notes || (row.status ? ('Status: ' + row.status) : 'Imported from tracker.'),
       url: row.url || '', status: row.status || '', score: row.score || '',
@@ -168,6 +168,16 @@
     return jGet('/api/compass/salary').then(function (j) { window.__salaryMap = (j && j.map) || {}; return window.__salaryMap; }).catch(function () { window.__salaryMap = {}; return {}; });
   }
   function salaryFor(url) { return (window.__salaryMap && window.__salaryMap[normUrl(url)]) || null; }
+  // Pre-application bookmarks (real "Save" state), keyed by normalized url.
+  function loadBookmarks() {
+    return jGet('/api/compass/saved').then(function (j) { window.__savedSet = {}; ((j && j.urls) || []).forEach(function (u) { window.__savedSet[normUrl(u)] = true; }); return window.__savedSet; }).catch(function () { window.__savedSet = {}; return {}; });
+  }
+  function bookmarkFor(url) { return !!(window.__savedSet && window.__savedSet[normUrl(url)]); }
+  function setBookmark(url, saved) {
+    if (!window.__savedSet) window.__savedSet = {};
+    if (saved) window.__savedSet[normUrl(url)] = true; else delete window.__savedSet[normUrl(url)];
+    return jPost('/api/compass/saved', { url: url, saved: !!saved });
+  }
   function fmtSalary(s) { // {min,max} in K → "$185–225K" or "$260K"
     if (!s) return '';
     var lo = s.min, hi = s.max;
@@ -199,6 +209,8 @@
   // Low-fit = an AI "Pass"/weak verdict. Unscored jobs are NOT low-fit (they pass through).
   function isLowFit(j) { return /pass|weak|poor/i.test(String(j && j.verdict || '')); }
   window.__compassShowLowFit = (function () { try { return localStorage.getItem('compass_showlowfit') === '1'; } catch (e) { return false; } })();
+  window.__scoreBand = (function () { try { var v = localStorage.getItem('compass_scoreband'); return v ? JSON.parse(v) : null; } catch (e) { return null; } })();
+  window.__compassSavedOnly = (function () { try { return localStorage.getItem('compass_savedonly') === '1'; } catch (e) { return false; } })();
 
   // Active-provider cache (one GET per page load) so LLM progress copy is honest:
   // Claude/cloud = fast; hermes = local + "can take a few minutes".
@@ -311,6 +323,48 @@
 
   // ======================= JOBS ============================================
   var PAGE_SIZE = 50;
+  // Fit-score range filter (preset bands) + "Saved only" toggle on the Jobs feed.
+  var SCORE_BANDS = [
+    { key: 'all', label: 'All', band: null },
+    { key: '80', label: '80+', band: { min: 80, max: 100 } },
+    { key: '70', label: '70–80', band: { min: 70, max: 79 } },
+    { key: '60', label: '60–70', band: { min: 60, max: 69 } },
+    { key: '40', label: '40–60', band: { min: 40, max: 59 } },
+    { key: 'lt40', label: '<40', band: { min: 0, max: 39 } }
+  ];
+  function ensureScoreBar() {
+    var cnt = document.getElementById('count'); if (!cnt) return;
+    var bar = document.getElementById('compassScoreBar');
+    if (!bar) {
+      bar = document.createElement('div'); bar.id = 'compassScoreBar';
+      bar.style.cssText = 'display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:10px 0 2px';
+      bar.innerHTML = '<span style="font:700 10.5px system-ui;letter-spacing:.05em;text-transform:uppercase;color:#b0a790;margin-right:2px">Fit score</span>' +
+        SCORE_BANDS.map(function (b) { return '<button type="button" class="cscore-chip" data-key="' + b.key + '" style="border:1px solid #e6ddc9;border-radius:999px;padding:4px 11px;font:600 12px system-ui;cursor:pointer;background:#fff;color:#2a3b4d">' + esc(b.label) + '</button>'; }).join('') +
+        '<span style="width:1px;height:18px;background:#e6ddc9;margin:0 4px"></span>' +
+        '<button type="button" id="cscoreSaved" style="display:inline-flex;align-items:center;gap:6px;border:1px solid #e6ddc9;border-radius:999px;padding:4px 12px;font:600 12px system-ui;cursor:pointer;background:#fff;color:#2a3b4d"><span style="color:#B5623B">♥</span> Saved only</button>';
+      (cnt.parentNode || cnt).insertBefore(bar, cnt.nextSibling);
+      bar.querySelectorAll('.cscore-chip').forEach(function (chip) {
+        chip.onclick = function () {
+          var found = SCORE_BANDS.filter(function (b) { return b.key === chip.getAttribute('data-key'); })[0];
+          window.__scoreBand = (found && found.band) ? { key: found.key, min: found.band.min, max: found.band.max } : null;
+          try { localStorage.setItem('compass_scoreband', window.__scoreBand ? JSON.stringify(window.__scoreBand) : ''); } catch (e) {}
+          window.__compassShown = PAGE_SIZE; compassRender();
+        };
+      });
+      bar.querySelector('#cscoreSaved').onclick = function () {
+        window.__compassSavedOnly = !window.__compassSavedOnly;
+        try { localStorage.setItem('compass_savedonly', window.__compassSavedOnly ? '1' : '0'); } catch (e) {}
+        window.__compassShown = PAGE_SIZE; compassRender();
+      };
+    }
+    var curKey = window.__scoreBand ? window.__scoreBand.key : 'all';
+    bar.querySelectorAll('.cscore-chip').forEach(function (chip) {
+      var on = chip.getAttribute('data-key') === curKey;
+      chip.style.background = on ? '#ffb300' : '#fff'; chip.style.color = on ? '#3a2600' : '#2a3b4d'; chip.style.borderColor = on ? '#ffb300' : '#e6ddc9';
+    });
+    var sv = bar.querySelector('#cscoreSaved');
+    if (sv) { var so = !!window.__compassSavedOnly; sv.style.background = so ? '#ffb300' : '#fff'; sv.style.color = so ? '#3a2600' : '#2a3b4d'; sv.style.borderColor = so ? '#ffb300' : '#e6ddc9'; }
+  }
   // "Show low-fit" toggle on the Jobs feed — hidden by default, reveals Pass-scored jobs.
   function ensureLowFitToggle(lowHidden) {
     var cnt = document.getElementById('count'); if (!cnt) return;
@@ -354,6 +408,7 @@
     }
     if (cnt) cnt.innerHTML = 'Showing <b>' + shown + '</b> of <b>' + all.length + '</b> matching · ' + window.JOBS.length + ' live jobs loaded';
     ensureLowFitToggle(lowHidden);
+    ensureScoreBar();
     var mb = document.getElementById('compassMore');
     if (!mb && list) { mb = document.createElement('div'); mb.id = 'compassMore'; mb.style.cssText = 'text-align:center;margin:16px 0 90px'; list.parentNode.insertBefore(mb, list.nextSibling); }
     if (mb) {
@@ -394,6 +449,21 @@
       t.innerHTML = 'Open in Tailoring';
       t.addEventListener('click', function (e) { e.stopPropagation(); setCurrentJob(job); });
       a.parentNode.insertBefore(t, a.nextSibling);
+      // Real bookmark: override the mockup's dead .save toggle to persist server-side.
+      var saveBtn = card.querySelector('.save');
+      if (saveBtn) {
+        saveBtn.classList.toggle('on', !!job.saved);
+        saveBtn.setAttribute('aria-pressed', String(!!job.saved));
+        saveBtn.onclick = function (e) {
+          e.stopPropagation();
+          var now = !job.saved; job.saved = now;
+          saveBtn.classList.toggle('on', now);
+          saveBtn.setAttribute('aria-pressed', String(now));
+          saveBtn.setAttribute('aria-label', now ? 'Saved' : 'Save this job');
+          setBookmark(job.url, now).then(function (r) { if (!(r.body && r.body.ok)) toastMsg('Could not save the bookmark', 'info'); }).catch(function () { toastMsg('Save failed — server unreachable', 'info'); });
+          if (window.__compassSavedOnly && !now) compassRender(); // drop it from the Saved-only view
+        };
+      }
       // AI fit-analysis: colored verdict pill (replaces the generic fit label) +
       // an expandable strengths/gaps. Score /100 is already the ring number.
       if (job.fitScored) {
@@ -472,7 +542,21 @@
         var baseMatches = window.matches;
         // The mockup's own salary slider (state.salLow/High + "show no-salary") runs
         // inside baseMatches and already passes unknown-salary rows through by default.
-        window.matches = function (j) { if (!baseMatches(j)) return false; if (COMP_FLOOR && j.salMax != null && j.salMax < COMP_FLOOR) return false; if (!window.__compassShowLowFit && isLowFit(j)) return false; return true; };
+        window.matches = function (j) {
+          if (!baseMatches(j)) return false;
+          if (COMP_FLOOR && j.salMax != null && j.salMax < COMP_FLOOR) return false;
+          if (window.__compassSavedOnly && !j.saved) return false;
+          var band = window.__scoreBand;
+          if (band) {
+            // Explicit numeric band is the authority: needs a real score in range,
+            // and it overrides the low-fit auto-hide (so e.g. <40 actually shows).
+            if (!j.fitScored || typeof j.fit !== 'number') return false;
+            if (j.fit < band.min || j.fit > band.max) return false;
+          } else if (!window.__compassShowLowFit && isLowFit(j)) {
+            return false;
+          }
+          return true;
+        };
         window.__compassMatchesWrapped = true;
       }
 
@@ -686,7 +770,38 @@
       // the summary stat cards, and any legacy row classes.
       main.querySelectorAll('.summary, .col-head, .row, .cols, .srow, .job-row, .saved-row, .card, .rows').forEach(function (n) { n.style.display = 'none'; });
       var wrap = document.getElementById('compassSavedList'); if (wrap) wrap.remove();
+      // ── SAVED (bookmarked) jobs — a pre-application bucket, distinct from status ──
+      var savedRows = rows.filter(function (r) { return bookmarkFor(r.url); });
+      var savedWrap = document.getElementById('compassBookmarks'); if (savedWrap) savedWrap.remove();
+      savedWrap = document.createElement('section'); savedWrap.id = 'compassBookmarks'; savedWrap.style.cssText = 'margin-bottom:26px'; main.appendChild(savedWrap);
       wrap = document.createElement('section'); wrap.id = 'compassSavedList'; main.appendChild(wrap);
+      function bookmarkRowHtml(r, i) {
+        var f = fitFor(r.url);
+        var fitHtml = (f && typeof f.score === 'number')
+          ? '<span style="font-family:var(--serif,Georgia);font-weight:600;font-size:16px;color:#16324F">' + f.score + '<span style="font-size:10px;color:#8a8172">/100</span></span>' + (f.verdict ? ' ' + verdictPill(f.verdict) : '')
+          : '<span style="font:12px system-ui;color:#8a8172">fit ' + scoreToFit(r) + '</span>';
+        var sal = salaryFor(r.url);
+        var salHtml = '<span style="font:12px system-ui;color:' + (sal ? '#16324F' : '#b0a790') + '">' + (sal ? fmtSalary(sal) : 'not listed') + '</span>';
+        return '<div class="c-brow" data-bi="' + i + '" style="display:flex;align-items:center;gap:14px;background:#fff;border:1px solid #ece5d6;border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.04);padding:14px 16px;margin-bottom:10px;cursor:pointer">' +
+          '<span class="logo" style="--mc:' + colorFor(r.company) + ';flex:none" data-mono="' + esc(initials(r.company)) + '"><img src="https://logo.clearbit.com/' + esc(hostFrom(r.url)) + '" onerror="this.parentNode.classList.add(\'failed\');this.remove()"></span>' +
+          '<div style="flex:1;min-width:0"><div style="font-weight:600;color:#16324F">' + esc(r.role) + '</div><div style="font-size:13px;color:#8a8172;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px"><span>' + esc(r.company) + (r.location ? ' · ' + esc(r.location) : '') + '</span>' + salHtml + fitHtml + '</div></div>' +
+          openPillHtml(r.url) +
+          (SAVED_APP_STAGE.test(r.status || '') ? savedStagePill(r.status) : '') +
+          (r.url ? '<a class="btn btn--outline btn--sm compass-ext" href="' + esc(r.url) + '" target="_blank" rel="noopener" style="flex:none;white-space:nowrap">View posting ↗</a>' : '') +
+          '<button class="c-brow-remove btn btn--outline btn--sm" type="button" title="Remove bookmark" style="flex:none;color:#B5623B"><span style="color:#B5623B">♥</span> Saved</button>' +
+          '</div>';
+      }
+      function renderBookmarks() {
+        var head = '<div style="display:flex;align-items:baseline;gap:10px;margin:6px 0 12px"><h2 style="font:600 20px var(--serif,\'Iowan Old Style\',Georgia,serif);color:#16324F;margin:0">Saved jobs</h2><span style="font:12px system-ui;color:#8a8172">' + savedRows.length + ' bookmarked</span></div>';
+        if (!savedRows.length) { savedWrap.innerHTML = head + '<div style="' + CARD + ';padding:22px 24px;text-align:center;color:#8a8172;font:14px system-ui">No saved jobs yet — tap the ♥ on any job in the feed to bookmark it here.</div>'; return; }
+        savedWrap.innerHTML = head + savedRows.map(bookmarkRowHtml).join('');
+        savedWrap.querySelectorAll('.c-brow').forEach(function (el) {
+          var i = +el.getAttribute('data-bi'); var r = savedRows[i];
+          el.addEventListener('click', function (e) { if (e.target.closest && (e.target.closest('.compass-ext') || e.target.closest('.c-brow-remove'))) return; var mj = mapRow(r); setCurrentJob(mj); location.href = jobHref('job-detail.html', mj); });
+          var rm = el.querySelector('.c-brow-remove');
+          if (rm) rm.onclick = function (e) { e.stopPropagation(); rm.disabled = true; setBookmark(r.url, false).then(function () { savedRows.splice(savedRows.indexOf(r), 1); renderBookmarks(); toastMsg('Removed bookmark', 'success'); }).catch(function () { rm.disabled = false; toastMsg('Could not remove bookmark', 'info'); }); };
+        });
+      }
 
       function optsFor(cur) {
         var set = []; stageList.forEach(function (s) { if (set.indexOf(s) < 0) set.push(s); });
@@ -719,9 +834,9 @@
           banner('My Jobs — no application-stage jobs yet (empty state). Mark a job Applied from Jobs/Apply and it appears here.');
           return;
         }
-        wrap.innerHTML = mine.map(rowHtml).join('');
+        wrap.innerHTML = '<div style="display:flex;align-items:baseline;gap:10px;margin:6px 0 12px"><h2 style="font:600 20px var(--serif,\'Iowan Old Style\',Georgia,serif);color:#16324F;margin:0">Applications</h2><span style="font:12px system-ui;color:#8a8172">' + mine.length + ' in progress</span></div>' + mine.map(rowHtml).join('');
         bindRows();
-        banner('My Jobs LIVE — ' + mine.length + ' real application(s). Status dropdown + Remove persist via POST /api/compass/tracker/status. Demo rows removed.');
+        banner('My Jobs LIVE — ' + savedRows.length + ' saved (bookmarked) + ' + mine.length + ' application(s). Bookmarks persist via /api/compass/saved; status/Remove via /api/compass/tracker/status.');
       }
       function persist(r, status, okMsg, onDone) {
         jPost('/api/compass/tracker/status', { num: r.num, url: r.url, status: status }).then(function (rr) {
@@ -747,6 +862,7 @@
           });
         });
       }
+      renderBookmarks();
       render();
     }).catch(function (e) { banner('Could not load saved/tracker: ' + e); });
   }
@@ -2184,7 +2300,7 @@
   }
 
   // ======================= dispatch ========================================
-  Promise.all([loadDead(), loadProvider(), loadFit(), loadSalary()]).then(function () {
+  Promise.all([loadDead(), loadProvider(), loadFit(), loadSalary(), loadBookmarks()]).then(function () {
     renderNav();
     injectMangoChrome();
     injectActivity();

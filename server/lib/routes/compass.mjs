@@ -98,6 +98,26 @@ const JD_CACHE = DATA_ROOT + '/data/compass-jd-cache.json';
 function normUrlSrv(u) { return String(u || '').split('#')[0].replace(/\/+$/, ''); }
 function readJdCache() { try { return JSON.parse(readFileSync(JD_CACHE, 'utf8')); } catch { return {}; } }
 function writeJdCache(map) { try { mkdirSync(dirname(JD_CACHE), { recursive: true }); writeFileSync(JD_CACHE, JSON.stringify(map)); } catch { /* best-effort */ } }
+// Pre-application BOOKMARKS (distinct from the tracker application-status flow).
+// JSONL keyed by normalized url; last write wins. { url, saved, ts }.
+const SAVED_STORE = DATA_ROOT + '/data/saved.jsonl';
+function readSavedMap() {
+  const map = {};
+  try {
+    readFileSync(SAVED_STORE, 'utf8').split('\n').forEach((ln) => {
+      ln = ln.trim(); if (!ln) return;
+      try { const o = JSON.parse(ln); if (o && o.url) map[normUrlSrv(o.url)] = !!o.saved; } catch { /* skip */ }
+    });
+  } catch { /* none yet */ }
+  return map;
+}
+function writeSavedMap(map) {
+  try {
+    mkdirSync(dirname(SAVED_STORE), { recursive: true });
+    const lines = Object.keys(map).filter((u) => map[u]).map((u) => JSON.stringify({ url: u, saved: true, ts: new Date().toISOString() }));
+    writeFileSync(SAVED_STORE, lines.join('\n') + (lines.length ? '\n' : ''));
+  } catch { /* best-effort */ }
+}
 const SELF = 'http://127.0.0.1:' + (process.env.PORT || '8100');
 // cover ≠ résumé: /api/cv-studio/tailor returns a COMBINED tailored-résumé doc, so
 // `cover` routes to the dedicated cover-letter mode (modes/cover.md → just a letter).
@@ -370,6 +390,22 @@ export function registerCompassRoutes(app) {
       try { out.logs[k] = statSync(p).mtime.toISOString(); } catch { /* missing */ }
     }
     res.json(out);
+  });
+
+  // Pre-application bookmarks. GET → { urls:[...] }; POST { url, saved } toggles.
+  app.get('/api/compass/saved', (_req, res) => {
+    const map = readSavedMap();
+    res.json({ urls: Object.keys(map).filter((u) => map[u]) });
+  });
+  app.post('/api/compass/saved', (req, res) => {
+    const b = req.body || {};
+    const u = normUrlSrv(b.url || '');
+    if (!u) return res.status(400).json({ error: 'url required' });
+    const map = readSavedMap();
+    const saved = b.saved !== false && b.saved !== 'false';
+    if (saved) map[u] = true; else delete map[u];
+    writeSavedMap(map);
+    res.json({ ok: true, url: u, saved });
   });
 
   // Pasted-JD cache: GET returns the cached JD for a url (or ''); POST stores one.
