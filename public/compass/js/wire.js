@@ -83,6 +83,15 @@
   }
   function toastMsg(msg, type) { if (window.toast) { try { window.toast(msg, type || 'info'); return; } catch (e) {} } }
 
+  // Whole days between an ISO 'YYYY-MM-DD' date and today (UTC midnight), or
+  // null if unparseable. Shared by the found/posted age computations below.
+  function daysAgo(isoDate) {
+    if (!isoDate) return null;
+    var t = new Date(isoDate + 'T00:00:00Z').getTime();
+    if (isNaN(t)) return null;
+    return Math.max(0, Math.floor((Date.now() - t) / 86400000));
+  }
+
   function mapRow(row) {
     var title = row.role || '';
     var j = {
@@ -107,6 +116,18 @@
     // (matches() passes it through when "show no-salary" is on; card shows "not listed").
     var sal = salaryFor(row.url);
     if (sal) { j.salMin = (sal.min != null ? sal.min : sal.max); j.salMax = (sal.max != null ? sal.max : sal.min); j.salSource = sal.source || ''; }
+    // Real "found" age, from the tracker row's Date column (when we added it to
+    // applications.md) — used ONLY as an honest display/tiebreak signal for the
+    // "Newest (posted)" sort below; the existing "Newest (found)" sort (j.age)
+    // is untouched.
+    j.foundAge = daysAgo(row.date);
+    // Real POSTED date (GET /api/compass/posted), partial/growing. Known → real
+    // days-since-posted; unknown → fall back to the found age so unposted rows
+    // still sort/tiebreak sensibly (never fabricated as "posted").
+    var posted = postedFor(row.url);
+    j.postedKnown = !!posted;
+    j.postedDate = posted || null;
+    j.postedAge = posted ? daysAgo(posted) : (j.foundAge != null ? j.foundAge : j.age);
     return j;
   }
   function setCurrentJob(job) { try { sessionStorage.setItem('compass_current_job', JSON.stringify(job)); } catch (e) {} }
@@ -168,6 +189,13 @@
     return jGet('/api/compass/salary').then(function (j) { window.__salaryMap = (j && j.map) || {}; return window.__salaryMap; }).catch(function () { window.__salaryMap = {}; return {}; });
   }
   function salaryFor(url) { return (window.__salaryMap && window.__salaryMap[normUrl(url)]) || null; }
+  // Real POSTED dates (url → 'YYYY-MM-DD'), partial + growing. A url absent
+  // here just means "posted date unknown" — mapRow falls back to the found
+  // date for that row rather than fabricating one.
+  function loadPosted() {
+    return jGet('/api/compass/posted').then(function (j) { window.__postedMap = (j && j.map) || {}; return window.__postedMap; }).catch(function () { window.__postedMap = {}; return {}; });
+  }
+  function postedFor(url) { return (window.__postedMap && window.__postedMap[normUrl(url)]) || null; }
   // Pre-application bookmarks (real "Save" state), keyed by normalized url.
   function loadBookmarks() {
     return jGet('/api/compass/saved').then(function (j) { window.__savedSet = {}; ((j && j.urls) || []).forEach(function (u) { window.__savedSet[normUrl(u)] = true; }); return window.__savedSet; }).catch(function () { window.__savedSet = {}; return {}; });
@@ -426,6 +454,14 @@
     // "best" = AI-scored jobs first (by fit score desc), then the rest.
     if (st === 'best') all.sort(function (a, b) { var as = a.fitScored ? 1 : 0, bs = b.fitScored ? 1 : 0; if (as !== bs) return bs - as; return (b.fit || 0) - (a.fit || 0); });
     else if (st === 'new') all.sort(function (a, b) { return a.age - b.age; });
+    // "Newest (posted)" — real posted-date rows sort first (soonest→oldest by
+    // real days-since-posted); rows with no real posted date sort after them,
+    // using the found date as a tiebreak. "Newest (found)" (st === 'found',
+    // handled above by the fallthrough — unchanged) never touches this branch.
+    else if (st === 'posted') all.sort(function (a, b) {
+      if (!!a.postedKnown !== !!b.postedKnown) return a.postedKnown ? -1 : 1;
+      return (a.postedAge != null ? a.postedAge : 0) - (b.postedAge != null ? b.postedAge : 0);
+    });
     else if (st === 'salary') all.sort(function (a, b) { return (b.salMax || 0) - (a.salMax || 0); });
     window.__compassMatched = all;
     var shown = Math.min(window.__compassShown || PAGE_SIZE, all.length);
@@ -527,6 +563,18 @@
       var loaded = rows.length;
       window.JOBS = rows.map(mapRow).filter(function (j) { return !isDead(j.url); });
       window.JOBS.forEach(function (j) { j.open = !isDead(j.url); });
+      // "Newest (posted)" is only a meaningful, non-duplicate choice once at
+      // least one job has a REAL posted date — hide it (never fabricate one)
+      // until the posted-date store has coverage.
+      (function () {
+        var anyPosted = window.JOBS.some(function (j) { return j.postedKnown; });
+        var opt = document.querySelector('#sort option[value="posted"]');
+        if (opt) { opt.hidden = !anyPosted; opt.disabled = !anyPosted; }
+        if (!anyPosted && window.state && window.state.sort === 'posted') {
+          window.state.sort = 'best';
+          var sel = document.getElementById('sort'); if (sel) sel.value = 'best';
+        }
+      })();
       var hidden = loaded - window.JOBS.length;
       window.__compassShown = PAGE_SIZE;
 
@@ -752,6 +800,15 @@
         var salSpan = Array.prototype.filter.call(meta.querySelectorAll('span'), function (s) { return /\$|salary/i.test(s.textContent) && !s.classList.contains('pin') && !s.classList.contains('badge'); })[0];
         if (salSpan) salSpan.textContent = sal ? fmtSalary(sal) : 'Salary not listed';
         setOpenBadge(meta.querySelector('[data-live]'), job.url);
+        // Honest per-row date chip: "posted Xd ago" when we have a real posted
+        // date, else "found Xd ago" (never fabricated when both are unknown).
+        var dateTxt = job.postedKnown ? ('posted ' + job.postedAge + 'd ago')
+          : (job.foundAge != null ? ('found ' + job.foundAge + 'd ago') : '');
+        if (dateTxt) {
+          var chip = meta.querySelector('.date-chip');
+          if (!chip) { chip = document.createElement('span'); chip.className = 'date-chip'; meta.appendChild(chip); }
+          chip.textContent = dateTxt;
+        }
       }
 
       // AI fit-analysis on job-detail: real /100 score, colored verdict pill, why,
@@ -2372,7 +2429,7 @@
   }
 
   // ======================= dispatch ========================================
-  Promise.all([loadDead(), loadProvider(), loadFit(), loadSalary(), loadBookmarks()]).then(function () {
+  Promise.all([loadDead(), loadProvider(), loadFit(), loadSalary(), loadPosted(), loadBookmarks()]).then(function () {
     renderNav();
     injectMangoChrome();
     injectActivity();
