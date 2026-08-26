@@ -572,28 +572,18 @@ function initTabs(tablist, opts){
   tabs.forEach(function(t){ t.addEventListener("click", function(){ select(t, false); }); });
   return {select:select, tabs:tabs};
 }
-/* ============ shared job data ============ */
-var JOBS = [
-  {id:"j1", title:"Director, Finance Business Manager", company:"Horizon Media", domain:"horizonmedia.com", mono:"HM", color:"#B5623B", loc:"New York, NY", locKey:"new-york", work:"Hybrid", salMin:185, salMax:215, fit:94, age:2, isNew:true, saved:true, cat:"Media & Entertainment", func:"Finance Business Partner", level:"Director", why:"Media agency FP&A leadership role — matches your WBD content-finance experience and CPA credential."},
-  {id:"j2", title:"Senior Manager, Content Finance", company:"Netflix", domain:"netflix.com", mono:"N", color:"#96702F", loc:"Los Angeles, CA", locKey:"los-angeles", work:"Hybrid", salMin:170, salMax:200, fit:91, age:4, isNew:false, saved:true, cat:"Media & Entertainment", func:"FP&A", level:"Sr Manager", why:"Content P&L ownership and title-level profitability — the core of your day-to-day at Warner Bros. Discovery."},
-  {id:"j3", title:"Director, Technical Ops Finance", company:"NBCUniversal", domain:"nbcuni.com", mono:"NBC", color:"#2E5C8A", loc:"New York, NY", locKey:"new-york", work:"On-site", salMin:165, salMax:190, fit:88, age:1, isNew:true, saved:false, cat:"Media & Entertainment", func:"Corporate Finance", level:"Director", why:"Director-level media finance in NYC. Operations focus is a slight pivot, but the FP&A discipline transfers cleanly."},
-  {id:"j4", title:"Finance Manager, FP&A", company:"Amazon MGM Studios", domain:"amazon.com", mono:"A", color:"#96702F", loc:"Los Angeles, CA", locKey:"los-angeles", work:"Hybrid", salMin:150, salMax:175, fit:87, age:6, isNew:false, saved:true, cat:"Media & Entertainment", func:"FP&A", level:"Manager", why:"Studio FP&A with strong forecasting scope. Hybrid in LA, and the content economics mirror your current work."},
-  {id:"j5", title:"Senior Director, Finance", company:"Reddit", domain:"reddit.com", mono:"R", color:"#B5623B", loc:"Remote (US)", locKey:"remote", work:"Remote", salMin:240, salMax:290, fit:86, age:3, isNew:true, saved:false, cat:"Tech", func:"Strategic Finance", level:"Director", why:"Fully remote finance leadership with a big step up in scope and pay. Platform (not content) finance, so a stretch worth a look."},
-  {id:"j6", title:"Director, FP&A — Streaming", company:"Paramount", domain:"paramount.com", mono:"P", color:"#16324F", loc:"New York, NY", locKey:"new-york", work:"Hybrid", salMin:180, salMax:205, fit:85, age:9, isNew:false, saved:true, cat:"Media & Entertainment", func:"FP&A", level:"Director", why:"Director-level streaming FP&A in NYC. Leans more on subscriber modeling than your title-level P&L work."},
-  {id:"j7", title:"Senior Manager, Content & Licensing Finance", company:"Spotify", domain:"spotify.com", mono:"S", color:"#2F6F5B", loc:"New York, NY", locKey:"new-york", work:"Hybrid", salMin:160, salMax:185, fit:82, age:7, isNew:false, saved:true, cat:"Media & Entertainment", func:"Strategic Finance", level:"Sr Manager", why:"Content & licensing economics overlap well; audio is a new vertical but the finance skills transfer."},
-  {id:"j8", title:"Senior Manager, Content Finance", company:"Hulu", domain:"hulu.com", mono:"H", color:"#2F6F5B", loc:"SF Bay Area, CA", locKey:"sf-bay", work:"Hybrid", salMin:175, salMax:205, fit:81, age:5, isNew:false, saved:false, cat:"Media & Entertainment", func:"FP&A", level:"Sr Manager", why:"Direct content-finance match at a streamer. Bay Area location is outside your NYC preference — hybrid may still work."},
-  {id:"j9", title:"Director, Financial Planning", company:"Warner Music Group", domain:"wmg.com", mono:"WMG", color:"#6B4E8A", loc:"New York, NY", locKey:"new-york", work:"Hybrid", salMin:175, salMax:200, fit:79, age:8, isNew:false, saved:false, cat:"Media & Entertainment", func:"Corporate Finance", level:"Director", why:"Director-level and NYC-based. Broader corporate planning scope vs. your content-P&L focus."},
-  {id:"j10", title:"Manager, Content Finance", company:"NBCUniversal", domain:"nbcuni.com", mono:"NBC", color:"#2E5C8A", loc:"New York, NY", locKey:"new-york", work:"On-site", salMin:135, salMax:155, fit:79, age:10, isNew:false, saved:false, cat:"Media & Entertainment", func:"FP&A", level:"Manager", why:"Right industry and location. Likely a step below your current level — worth a look for a strong culture fit."},
-  {id:"j11", title:"Manager, Studio FP&A", company:"Disney", domain:"disney.com", mono:"D", color:"#2E5C8A", loc:"Los Angeles, CA", locKey:"los-angeles", work:"On-site", salMin:145, salMax:170, fit:78, age:11, isNew:false, saved:false, cat:"Media & Entertainment", func:"FP&A", level:"Manager", why:"Studio FP&A at a marquee name. On-site LA and manager level make it a lateral, cross-country move."},
-  {id:"j12", title:"Director, Strategic Finance", company:"Coinbase", domain:"coinbase.com", mono:"CB", color:"#2E5C8A", loc:"Remote (US)", locKey:"remote", work:"Remote", salMin:210, salMax:260, fit:74, age:5, isNew:true, saved:false, cat:"Crypto", func:"Strategic Finance", level:"Director", why:"A strong pay and scope step-up, fully remote. Crypto is a new industry for you, so it's a genuine pivot to weigh."},
-  {id:"j13", title:"FP&A Manager, Media", company:"Roku", domain:"roku.com", mono:"R", color:"#6B4E8A", loc:"Remote (US)", locKey:"remote", work:"Remote", salMin:140, salMax:160, fit:73, age:14, isNew:false, saved:false, cat:"Tech", func:"FP&A", level:"Manager", why:"Fully remote and media-adjacent. More ad-platform finance than content finance, so a bit of a stretch."},
-  {id:"j14", title:"Manager, FP&A — Touring", company:"Live Nation", domain:"livenation.com", mono:"LN", color:"#B5623B", loc:"Los Angeles, CA", locKey:"los-angeles", work:"On-site", salMin:120, salMax:140, fit:71, age:15, isNew:false, saved:false, cat:"Consumer", func:"FP&A", level:"Manager", why:"Live-events finance is a fresh angle. Manager level is at the lower end of your target, but the industry is adjacent."},
-  {id:"j15", title:"Senior Manager, FP&A", company:"Chime", domain:"chime.com", mono:"Ch", color:"#2F6F5B", loc:"Remote (US)", locKey:"remote", work:"Remote", salMin:null, salMax:null, fit:70, age:13, isNew:false, saved:false, cat:"Fintech", func:"FP&A", level:"Sr Manager", why:"Consumer-fintech FP&A, fully remote. Salary isn't listed, and it's outside media — a pivot worth a quick look."}
-];
+/* ============ shared job data ============
+ * LIVE DATA — no demo rows. js/wire.js (loaded after this script) fetches the
+ * full tracker via GET /api/tracker (all ~1050 applications.md rows) and joins
+ * the real fit map (/api/compass/fit), salary bands (/api/compass/salary),
+ * saved bookmarks (/api/compass/saved) and liveness (/api/compass/liveness),
+ * then replaces window.JOBS with the mapped card rows and calls render().
+ * These stay empty so nothing fake ships in the page source. */
+var JOBS = [];
 
-/* Iteration 6 — "still open?" liveness: most roles Open, a couple no longer accepting */
-var CLOSED_JOBS = {j11:true, j14:true};   /* Disney (Studio FP&A) & Live Nation (Touring) filled */
-JOBS.forEach(function(j){ j.open = !CLOSED_JOBS[j.id]; if(j.postedAge==null){ j.postedAge = j.age + (j.id.charCodeAt(1)%6) + 1; } });
+/* Liveness ("still open?") comes from the real liveness store via wire.js. */
+var CLOSED_JOBS = {};
+JOBS.forEach(function(j){ j.open = !CLOSED_JOBS[j.id]; if(j.postedAge==null){ j.postedAge = j.age; } });
 
 /* tag taxonomy (order = display order in filter menus) */
 var CATS  = ["Media & Entertainment","Tech","Crypto","Consumer","Fintech"];
@@ -1031,24 +1021,23 @@ var scanStatus=document.getElementById("scanStatus"), scanText=document.getEleme
 refreshBtn.addEventListener("click", function(){
   refreshBtn.disabled=true; scanStatus.classList.remove("done");
   refreshBtn.querySelector("svg").animate([{transform:"rotate(0)"},{transform:"rotate(360deg)"}],{duration:700,iterations:3});
-  var steps=[
-    "Checking 68 job sources for you…",
-    "Reading new postings across media, tech &amp; finance…",
-    "Matching each one to your résumé…"
-  ];
-  var i=0;
-  scanText.innerHTML=steps[0];
-  var iv=setInterval(function(){
-    i++;
-    if(i<steps.length){ scanText.innerHTML=steps[i]; }
-    else {
-      clearInterval(iv);
-      scanStatus.classList.add("done");
-      scanText.innerHTML="<b>Found 3 new roles.</b> Updated just now · 15 roles in your feed";
-      refreshBtn.disabled=false;
-      toast("Found 3 new roles", "success");
-    }
-  }, 900);
+  scanText.innerHTML="Checking your job sources…";
+  // REAL data: the search runs automatically on a schedule; report the genuine
+  // last new-jobs date/count (GET /api/compass/runs) and the real feed size.
+  fetch("/api/compass/runs").then(function(r){ return r.json(); }).then(function(d){
+    var feed=(window.JOBS&&window.JOBS.length)||0;
+    var last=d&&d.lastNew;
+    scanStatus.classList.add("done");
+    scanText.innerHTML = last
+      ? "<b>"+last.count+" new role"+(last.count===1?"":"s")+"</b> last found "+esc(last.date)+" · "+feed+" role"+(feed===1?"":"s")+" in your feed"
+      : feed+" role"+(feed===1?"":"s")+" in your feed";
+    refreshBtn.disabled=false;
+    toast("Feed up to date", "success");
+  }).catch(function(){
+    scanStatus.classList.add("done");
+    scanText.innerHTML=((window.JOBS&&window.JOBS.length)||0)+" roles in your feed";
+    refreshBtn.disabled=false;
+  });
 });
 
 /* ============ Quick Add ("Add a job") — real dialog (focus trap, Esc, backdrop, scroll-lock, focus return) ============ */
@@ -1077,7 +1066,7 @@ function renderQAForm(){
   qaBody.innerHTML=
     '<h2 id="qaTitle"><span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg></span>Add a job by link</h2>'+
     '<p class="msub" id="qaSub">Found a posting somewhere else? Paste the link and Compass will read it, match it to your résumé, and file it in My Jobs — no copying and pasting.</p>'+
-    '<div class="qa-input"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg><input id="qaUrl" type="text" placeholder="Paste a job link, e.g. linkedin.com/jobs/…" value="https://careers.acme.com/finance-director"></div>'+
+    '<div class="qa-input"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg><input id="qaUrl" type="text" placeholder="Paste a job link, e.g. linkedin.com/jobs/…" value=""></div>'+
     '<div class="qa-actions"><button class="btn btn--outline qa-cancel" type="button" id="qaCancel">Cancel</button><button class="btn btn--primary qa-go" type="button" id="qaGo">Add it</button></div>';
   document.getElementById("qaCancel").onclick=closeModal;
   document.getElementById("qaGo").onclick=runQA;
@@ -1099,14 +1088,16 @@ function runQA(){
   }
   step();
 }
+/* Fallback result view only — js/wire.js overrides window.runQA with the REAL
+ * pipeline+evaluate flow (compassRunQA), which renders the actual score/verdict.
+ * No fabricated company/score here. */
 function showQAResult(){
   qaBody.innerHTML=
-    '<div class="qa-ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>Added to My Jobs</div>'+
-    '<h2 id="qaTitle" style="font-size:19px">Here&rsquo;s what we found</h2>'+
-    '<div class="qa-result"><div class="r-ring">89</div><div><div class="r-t">Director, Strategic Finance</div><div class="r-m">Acme Studios · New York, NY · Strong fit for your background</div></div></div>'+
-    '<div class="qa-actions"><button class="btn btn--outline qa-cancel" type="button" id="qaAnother">Add another</button><a class="btn btn--primary qa-go" href="job-detail.html">View job</a></div>';
+    '<div class="qa-ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>Added to your pipeline</div>'+
+    '<p class="msub">The link is saved. Scoring runs in the background — check the Library for the result.</p>'+
+    '<div class="qa-actions"><button class="btn btn--outline qa-cancel" type="button" id="qaAnother">Add another</button><a class="btn btn--primary qa-go" href="saved.html">View My Jobs</a></div>';
   document.getElementById("qaAnother").onclick=renderQAForm;
-  toast("Job added — saved to My Jobs", "success");
+  toast("Job added to your pipeline", "success");
 }
 
 /* ============ init ============ */
