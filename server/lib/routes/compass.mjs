@@ -91,6 +91,13 @@ const LIVENESS_PY = SCRAPE_DIR + '/liveness.py';
 // fetch (exact same prompt/provider logic, no duplication).
 const JOBS_STORE = DATA_ROOT + '/data/compass-jobs.jsonl';
 const ARTIFACT_DIR = DATA_ROOT + '/data/compass-artifacts';
+// Pasted-JD cache (keyed by normalized url) — when a board is JS-rendered/bot-
+// protected and the preview reads thin, the user pastes the real JD once; we cache
+// it so future tailor/evaluate on the same job reuse it and don't re-prompt.
+const JD_CACHE = DATA_ROOT + '/data/compass-jd-cache.json';
+function normUrlSrv(u) { return String(u || '').split('#')[0].replace(/\/+$/, ''); }
+function readJdCache() { try { return JSON.parse(readFileSync(JD_CACHE, 'utf8')); } catch { return {}; } }
+function writeJdCache(map) { try { mkdirSync(dirname(JD_CACHE), { recursive: true }); writeFileSync(JD_CACHE, JSON.stringify(map)); } catch { /* best-effort */ } }
 const SELF = 'http://127.0.0.1:' + (process.env.PORT || '8100');
 // cover ≠ résumé: /api/cv-studio/tailor returns a COMBINED tailored-résumé doc, so
 // `cover` routes to the dedicated cover-letter mode (modes/cover.md → just a letter).
@@ -176,6 +183,12 @@ async function runJob(job) {
     // Fetch the JD from the posting if we only have a URL.
     if (!job.jd && job.url) {
       try { const pv = await (await fetch(SELF + '/api/pipeline/preview?url=' + encodeURIComponent(job.url), opt)).json(); job.jd = (pv && pv.text) || ''; } catch (e) { if (ctrl.signal.aborted) throw e; /* thin */ }
+    }
+    // If the live preview read thin, fall back to a pasted-JD the user cached for
+    // this url (guided-paste flow) — so evaluate/cover/tailor run on the REAL JD.
+    if ((!job.jd || job.jd.length < 40) && job.url) {
+      const cached = readJdCache()[normUrlSrv(job.url)];
+      if (cached && cached.length >= 40) job.jd = cached;
     }
     // tailor/cover need a JD floor; synthesize from role/company if the board was JS-thin.
     if ((job.type === 'tailor' || job.type === 'cover') && (!job.jd || job.jd.length < 40)) {
@@ -340,6 +353,21 @@ export function registerCompassRoutes(app) {
       try { out.logs[k] = statSync(p).mtime.toISOString(); } catch { /* missing */ }
     }
     res.json(out);
+  });
+
+  // Pasted-JD cache: GET returns the cached JD for a url (or ''); POST stores one.
+  app.get('/api/compass/jd-cache', (req, res) => {
+    const u = normUrlSrv(req.query.url || '');
+    const m = readJdCache();
+    res.json({ url: u, jd: (u && m[u]) || '' });
+  });
+  app.post('/api/compass/jd-cache', (req, res) => {
+    const b = req.body || {};
+    const u = normUrlSrv(b.url || '');
+    const jd = String(b.jd || '').slice(0, 20000).trim();
+    if (!u || jd.length < 40) return res.status(400).json({ error: 'url and jd (40+ chars) required' });
+    const m = readJdCache(); m[u] = jd; writeJdCache(m);
+    res.json({ ok: true, bytes: jd.length });
   });
 
   // ── Liveness: trigger a bounded sweep (default 100 URLs). The daily launchd

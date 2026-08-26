@@ -818,46 +818,93 @@
       '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px">' +
       '<div style="flex:1;min-width:0"><div style="font-family:var(--serif,Georgia);font-weight:600;font-size:18px;color:#16324F">Tailored résumé</div>' +
       '<div style="font:12.5px system-ui;color:#8a8172">' + (company ? esc(company) + (role ? ' · ' + esc(role) : '') : 'Pick a job above') + ' · running on ' + esc(llmDesc()) + '</div></div></div>' +
-      '<details class="tailor-prompt" style="' + CARD + ';margin:8px 0 12px" open>' +
-        '<summary style="cursor:pointer;list-style:none;padding:12px 16px;font:600 13.5px system-ui;color:#16324F;display:flex;justify-content:space-between;align-items:center">The tailoring prompt<span style="font:400 12px system-ui;color:#b0a790">edit before running ▾</span></summary>' +
-        '<div style="padding:0 16px 14px">' +
-        '<div style="font:12px system-ui;color:#8a8172;margin-bottom:6px">This is the exact prompt — your résumé + this job + the surgical instructions. Edit it, copy it, or generate right here. What you see is what runs.</div>' +
-        '<textarea id="tailorPromptTa" spellcheck="false" style="width:100%;min-height:200px;box-sizing:border-box;padding:11px 12px;border:1px solid #d8cdb8;border-radius:10px;font:12.5px/1.5 ui-monospace,Menlo,monospace;resize:vertical" placeholder="Assembling the prompt…"></textarea>' +
-        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">' +
-          '<button class="btn btn--outline btn--sm" id="tailorCopyBtn" type="button">Copy prompt</button>' +
-          '<button class="btn btn--outline btn--sm" id="tailorReassemble" type="button">Reset prompt</button>' +
-          '<button class="btn btn--primary btn--sm" id="tailorGenBtn" type="button">Generate here</button>' +
-        '</div></div></details>' +
+      '<div class="tailor-prompt-wrap" style="' + CARD + ';margin:8px 0 12px"><div id="tailorPromptBody" style="padding:14px 16px">Reading the posting…</div></div>' +
       '<div class="compass-doc-out" style="margin-top:10px"></div>';
-    var ta = panel.querySelector('#tailorPromptTa');
+    var body = panel.querySelector('#tailorPromptBody');
     var out = panel.querySelector('.compass-doc-out');
-    function assemble() {
-      ta.value = ''; ta.placeholder = 'Assembling the prompt…';
-      var jdP = url ? jGet('/api/pipeline/preview?url=' + encodeURIComponent(url)).then(function (p) { return (p && p.text) || ''; }).catch(function () { return ''; }) : Promise.resolve('');
-      jdP.then(function (jd) {
-        if (!jd || jd.length < 40) jd = (role || 'Finance role') + ' at ' + (company || 'the company') + '. Responsibilities include FP&A, budgeting, forecasting, and business partnering.';
-        jPost('/api/cv-studio/tailor', { jd: jd, headline: role, run: false }).then(function (r) {
-          if (r.body && r.body.prompt) ta.value = r.body.prompt;
-          else ta.placeholder = 'Could not assemble the prompt (' + ((r.body && r.body.error) || r.status) + ')';
-        });
-      });
-    }
+    var ta = null;
     function loadVersions(selectId) {
       jGet('/api/compass/jobs').then(function (d) {
         var vs = ((d && d.jobs) || []).filter(function (j) { return j.type === 'tailor' && j.status === 'done' && docMatch(j, company, role); }).sort(function (a, b) { return String(a.created).localeCompare(String(b.created)); });
         renderVersioned(out, 'tailor', vs, selectId);
       });
     }
-    panel.querySelector('#tailorCopyBtn').onclick = function () { var b = this; navigator.clipboard.writeText(ta.value || '').then(function () { var o = b.textContent; b.textContent = 'Copied ✓'; setTimeout(function () { b.textContent = o; }, 1400); }); };
-    panel.querySelector('#tailorReassemble').onclick = function () { assemble(); };
-    panel.querySelector('#tailorGenBtn').onclick = function () {
-      var prompt = (ta.value || '').trim();
+    function generate() {
+      var prompt = (ta && ta.value || '').trim();
       if (prompt.length < 40) { toastMsg('The prompt is empty — reset it first', 'info'); return; }
       out.innerHTML = docSpinner(llmProgress('Tailoring'));
       startJob({ type: 'tailor', company: company, role: role, url: url, prompt: prompt }, null,
         function (j) { toastMsg('Résumé ready', 'success'); loadVersions(j.id); },
         function (err) { out.innerHTML = '<div style="padding:16px;background:#f7ece7;border:1px solid #e6c9bb;border-radius:10px;color:#9c5231;font:13.5px system-ui">Generation failed: ' + esc(err) + '</div>'; });
-    };
+    }
+    // Render the normal editable-prompt UI once we have a real JD.
+    function renderPromptUI(assembled) {
+      body.innerHTML =
+        '<div style="font:600 13.5px system-ui;color:#16324F;margin-bottom:4px">The tailoring prompt</div>' +
+        '<div style="font:12px system-ui;color:#8a8172;margin-bottom:6px">This is the exact prompt — your résumé + this job + the surgical instructions. Edit it, copy it, or generate right here. What you see is what runs.</div>' +
+        '<textarea id="tailorPromptTa" spellcheck="false" style="width:100%;min-height:200px;box-sizing:border-box;padding:11px 12px;border:1px solid #d8cdb8;border-radius:10px;font:12.5px/1.5 ui-monospace,Menlo,monospace;resize:vertical"></textarea>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">' +
+          '<button class="btn btn--outline btn--sm" id="tailorCopyBtn" type="button">Copy prompt</button>' +
+          '<button class="btn btn--outline btn--sm" id="tailorReassemble" type="button">Reset prompt</button>' +
+          '<button class="btn btn--primary btn--sm" id="tailorGenBtn" type="button">Generate here</button>' +
+        '</div>';
+      ta = body.querySelector('#tailorPromptTa'); ta.value = assembled || '';
+      body.querySelector('#tailorCopyBtn').onclick = function () { var b = this; navigator.clipboard.writeText(ta.value || '').then(function () { var o = b.textContent; b.textContent = 'Copied ✓'; setTimeout(function () { b.textContent = o; }, 1400); }); };
+      body.querySelector('#tailorReassemble').onclick = function () { assemble(); };
+      body.querySelector('#tailorGenBtn').onclick = generate;
+    }
+    function assembleWithJd(jd) {
+      body.innerHTML = '<div style="color:#8a8172;font:13px system-ui">Assembling the prompt…</div>';
+      jPost('/api/cv-studio/tailor', { jd: jd, headline: role, run: false }).then(function (r) {
+        if (r.body && r.body.prompt) renderPromptUI(r.body.prompt);
+        else body.innerHTML = '<div style="color:#9c5231;font:13px system-ui">Could not assemble the prompt (' + esc((r.body && r.body.error) || r.status) + ')</div>';
+      });
+    }
+    // Guided paste flow — shown when the posting can't be read automatically.
+    function renderGuidedPaste() {
+      body.innerHTML =
+        '<div style="font:600 14px system-ui;color:#16324F;margin-bottom:4px">We couldn’t read this posting automatically</div>' +
+        '<div style="font:12.5px/1.6 system-ui;color:#8a8172;margin-bottom:12px">Some sites hide the job description behind scripts or bot-protection. It takes 20 seconds to paste it in — then tailoring is grounded in the real posting.</div>' +
+        '<ol style="margin:0 0 12px;padding-left:20px;font:13px/1.7 system-ui;color:#2a3b4d">' +
+          '<li style="margin-bottom:8px"><b>Open the original posting</b><div style="margin-top:5px">' + (url ? '<a class="btn btn--primary btn--sm" href="' + esc(url) + '" target="_blank" rel="noopener">Open the original posting ↗</a>' : '<span style="color:#b0a790">no link on this job</span>') + '</div></li>' +
+          '<li style="margin-bottom:8px"><b>Copy the full job description</b> from that page (the responsibilities, requirements, etc.).</li>' +
+          '<li style="margin-bottom:8px"><b>Paste it in the box below 👇</b></li>' +
+          '<li><b>Then click Use this description</b> — we’ll tailor from it (and remember it for next time).</li>' +
+        '</ol>' +
+        '<textarea id="tailorPasteTa" spellcheck="false" placeholder="Paste the full job description here…" style="width:100%;min-height:160px;box-sizing:border-box;padding:11px 12px;border:2px solid #ffb300;border-radius:10px;font:13px/1.55 system-ui;resize:vertical;background:#fffdf5"></textarea>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center">' +
+          '<button class="btn btn--primary btn--sm" id="tailorPasteUse" type="button">Use this description</button>' +
+          '<span id="tailorPasteMsg" style="font:12px system-ui;color:#b0a790"></span>' +
+        '</div>';
+      var pasteTa = body.querySelector('#tailorPasteTa');
+      body.querySelector('#tailorPasteUse').onclick = function () {
+        var jd = (pasteTa.value || '').trim();
+        var msg = body.querySelector('#tailorPasteMsg');
+        if (jd.length < 40) { msg.style.color = '#9c5231'; msg.textContent = 'Paste a bit more of the description (40+ characters).'; return; }
+        msg.style.color = '#2f6f5b'; msg.textContent = 'Saved ✓ — assembling…';
+        // Cache the pasted JD by url so future tailor/evaluate reuse it.
+        if (url) jPost('/api/compass/jd-cache', { url: url, jd: jd });
+        assembleWithJd(jd);
+      };
+    }
+    function assemble() {
+      body.innerHTML = '<div style="color:#8a8172;font:13px system-ui">Reading the posting…</div>';
+      // 1) a previously pasted JD for this url wins (no re-prompting).
+      var cacheP = url ? jGet('/api/compass/jd-cache?url=' + encodeURIComponent(url)).then(function (r) { return (r && r.jd) || ''; }).catch(function () { return ''; }) : Promise.resolve('');
+      cacheP.then(function (cached) {
+        if (cached && cached.length >= 40) { assembleWithJd(cached); return; }
+        // 2) live preview
+        var prevP = url ? jGet('/api/pipeline/preview?url=' + encodeURIComponent(url)).catch(function () { return null; }) : Promise.resolve(null);
+        prevP.then(function (pv) {
+          var jd = (pv && pv.text) || '';
+          var thin = !pv || pv.thin || jd.length < 40;
+          if (!thin) { assembleWithJd(jd); return; }
+          // 3) thin + has a url → guided paste; no url → floor synth.
+          if (url) renderGuidedPaste();
+          else assembleWithJd((role || 'Finance role') + ' at ' + (company || 'the company') + '. Responsibilities include FP&A, budgeting, forecasting, and business partnering.');
+        });
+      });
+    }
     loadVersions();
     assemble();
   }
