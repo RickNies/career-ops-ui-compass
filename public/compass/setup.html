@@ -622,13 +622,11 @@ var DEFAULT_CITIES=[
   {name:"Los Angeles, CA", priority:false},
   {name:"Atlanta, GA", priority:false}
 ];
-var DEFAULT_COMPANIES=[
-  {name:"Spotify", domain:"spotify.com", mono:"S", color:"#2F6F5B"},
-  {name:"Netflix", domain:"netflix.com", mono:"N", color:"#96702F"},
-  {name:"NBCUniversal", domain:"nbcuni.com", mono:"NBC", color:"#2E5C8A"},
-  {name:"Coinbase", domain:"coinbase.com", mono:"CB", color:"#2E5C8A"},
-  {name:"Amazon", domain:"amazon.com", mono:"A", color:"#96702F"}
-];
+// No demo companies ship in the page source — an empty list here is the
+// honest starting state until you add your own or Save pulls in the real
+// tracked_companies from portals.yml. wireSetup/renderCompanies both already
+// handle an empty `companies` array (renders nothing, no crash).
+var DEFAULT_COMPANIES=[];
 var stored=load()||{};
 var roles = stored.roles || DEFAULT_ROLES.slice();
 var floor = stored.floor || 150;
