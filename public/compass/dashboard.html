@@ -172,8 +172,8 @@
     <div class="hello">
       <div>
         <h1>Good morning, Nicole</h1>
-        <div class="sub">Here's where your search stands today. We found new roles for you overnight.</div>
-        <div class="scan-status" id="scanStatus"><span class="sdot"></span><span id="scanText">Last updated today at 8:04 AM · found 3 new roles overnight</span></div>
+        <div class="sub">Here's where your search stands today.</div>
+        <div class="scan-status" id="scanStatus"><span class="sdot"></span><span id="scanText">Loading your latest search results…</span></div>
       </div>
       <div class="hello-actions">
         <a class="btn btn--primary" href="jobs.html#add">
@@ -187,12 +187,15 @@
       </div>
     </div>
 
+    <!-- All five tiles are filled with REAL numbers by js/wire.js (wireDash:
+         /api/dashboard + /api/tracker) except Saved, which the inline script
+         below fills from /api/compass/saved. "—" is a pre-load placeholder. -->
     <div class="summary">
-      <div class="stat"><div class="n">15</div><div class="l"><span class="dot d-found"></span>Jobs found</div></div>
-      <div class="stat"><div class="n">5</div><div class="l"><span class="dot d-saved"></span>Saved</div></div>
-      <div class="stat"><div class="n">3</div><div class="l"><span class="dot d-applied"></span>Applied</div></div>
-      <div class="stat"><div class="n" id="toReview">12</div><div class="l"><span class="dot d-rev"></span>To review</div></div>
-      <div class="stat"><div class="n">81</div><div class="l"><span class="dot d-fit"></span>Avg fit</div></div>
+      <div class="stat"><div class="n">—</div><div class="l"><span class="dot d-found"></span>Jobs found</div></div>
+      <div class="stat"><div class="n" id="savedTile">—</div><div class="l"><span class="dot d-saved"></span>Saved</div></div>
+      <div class="stat"><div class="n">—</div><div class="l"><span class="dot d-applied"></span>Applied</div></div>
+      <div class="stat"><div class="n" id="toReview">—</div><div class="l"><span class="dot d-rev"></span>To review</div></div>
+      <div class="stat"><div class="n">—</div><div class="l"><span class="dot d-fit"></span>Avg fit</div></div>
     </div>
 
     <div class="section-head">
@@ -275,49 +278,35 @@ function toast(msg, type){
   setTimeout(function(){ t.style.transition="opacity .2s"; t.style.opacity="0"; setTimeout(function(){ if(t.parentNode) t.remove(); }, 220); }, 3600);
 }
 
-/* top matches — same shape as the Jobs feed data */
-var TOP = [
-  {title:"Director, Finance Business Manager", company:"Horizon Media", domain:"horizonmedia.com", mono:"HM", color:"#B5623B", loc:"New York, NY · Hybrid", fit:94},
-  {title:"Senior Manager, Content Finance", company:"Netflix", domain:"netflix.com", mono:"N", color:"#96702F", loc:"Los Angeles, CA · Hybrid", fit:91},
-  {title:"Director, Technical Ops Finance", company:"NBCUniversal", domain:"nbcuni.com", mono:"NBC", color:"#2E5C8A", loc:"New York, NY · On-site", fit:88},
-  {title:"Finance Manager, FP&A", company:"Amazon MGM Studios", domain:"amazon.com", mono:"A", color:"#96702F", loc:"Los Angeles, CA · Hybrid", fit:87},
-  {title:"Senior Director, Finance", company:"Reddit", domain:"reddit.com", mono:"R", color:"#B5623B", loc:"Remote (US)", fit:86}
-];
 function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
-document.getElementById("matches").innerHTML = TOP.map(function(j){
-  var cls = j.fit>=86 ? "fm-strong":"fm-good";
-  return '<div class="match">'+
-    '<div class="fitmini '+cls+'">'+j.fit+'</div>'+
-    '<span class="logo" style="--mc:'+j.color+'" data-mono="'+esc(j.mono)+'"><img src="https://logo.clearbit.com/'+j.domain+'" alt="'+esc(j.company)+' logo" onerror="this.parentNode.classList.add(\'failed\');this.remove()"></span>'+
-    '<div class="minfo"><div class="t"><a href="job-detail.html">'+esc(j.title)+'</a></div><div class="m"><span>'+esc(j.company)+'</span><span>'+esc(j.loc)+'</span></div></div>'+
-    '<a class="btn btn--outline btn--sm go" href="job-detail.html">View<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>'+
-  '</div>';
-}).join("");
+/* Top matches (#matches) are rendered LIVE by js/wire.js (wireDash) from the real
+   tracker top-6. No demo array ships here. */
+document.getElementById("matches").innerHTML = "";
 
-/* reflect reviewed progress in the "To review" tile (reads the iteration-3 review store,
-   falls back to the old boolean map) */
-try{
-  var rev = JSON.parse(localStorage.getItem("compass_reviews")||"null") || JSON.parse(localStorage.getItem("compass_reviewed")||"{}");
-  var reviewed = Object.keys(rev).length;
-  var el = document.getElementById("toReview");
-  if(reviewed>0) el.textContent = Math.max(0, 12-reviewed);
-}catch(e){}
+/* REAL "last search ran" readout + Saved tile, from the live stores. */
+function loadDashScan(){
+  fetch("/api/compass/runs").then(function(r){return r.json();}).then(function(d){
+    var last=d&&d.lastNew, st=document.getElementById("scanStatus"), tx=document.getElementById("scanText");
+    if(!tx) return;
+    if(last){ tx.innerHTML="Last new roles found "+esc(last.date)+" · <b>"+last.count+"</b> that day"; }
+    else { tx.textContent="Your search runs automatically on a schedule."; }
+    if(st) st.classList.add("done");
+  }).catch(function(){ var tx=document.getElementById("scanText"); if(tx) tx.textContent="Your search runs automatically on a schedule."; });
+}
+loadDashScan();
+fetch("/api/compass/saved").then(function(r){return r.json();}).then(function(d){
+  var t=document.getElementById("savedTile"); if(t) t.textContent=((d&&d.urls&&d.urls.length)||0);
+}).catch(function(){});
 
-/* Find new jobs — friendly progress readout */
+/* Find new jobs — reload the live feed and refresh the real readout. */
 var refreshBtn=document.getElementById("refreshBtn");
 var scanStatus=document.getElementById("scanStatus"), scanText=document.getElementById("scanText");
 refreshBtn.addEventListener("click", function(){
   refreshBtn.disabled=true; scanStatus.classList.remove("done");
   refreshBtn.querySelector("svg").animate([{transform:"rotate(0)"},{transform:"rotate(360deg)"}],{duration:700,iterations:3});
-  var steps=["Checking 68 job sources for you…","Reading new postings across media, tech & finance…","Matching each one to your résumé…"];
-  var i=0; scanText.innerHTML=steps[0];
-  var iv=setInterval(function(){
-    i++;
-    if(i<steps.length){ scanText.innerHTML=steps[i]; }
-    else { clearInterval(iv); scanStatus.classList.add("done");
-      scanText.innerHTML="<b>Found 3 new roles.</b> Updated just now — see them in Jobs";
-      refreshBtn.disabled=false; toast("Found 3 new roles", "success"); }
-  }, 900);
+  scanText.textContent="Checking your latest search results…";
+  loadDashScan();
+  setTimeout(function(){ refreshBtn.disabled=false; toast("Feed up to date","success"); }, 700);
 });
 </script>
   <script src="js/wire.js"></script>
