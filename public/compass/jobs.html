@@ -423,7 +423,8 @@
             <div class="right">
               <select class="select" id="sort" aria-label="Sort by">
                 <option value="best" selected>Sort: Best match</option>
-                <option value="new">Sort: Newest</option>
+                <option value="found">Sort: Newest (found)</option>
+                <option value="posted">Sort: Newest (posted)</option>
                 <option value="salary">Sort: Salary</option>
               </select>
             </div>
@@ -592,7 +593,7 @@ var JOBS = [
 
 /* Iteration 6 — "still open?" liveness: most roles Open, a couple no longer accepting */
 var CLOSED_JOBS = {j11:true, j14:true};   /* Disney (Studio FP&A) & Live Nation (Touring) filled */
-JOBS.forEach(function(j){ j.open = !CLOSED_JOBS[j.id]; });
+JOBS.forEach(function(j){ j.open = !CLOSED_JOBS[j.id]; if(j.postedAge==null){ j.postedAge = j.age + (j.id.charCodeAt(1)%6) + 1; } });
 
 /* tag taxonomy (order = display order in filter menus) */
 var CATS  = ["Media & Entertainment","Tech","Crypto","Consumer","Fintech"];
@@ -714,7 +715,8 @@ function matches(j){
 function render(){
   var rows=JOBS.filter(matches);
   if(state.sort==="best") rows.sort(function(a,b){ return b.fit-a.fit; });
-  else if(state.sort==="new") rows.sort(function(a,b){ return a.age-b.age; });
+  else if(state.sort==="found"||state.sort==="new") rows.sort(function(a,b){ return a.age-b.age; });
+  else if(state.sort==="posted") rows.sort(function(a,b){ return (a.postedAge!=null?a.postedAge:a.age)-(b.postedAge!=null?b.postedAge:b.age); });
   else if(state.sort==="salary") rows.sort(function(a,b){ return (b.salMax||0)-(a.salMax||0); });
 
   document.getElementById("list").innerHTML = rows.map(cardHTML).join("");
@@ -993,7 +995,7 @@ var segTabs = initTabs(document.querySelector(".seg"), {
 /* reflect the full state object into every control (used on load + when filters change elsewhere) */
 function applyControls(){
   document.getElementById("q").value=state.q;
-  document.getElementById("sort").value=state.sort;
+  document.getElementById("sort").value=(state.sort==="new"?"found":state.sort);
   salLow.value=state.salLow; salHigh.value=state.salHigh; paintSlider();
   document.getElementById("salUnknown").checked=state.showUnknown;
   document.querySelectorAll(".chip[data-work]").forEach(function(c){ c.classList.toggle("on", state.works.indexOf(c.getAttribute("data-work"))>=0); });
