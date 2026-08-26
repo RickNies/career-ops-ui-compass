@@ -1364,6 +1364,57 @@
       (s.why ? '<div style="font:14px/1.55 system-ui;color:#3a3428">' + esc(s.why) + '</div>' : '') +
       '</div></div>';
   }
+  // ---- View-only diff highlight (tailored résumé vs baseline cv.md) ----
+  // Highlights live ONLY in the on-screen DOM; Copy/Download always use the clean
+  // section text (hidden textarea) / raw markdown, never the highlighted markup.
+  var __cvBaseline = null;
+  function loadCvBaseline() {
+    if (__cvBaseline) return Promise.resolve(__cvBaseline);
+    return jGet('/api/cv').then(function (d) {
+      var md = (d && d.markdown) || '';
+      var lines = md.split('\n').map(diffNormLine).filter(Boolean);
+      var set = {}; lines.forEach(function (l) { set[l] = 1; });
+      __cvBaseline = { set: set, lineTokens: lines.map(diffTokens) };
+      return __cvBaseline;
+    }).catch(function () { __cvBaseline = { set: {}, lineTokens: [] }; return __cvBaseline; });
+  }
+  function diffNormLine(s) { return String(s || '').toLowerCase().replace(/^[\s>*+\-•–—\d.)]+/, '').replace(/[*_`#]/g, '').replace(/\s+/g, ' ').trim(); }
+  function diffTokens(s) { return diffNormLine(s).split(' ').filter(Boolean); }
+  function diffNormWord(w) { return String(w || '').toLowerCase().replace(/[^a-z0-9%$.]/g, ''); }
+  // Apply / remove highlights on the rendered blocks inside `root` (a container).
+  function applyDiffHighlight(root, on, base) {
+    var blocks = root.querySelectorAll('.lib-md li, .lib-md p, .lib-md h3');
+    blocks.forEach(function (el) {
+      if (el.__diffOrig == null) el.__diffOrig = el.innerHTML; // stash the clean render once
+      // always start from the clean render
+      el.innerHTML = el.__diffOrig;
+      el.style.borderLeft = ''; el.style.paddingLeft = ''; el.style.background = ''; el.style.borderRadius = '';
+      if (!on) return;
+      var n = diffNormLine(el.textContent);
+      if (!n || base.set[n]) return; // empty or unchanged (verbatim in baseline)
+      // find the closest baseline line by token overlap for a word-level diff
+      var elTok = diffTokens(el.textContent), best = null, bestScore = 0;
+      for (var i = 0; i < base.lineTokens.length; i++) {
+        var bt = base.lineTokens[i]; if (!bt.length) continue;
+        var bset = {}; bt.forEach(function (t) { bset[t] = 1; });
+        var hit = 0; elTok.forEach(function (t) { if (bset[t]) hit++; });
+        var score = hit / Math.max(elTok.length, 1);
+        if (score > bestScore) { bestScore = score; best = bset; }
+      }
+      el.style.borderLeft = '3px solid #ffb300'; el.style.paddingLeft = '8px'; el.style.background = '#fffdf0'; el.style.borderRadius = '4px';
+      if (best && bestScore >= 0.4) {
+        // reworded line — highlight only the words not present in the matched baseline line
+        var parts = el.textContent.split(/(\s+)/);
+        el.innerHTML = parts.map(function (w) {
+          if (!w || /^\s+$/.test(w)) return esc(w);
+          return best[diffNormWord(w)] ? esc(w) : '<span style="background:#ffe89e;border-radius:3px">' + esc(w) + '</span>';
+        }).join('');
+      } else {
+        // new/heavily-changed line — highlight the whole thing
+        el.innerHTML = '<span style="background:#ffe89e;border-radius:3px">' + el.__diffOrig + '</span>';
+      }
+    });
+  }
   function renderWorkspace(container, md, type) {
     md = String(md || '');
     if (!md.trim()) { container.innerHTML = '<div style="padding:16px;color:#8a8172;font:14px system-ui">(empty result)</div>'; return; }
@@ -1382,8 +1433,9 @@
     bar.appendChild(toc); bar.appendChild(dls);
     container.appendChild(bar);
     // ── FULL-WIDTH CONTENT below: Copy all, then the sections ──
-    var copyRow = el('div', 'margin-bottom:14px');
-    copyRow.innerHTML = '<button class="btn btn--primary btn--sm" data-a="copyall" type="button">Copy all</button>';
+    var copyRow = el('div', 'margin-bottom:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap');
+    copyRow.innerHTML = '<button class="btn btn--primary btn--sm" data-a="copyall" type="button">Copy all</button>' +
+      (type === 'tailor' ? '<button class="btn btn--outline btn--sm" data-a="showdiff" type="button" aria-pressed="false">Show changes</button><span data-diffhint style="font:12px system-ui;color:#b0a790"></span>' : '');
     container.appendChild(copyRow);
     var col = el('div', 'max-width:100%');
     var api = [];
@@ -1406,6 +1458,24 @@
     copyRow.querySelector('[data-a=copyall]').onclick = function () { var all = api.map(function (s) { return (s.title ? s.title + '\n' + '-'.repeat(Math.min(44, (s.title || '').length || 3)) + '\n' : '') + s.get(); }).join('\n\n'); copyText(all, this); };
     dls.querySelector('[data-a=docx]').onclick = function () { libDownloadDocx(md, type); };
     dls.querySelector('[data-a=md]').onclick = function () { downloadText(md, (DOC_LABEL[type] || 'document').replace(/\s+/g, '-').toLowerCase() + '.md', 'text/markdown'); };
+    // View-only diff highlight vs baseline cv.md (tailor only). Copy/Download above
+    // stay clean — they read ta.value / md, never this highlighted DOM.
+    var diffBtn = copyRow.querySelector('[data-a=showdiff]');
+    if (diffBtn) {
+      var diffOn = false, hint = copyRow.querySelector('[data-diffhint]');
+      diffBtn.onclick = function () {
+        diffOn = !diffOn;
+        diffBtn.textContent = diffOn ? 'Hide changes' : 'Show changes';
+        diffBtn.setAttribute('aria-pressed', String(diffOn));
+        if (!diffOn) { applyDiffHighlight(col, false, { set: {}, lineTokens: [] }); hint.textContent = ''; return; }
+        hint.textContent = 'comparing to your résumé…';
+        loadCvBaseline().then(function (base) {
+          applyDiffHighlight(col, true, base);
+          var n = col.querySelectorAll('.lib-md [style*="ffe89e"]').length;
+          hint.textContent = n ? 'highlighting tailored changes vs your résumé' : 'no line-level changes detected';
+        });
+      };
+    }
   }
   function libPoll(id, container, type, token) {
     var t = setInterval(function () {
