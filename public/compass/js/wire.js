@@ -323,32 +323,40 @@
 
   // ======================= JOBS ============================================
   var PAGE_SIZE = 50;
-  // Fit-score dual-range slider (0–100) — reuses the mockup's salary .range
-  // component — + a "Saved only" toggle on the Jobs feed.
+  // Fit-score filter as a DROPDOWN (.ms popover) sitting next to the salary
+  // adjuster — mirrors the salary control's trigger-pill + .ms-menu pattern and
+  // reuses the same dual-range .range slider. Plus a "Saved only" toggle.
   var FIT_GAP = 5;
   function ensureScoreBar() {
-    var cnt = document.getElementById('count'); if (!cnt) return;
-    var bar = document.getElementById('compassScoreBar');
-    if (!bar) {
-      bar = document.createElement('div'); bar.id = 'compassScoreBar';
-      bar.style.cssText = 'display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin:10px 0 2px';
-      bar.innerHTML =
-        '<div style="display:flex;align-items:center;gap:11px">' +
-        '<span style="font:700 10.5px system-ui;letter-spacing:.05em;text-transform:uppercase;color:#b0a790">Fit score</span>' +
-        '<div class="range" id="fitRange" style="width:210px" aria-label="Fit score range">' +
+    ensureFitDropdown();
+    ensureSavedToggle();
+  }
+  function ensureFitDropdown() {
+    var salMs = document.getElementById('salMs');
+    var fitMs = document.getElementById('fitMs');
+    if (!fitMs) {
+      if (!salMs || !salMs.parentNode || typeof window.Pop === 'undefined') return; // filter bar not ready
+      fitMs = document.createElement('div'); fitMs.className = 'ms'; fitMs.id = 'fitMs';
+      fitMs.innerHTML =
+        '<button class="ms-trigger" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="fitPanel">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><circle cx="12" cy="12" r="9"/><path d="M12 12l4-2.5"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>' +
+        '<span id="fitPill">Any fit</span>' +
+        '<svg class="cv" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg></button>' +
+        '<div class="ms-menu sal-menu" id="fitPanel" role="group" aria-label="Filter by fit score" hidden>' +
+        '<span class="sv-lab">Fit score /100</span>' +
+        '<div class="range" aria-label="Fit score range">' +
         '<div class="range-track"></div><div class="range-fill" id="fitFill"></div>' +
         '<input type="range" id="fitLow" min="0" max="100" step="5" value="0" aria-label="Minimum fit score">' +
-        '<input type="range" id="fitHigh" min="0" max="100" step="5" value="100" aria-label="Maximum fit score">' +
-        '</div>' +
-        '<span id="fitVals" style="font:600 13px system-ui;color:#16324F;white-space:nowrap;min-width:52px">0–100</span></div>' +
-        '<span style="width:1px;height:18px;background:#e6ddc9"></span>' +
-        '<button type="button" id="cscoreSaved" style="display:inline-flex;align-items:center;gap:6px;border:1px solid #e6ddc9;border-radius:999px;padding:5px 12px;font:600 12px system-ui;cursor:pointer;background:#fff;color:#2a3b4d"><span style="color:#B5623B">♥</span> Saved only</button>';
-      (cnt.parentNode || cnt).insertBefore(bar, cnt.nextSibling);
-      var fitLow = bar.querySelector('#fitLow'), fitHigh = bar.querySelector('#fitHigh'), fill = bar.querySelector('#fitFill'), vals = bar.querySelector('#fitVals');
+        '<input type="range" id="fitHigh" min="0" max="100" step="5" value="100" aria-label="Maximum fit score"></div>' +
+        '<span class="sal-vals" id="fitVals">0 – 100</span>' +
+        '<div class="sal-done-row"><button type="button" class="btn btn--primary btn--sm" id="fitDone">Done</button></div></div>';
+      salMs.parentNode.insertBefore(fitMs, salMs.nextSibling); // sit right after salary
+      var fitLow = fitMs.querySelector('#fitLow'), fitHigh = fitMs.querySelector('#fitHigh'), fill = fitMs.querySelector('#fitFill'), vals = fitMs.querySelector('#fitVals'), pill = fitMs.querySelector('#fitPill');
       function paint() {
         var a = +fitLow.value, b = +fitHigh.value;
         fill.style.left = a + '%'; fill.style.right = (100 - b) + '%';
-        vals.textContent = a + '–' + b;
+        vals.textContent = a + ' – ' + b;
+        pill.textContent = (a <= 0 && b >= 100) ? 'Any fit' : (a + '–' + b);
         if (b <= FIT_GAP * 2) { fitHigh.style.zIndex = 6; fitLow.style.zIndex = 5; }
         else if (a >= 100 - FIT_GAP * 2) { fitLow.style.zIndex = 6; fitHigh.style.zIndex = 5; }
         fitLow.setAttribute('aria-valuetext', a + ' out of 100'); fitHigh.setAttribute('aria-valuetext', b + ' out of 100');
@@ -368,18 +376,29 @@
       }
       fitLow.addEventListener('input', onSlide);
       fitHigh.addEventListener('input', onSlide);
-      bar.__paint = paint;
-      bar.querySelector('#cscoreSaved').onclick = function () {
-        window.__compassSavedOnly = !window.__compassSavedOnly;
-        try { localStorage.setItem('compass_savedonly', window.__compassSavedOnly ? '1' : '0'); } catch (e) {}
-        window.__compassShown = PAGE_SIZE; compassRender();
-      };
+      fitMs.querySelector('#fitDone').onclick = function () { try { window.Pop.close(fitMs, true); } catch (e) {} };
+      fitMs.__paint = paint;
+      try { window.Pop.init(fitMs); } catch (e) {}
     }
-    // Sync slider handles to the persisted band each render (idempotent).
-    var fl = bar.querySelector('#fitLow'), fh = bar.querySelector('#fitHigh');
-    if (fl && fh) { var bnd = window.__scoreBand; fl.value = bnd ? bnd.min : 0; fh.value = bnd ? bnd.max : 100; if (bar.__paint) bar.__paint(); }
-    var sv = bar.querySelector('#cscoreSaved');
-    if (sv) { var so = !!window.__compassSavedOnly; sv.style.background = so ? '#ffb300' : '#fff'; sv.style.color = so ? '#3a2600' : '#2a3b4d'; sv.style.borderColor = so ? '#ffb300' : '#e6ddc9'; }
+    // Sync handles + pill to the persisted band each render (idempotent).
+    var fl = fitMs.querySelector('#fitLow'), fh = fitMs.querySelector('#fitHigh');
+    if (fl && fh) { var bnd = window.__scoreBand; fl.value = bnd ? bnd.min : 0; fh.value = bnd ? bnd.max : 100; if (fitMs.__paint) fitMs.__paint(); }
+  }
+  function ensureSavedToggle() {
+    var cnt = document.getElementById('count'); if (!cnt) return;
+    var sv = document.getElementById('compassSavedOnly');
+    if (!sv) {
+      sv = document.createElement('label'); sv.id = 'compassSavedOnly';
+      sv.style.cssText = 'display:inline-flex;align-items:center;gap:7px;margin-left:14px;font:13px system-ui;color:#6b6255;cursor:pointer;vertical-align:middle';
+      sv.innerHTML = '<input type="checkbox"' + (window.__compassSavedOnly ? ' checked' : '') + ' style="accent-color:#B5623B;width:15px;height:15px"><span><span style="color:#B5623B">♥</span> Saved only</span>';
+      (cnt.parentNode || cnt).insertBefore(sv, cnt.nextSibling);
+      sv.querySelector('input').addEventListener('change', function () {
+        window.__compassSavedOnly = this.checked;
+        try { localStorage.setItem('compass_savedonly', this.checked ? '1' : '0'); } catch (e) {}
+        window.__compassShown = PAGE_SIZE; compassRender();
+      });
+    }
+    var cb = sv.querySelector('input'); if (cb) cb.checked = !!window.__compassSavedOnly;
   }
   // "Show low-fit" toggle on the Jobs feed — hidden by default, reveals Pass-scored jobs.
   function ensureLowFitToggle(lowHidden) {
