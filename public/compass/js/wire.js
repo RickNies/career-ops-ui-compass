@@ -542,6 +542,12 @@
       '</div>';
   }
   function wireDash() {
+    // Time-of-day greeting from the current LOCAL hour.
+    var h = new Date().getHours();
+    var greet = h < 12 ? 'Good morning' : (h < 17 ? 'Good afternoon' : 'Good evening');
+    var hi = Array.prototype.filter.call(document.querySelectorAll('h1'), function (n) { return /good\s+(morning|afternoon|evening)/i.test(n.textContent); })[0];
+    if (hi) hi.textContent = greet + ', Nicole';
+    wireRunsPanel(); // real per-loop last-run times on the dashboard
     Promise.all([jGet('/api/dashboard'), jGet('/api/tracker')]).then(function (arr) {
       var d = arr[0] || {}, t = arr[1] || {};
       var live = ((t.rows) || []).filter(function (r) { return !isDead(r.url); });
@@ -1272,10 +1278,24 @@
         if (!h) { h = document.createElement('div'); h.id = 'compassRunsMeta'; var hint = card.querySelector('.hint'); if (hint) hint.parentNode.insertBefore(h, hint.nextSibling); else runs.parentNode.insertBefore(h, runs); }
         h.innerHTML = 'Last new jobs added: <b>' + esc(r.lastNew.date) + '</b> · ' + (+r.lastNew.count || 0) + ' new';
       }
-      var order = ['scan', 'scrape', 'discover', 'linkedin']; // matches the 4 run-rows in DOM order
-      runs.querySelectorAll('.run-row').forEach(function (row, i) {
+      // Map each row to its pipeline by MATCHING THE ROW LABEL (robust to row
+      // count/order) rather than by a fixed positional index.
+      var logs = (r && r.logs) || {};
+      function logKeyForLabel(txt) {
+        var t = String(txt || '').toLowerCase();
+        if (/job-?site|company|career page|career-page/.test(t)) return 'scan';
+        if (/deep|board|scrape/.test(t)) return 'scrape';
+        if (/web discovery|discover/.test(t)) return 'discover';
+        if (/linkedin/.test(t)) return 'linkedin';
+        if (/liveness|still open|still-open|open\?/.test(t)) return 'liveness';
+        if (/\bfit\b|score/.test(t)) return 'fitscore';
+        return null;
+      }
+      runs.querySelectorAll('.run-row').forEach(function (row) {
         var stt = row.querySelector('.run-status'); if (!stt) return;
-        var iso = r && r.logs && r.logs[order[i]];
+        var label = (row.querySelector('.run-t') || {}).textContent || row.textContent;
+        var key = logKeyForLabel(label);
+        var iso = key && logs[key];
         if (iso) stt.innerHTML = '<span class="badge badge--live"><span class="tk"></span>Last ran ' + esc(fmtRan(iso)) + '</span>';
         else stt.innerHTML = '<span style="font:11px system-ui;color:#b0a790">on schedule</span>';
       });
