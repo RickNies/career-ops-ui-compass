@@ -975,7 +975,10 @@
     if (!anchor || !anchor.parentNode) return;
     var wrap = document.getElementById('compassTailoredList');
     if (!wrap) { wrap = document.createElement('section'); wrap.id = 'compassTailoredList'; wrap.style.cssText = 'margin:0 0 16px'; anchor.parentNode.insertBefore(wrap, anchor.nextSibling); }
-    wrap.innerHTML = '<div style="font:700 11px system-ui;letter-spacing:.05em;text-transform:uppercase;color:#b0a790;margin:0 0 7px">Already tailored</div><div id="compassTailoredRows" style="font:13px system-ui;color:#8a8172">Loading…</div>';
+    wrap.innerHTML =
+      '<div style="display:flex;align-items:center;gap:10px;margin:0 0 8px"><div style="flex:1;font:700 11px system-ui;letter-spacing:.05em;text-transform:uppercase;color:#b0a790">Your tailored roles</div>' +
+      '<a href="library.html?type=tailor" style="font:600 11.5px system-ui;color:#2f6f5b;text-decoration:none">See all in Library →</a></div>' +
+      '<div id="compassTailoredBody" style="font:13px system-ui;color:#8a8172">Loading…</div>';
     Promise.all([jGet('/api/compass/jobs'), jGet('/api/tracker')]).then(function (arr) {
       var jobs = ((arr[0] && arr[0].jobs) || []).filter(function (j) { return j.type === 'tailor' && j.status === 'done'; });
       var rows = (arr[1] && arr[1].rows) || [];
@@ -993,20 +996,41 @@
         var ent = { company: company, role: role, num: num, url: url, created: j.finished || j.created };
         var prev = byKey[key]; if (!prev || String(ent.created) > String(prev.created)) byKey[key] = ent;
       });
-      var list = Object.keys(byKey).map(function (k) { return byKey[k]; }).sort(function (a, b) { return String(b.created).localeCompare(String(a.created)); }).slice(0, 12);
-      var rowsEl = document.getElementById('compassTailoredRows');
-      if (!rowsEl) return;
-      if (!list.length) { rowsEl.innerHTML = '<div style="padding:12px 14px;background:#fff;border:1px dashed #e6ddc9;border-radius:10px;color:#8a8172">No tailored résumés yet — pick a job above to start.</div>'; return; }
-      rowsEl.innerHTML = list.map(function (e) {
-        var slug = jobSlug({ company: e.company, role: e.role, num: e.num });
+      var list = Object.keys(byKey).map(function (k) { return byKey[k]; }).sort(function (a, b) { return String(b.created).localeCompare(String(a.created)); });
+      var bodyEl = document.getElementById('compassTailoredBody');
+      if (!bodyEl) return;
+      if (!list.length) { bodyEl.innerHTML = '<div style="padding:12px 14px;background:#fff;border:1px dashed #e6ddc9;border-radius:10px;color:#8a8172">No tailored résumés yet — pick a job above to start.</div>'; return; }
+      function slugFor(e) { return jobSlug({ company: e.company, role: e.role, num: e.num }); }
+      // Recent (3–5) as one-click chips + a compact search-select for the rest.
+      var recent = list.slice(0, 5);
+      var chips = recent.map(function (e) {
         var f = fitFor(e.url);
-        var dt = e.created ? new Date(e.created).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
-        return '<a href="documents.html?job=' + encodeURIComponent(slug) + '" style="display:flex;align-items:center;gap:10px;text-decoration:none;background:#fff;border:1px solid #ece5d6;border-radius:10px;padding:8px 12px;margin-bottom:6px">' +
-          '<span style="flex:1;min-width:0"><span style="display:block;font:600 13px system-ui;color:#16324F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(e.company || '—') + ' · ' + esc(e.role || '') + '</span>' +
-          '<span style="font:11.5px system-ui;color:#8a8172">tailored ' + esc(dt) + '</span></span>' +
-          (f && typeof f.score === 'number' ? '<span style="flex:none;font:600 12px system-ui;color:#16324F">' + f.score + '<span style="font-size:9px;color:#b0a790">/100</span></span>' : '') +
-          '<span style="flex:none;color:#b0a790;font-size:15px">→</span></a>';
+        return '<a href="documents.html?job=' + encodeURIComponent(slugFor(e)) + '" title="' + esc((e.company || '') + ' · ' + (e.role || '')) + '" style="display:inline-flex;align-items:center;gap:7px;max-width:280px;text-decoration:none;background:#fff;border:1px solid #ece5d6;border-radius:999px;padding:6px 12px;font:600 12.5px system-ui;color:#16324F">' +
+          '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(e.company || '—') + ' · ' + esc(e.role || '') + '</span>' +
+          (f && typeof f.score === 'number' ? '<span style="flex:none;color:#8a8172;font:600 10.5px system-ui">' + f.score + '</span>' : '') + '</a>';
       }).join('');
+      bodyEl.innerHTML =
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">' + chips + '</div>' +
+        '<div style="position:relative;max-width:460px">' +
+        '<input id="tailoredJump" type="search" autocomplete="off" placeholder="Jump to a tailored role…" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid #d8cdb8;border-radius:9px;font:13.5px system-ui">' +
+        '<div id="tailoredJumpResults" style="display:none;position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:40;background:#fff;border:1px solid #e6ddc9;border-radius:11px;box-shadow:0 8px 28px rgba(22,50,79,.14);padding:8px;max-height:320px;overflow:auto"></div></div>';
+      var jump = bodyEl.querySelector('#tailoredJump');
+      var jres = bodyEl.querySelector('#tailoredJumpResults');
+      function renderJump(q) {
+        var qq = (q || '').trim().toLowerCase();
+        var m = list.filter(function (e) { return !qq || ((e.company || '') + ' ' + (e.role || '')).toLowerCase().indexOf(qq) >= 0; }).slice(0, 12);
+        if (!m.length) { jres.innerHTML = '<div style="padding:10px 12px;color:#8a8172;font:13px system-ui">No matching tailored role.</div>'; return; }
+        jres.innerHTML = m.map(function (e) {
+          var f = fitFor(e.url); var dt = e.created ? new Date(e.created).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+          return '<a href="documents.html?job=' + encodeURIComponent(slugFor(e)) + '" style="display:flex;gap:10px;align-items:center;text-decoration:none;border-radius:8px;padding:8px 10px">' +
+            '<span style="flex:1;min-width:0"><span style="display:block;font:600 13px system-ui;color:#16324F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(e.company || '—') + ' · ' + esc(e.role || '') + '</span>' +
+            '<span style="font:11.5px system-ui;color:#8a8172">tailored ' + esc(dt) + '</span></span>' +
+            (f && typeof f.score === 'number' ? '<span style="flex:none;font:600 12px system-ui;color:#16324F">' + f.score + '<span style="font-size:9px;color:#b0a790">/100</span></span>' : '') + '</a>';
+        }).join('');
+      }
+      jump.addEventListener('focus', function () { renderJump(jump.value); jres.style.display = 'block'; });
+      jump.addEventListener('input', function () { renderJump(jump.value); jres.style.display = 'block'; });
+      document.addEventListener('click', function (e) { if (jres.style.display !== 'none' && !wrap.contains(e.target)) jres.style.display = 'none'; }, true);
     }).catch(function () { });
   }
   function wireDocs() {
