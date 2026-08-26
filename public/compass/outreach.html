@@ -136,67 +136,15 @@
 
   <main class="wrap">
     <a class="back" href="job-detail.html"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>Back to job</a>
+    <!-- LIVE DATA — no demo contacts. js/wire.js (wireOutreach) replaces this
+         with a real job picker (search your tracker) + an AI networking plan
+         (POST /api/networking/plan) and your saved plans (/api/networking/plans).
+         No fabricated people or messages ship in the page source. -->
     <div class="page-head">
-      <h1>Find a contact at Horizon Media</h1>
-      <div class="sub">People who could help your application stand out — pick one and we'll draft a short, warm message you can send.</div>
+      <h1>Find people to reach out to</h1>
+      <div class="sub">Pick a role from your tracker and we'll build a networking plan with real LinkedIn searches for the people who can help.</div>
     </div>
-
-    <div class="grid">
-      <div class="panel">
-        <h2>Suggested contacts</h2>
-        <div class="ph">Ordered by how likely they are to respond, based on role and shared connections.</div>
-
-        <div class="contact selected">
-          <div class="pic">MR</div>
-          <div class="info">
-            <div class="nm">Marcus Reyes</div>
-            <div class="rl">SVP, Finance · Horizon Media</div>
-            <span class="badge badge--warm"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Warm — likely the hiring manager</span>
-          </div>
-          <button class="pick">Selected</button>
-        </div>
-
-        <div class="contact">
-          <div class="pic">JL</div>
-          <div class="info">
-            <div class="nm">Jenna Liu</div>
-            <div class="rl">Director, Talent Acquisition · Horizon Media</div>
-            <span class="badge badge--warm"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Warm — recruits for finance roles</span>
-          </div>
-          <button class="pick">Pick</button>
-        </div>
-
-        <div class="contact">
-          <div class="pic">DA</div>
-          <div class="info">
-            <div class="nm">David Ahn</div>
-            <div class="rl">Finance Manager · Horizon Media</div>
-            <span class="badge badge--cool"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>Both went to NYU Stern</span>
-          </div>
-          <button class="pick">Pick</button>
-        </div>
-      </div>
-
-      <aside class="rail">
-        <div class="msg-card">
-          <h2>Your message</h2>
-          <div class="msg-to">To <b>Marcus Reyes</b>, SVP Finance</div>
-
-          <div class="via">
-            <div class="seg on">LinkedIn note</div>
-            <div class="seg">Email</div>
-          </div>
-
-          <div class="msg">Hi Marcus, I just applied for the Director, Finance Business Manager role on your team. I've spent the last six years leading content finance at Warner Bros. Discovery, and Horizon's client-partnership model is exactly the kind of work I'm looking to bring my FP&A experience to. Would you be open to a brief chat? I'd value your perspective on the team.</div>
-
-          <div class="actions">
-            <button class="btn btn--outline regen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v5h-5"/></svg>Rewrite</button>
-            <button class="btn btn--primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 4h9l3 3v13H8z"/><path d="M6 8H4v12h11"/></svg>Copy</button>
-          </div>
-          <p class="note">Keep it short and specific. Mentioning that you've already applied and naming one genuine reason you're interested gets the best response.</p>
-        </div>
-      </aside>
-    </div>
+    <div class="ph" id="outreachLoading">Loading your tracker…</div>
   </main>
   <script src="js/wire.js"></script>
 </body>
