@@ -164,6 +164,9 @@
     return ['#6b6255', '#eee9de'];
   }
   function verdictPill(v) { var c = verdictColors(v); return '<span style="display:inline-block;padding:2px 10px;border-radius:999px;background:' + c[1] + ';color:' + c[0] + ';font:700 11px system-ui;white-space:nowrap">' + esc(v) + '</span>'; }
+  // Low-fit = an AI "Pass"/weak verdict. Unscored jobs are NOT low-fit (they pass through).
+  function isLowFit(j) { return /pass|weak|poor/i.test(String(j && j.verdict || '')); }
+  window.__compassShowLowFit = (function () { try { return localStorage.getItem('compass_showlowfit') === '1'; } catch (e) { return false; } })();
 
   // Active-provider cache (one GET per page load) so LLM progress copy is honest:
   // Claude/cloud = fast; hermes = local + "can take a few minutes".
@@ -276,6 +279,25 @@
 
   // ======================= JOBS ============================================
   var PAGE_SIZE = 50;
+  // "Show low-fit" toggle on the Jobs feed — hidden by default, reveals Pass-scored jobs.
+  function ensureLowFitToggle(lowHidden) {
+    var cnt = document.getElementById('count'); if (!cnt) return;
+    var wrap = document.getElementById('compassLowFit');
+    if (!wrap) {
+      wrap = document.createElement('label'); wrap.id = 'compassLowFit';
+      wrap.style.cssText = 'display:inline-flex;align-items:center;gap:7px;margin-left:14px;font:13px system-ui;color:#6b6255;cursor:pointer;vertical-align:middle';
+      wrap.innerHTML = '<input type="checkbox"' + (window.__compassShowLowFit ? ' checked' : '') + ' style="accent-color:#ffb300;width:15px;height:15px"><span class="lff-lbl"></span>';
+      (cnt.parentNode || cnt).insertBefore(wrap, cnt.nextSibling);
+      wrap.querySelector('input').addEventListener('change', function () {
+        window.__compassShowLowFit = this.checked;
+        try { localStorage.setItem('compass_showlowfit', this.checked ? '1' : '0'); } catch (e) {}
+        window.__compassShown = PAGE_SIZE;
+        compassRender();
+      });
+    }
+    var lbl = wrap.querySelector('.lff-lbl');
+    if (lbl) lbl.textContent = window.__compassShowLowFit ? 'Showing low-fit' : ('Show low-fit' + (lowHidden ? ' (' + lowHidden + ')' : ''));
+  }
   function compassRender() {
     if (!window.JOBS || typeof window.matches !== 'function' || typeof window.cardHTML !== 'function') return;
     var all = window.JOBS.filter(window.matches);
@@ -290,7 +312,16 @@
     if (list) list.innerHTML = all.slice(0, shown).map(window.cardHTML).join('');
     var empty = document.getElementById('empty'); if (empty) empty.style.display = all.length ? 'none' : 'block';
     var cnt = document.getElementById('count');
+    // How many low-fit (Pass) jobs are currently hidden by the toggle (they pass all
+    // OTHER filters). Count by momentarily enabling the flag so matches() includes them.
+    var lowHidden = 0;
+    if (!window.__compassShowLowFit && typeof window.matches === 'function') {
+      window.__compassShowLowFit = true;
+      lowHidden = window.JOBS.filter(function (j) { return isLowFit(j) && window.matches(j); }).length;
+      window.__compassShowLowFit = false;
+    }
     if (cnt) cnt.innerHTML = 'Showing <b>' + shown + '</b> of <b>' + all.length + '</b> matching · ' + window.JOBS.length + ' live jobs loaded';
+    ensureLowFitToggle(lowHidden);
     var mb = document.getElementById('compassMore');
     if (!mb && list) { mb = document.createElement('div'); mb.id = 'compassMore'; mb.style.cssText = 'text-align:center;margin:16px 0 90px'; list.parentNode.insertBefore(mb, list.nextSibling); }
     if (mb) {
@@ -407,7 +438,7 @@
         var baseMatches = window.matches;
         // The mockup's own salary slider (state.salLow/High + "show no-salary") runs
         // inside baseMatches and already passes unknown-salary rows through by default.
-        window.matches = function (j) { if (!baseMatches(j)) return false; if (COMP_FLOOR && j.salMax != null && j.salMax < COMP_FLOOR) return false; return true; };
+        window.matches = function (j) { if (!baseMatches(j)) return false; if (COMP_FLOOR && j.salMax != null && j.salMax < COMP_FLOOR) return false; if (!window.__compassShowLowFit && isLowFit(j)) return false; return true; };
         window.__compassMatchesWrapped = true;
       }
 
