@@ -227,8 +227,42 @@
   function ensureHeaderStyles() {
     if (document.getElementById('compassHeaderStyles')) return;
     var st = document.createElement('style'); st.id = 'compassHeaderStyles';
-    st.textContent = '.topbar-in{max-width:1320px !important;margin-left:auto !important;margin-right:auto !important;padding-left:22px !important;padding-right:22px !important}';
+    st.textContent = '.topbar-in{max-width:1320px !important;margin-left:auto !important;margin-right:auto !important;padding-left:22px !important;padding-right:22px !important}'
+      // ---- Light Mango accent nods (mango-orange #ffb300 + leaf-green #7bbf6a) ----
+      + '.brand img{width:26px;height:26px;display:block}'
+      + '.nav a.active{background:#ffb300 !important;color:#3a2600 !important}'
+      + '.btn--primary,.btn.apply{background:#ffb300 !important;border-color:#ffb300 !important;color:#3a2600 !important;box-shadow:0 1px 2px rgba(0,0,0,.06)}'
+      + '.btn--primary:hover,.btn.apply:hover{background:#f0a500 !important;border-color:#f0a500 !important}'
+      // leaf-green nod on the still-open / live badge
+      + '.badge--live{background:#eaf5e6 !important;color:#3f7a2e !important}'
+      + '.badge--live .tk{background:#7bbf6a !important}'
+      // subtle Mango footer on every page
+      + '#mangoFooter{text-align:center;padding:26px 16px 40px;color:#b0a790;font:13px/1.5 system-ui;-webkit-user-select:none;user-select:none}'
+      + '#mangoFooter .h{color:#e0645a}';
     document.head.appendChild(st);
+  }
+  // Rebrand chrome shared by every compass page: mascot wordmark, favicon, footer.
+  function injectMangoChrome() {
+    document.title = 'Mango Jobs';
+    if (!document.querySelector('link[rel="icon"]')) {
+      var ic = document.createElement('link'); ic.rel = 'icon'; ic.href = '/compass/img/mascot.svg';
+      document.head.appendChild(ic);
+    }
+    // Header wordmark: mascot + "Mango Jobs" (keep .brand layout/position).
+    var brand = document.querySelector('.brand');
+    if (brand && !brand.querySelector('img')) {
+      var svg = brand.querySelector('svg'); if (svg) svg.remove();
+      var span = brand.querySelector('span'); if (span) span.textContent = 'Mango Jobs';
+      var img = document.createElement('img');
+      img.src = '/compass/img/mascot.svg'; img.alt = 'Mango Jobs'; img.width = 26; img.height = 26;
+      brand.insertBefore(img, brand.firstChild);
+    }
+    // Footer on every page.
+    if (!document.getElementById('mangoFooter')) {
+      var f = document.createElement('footer'); f.id = 'mangoFooter';
+      f.innerHTML = 'Made with <span class="h">♥</span> for Nicole';
+      document.body.appendChild(f);
+    }
   }
   function renderNav() {
     ensureHeaderStyles();
@@ -1598,6 +1632,7 @@
   // ======================= dispatch ========================================
   Promise.all([loadDead(), loadProvider(), loadFit(), loadSalary()]).then(function () {
     renderNav();
+    injectMangoChrome();
     injectActivity();
     watchJobs(); setInterval(watchJobs, 6000);   // global watcher on every page
     if (page === 'jobs.html') wireJobs();

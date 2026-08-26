@@ -1,0 +1,54 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Cute dog biting a mango">
+  <defs>
+    <linearGradient id="mango" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffd24a"/>
+      <stop offset="0.6" stop-color="#ff9f1c"/>
+      <stop offset="1" stop-color="#ff7b2c"/>
+    </linearGradient>
+    <linearGradient id="fur" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f6cd9b"/>
+      <stop offset="1" stop-color="#e3ac6e"/>
+    </linearGradient>
+    <radialGradient id="cheek" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ff9aa2" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#ff9aa2" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- soft background blob -->
+  <circle cx="100" cy="100" r="96" fill="#fff4e0"/>
+
+  <!-- ears -->
+  <ellipse cx="44" cy="92" rx="24" ry="38" fill="#c98b4f" transform="rotate(-18 44 92)"/>
+  <ellipse cx="156" cy="92" rx="24" ry="38" fill="#c98b4f" transform="rotate(18 156 92)"/>
+
+  <!-- head -->
+  <circle cx="100" cy="92" r="58" fill="url(#fur)"/>
+
+  <!-- cheeks -->
+  <circle cx="62" cy="104" r="16" fill="url(#cheek)"/>
+  <circle cx="138" cy="104" r="16" fill="url(#cheek)"/>
+
+  <!-- eyes -->
+  <circle cx="80" cy="84" r="9" fill="#3b2a1a"/>
+  <circle cx="120" cy="84" r="9" fill="#3b2a1a"/>
+  <circle cx="83" cy="81" r="3" fill="#fff"/>
+  <circle cx="123" cy="81" r="3" fill="#fff"/>
+
+  <!-- muzzle -->
+  <ellipse cx="100" cy="116" rx="30" ry="24" fill="#fbe6c8"/>
+  <!-- nose -->
+  <ellipse cx="100" cy="104" rx="9" ry="6.5" fill="#3b2a1a"/>
+
+  <!-- mango held in mouth -->
+  <g transform="rotate(-8 100 138)">
+    <ellipse cx="100" cy="140" rx="34" ry="24" fill="url(#mango)"/>
+    <ellipse cx="88" cy="132" rx="9" ry="6" fill="#fff" opacity="0.45"/>
+    <!-- little leaf -->
+    <path d="M128 124 q14 -10 22 -2 q-10 8 -22 6 z" fill="#7bbf6a"/>
+  </g>
+
+  <!-- bite marks (mouth corners over the mango) -->
+  <path d="M74 126 q8 8 18 7" stroke="#d98324" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M126 126 q-8 8 -18 7" stroke="#d98324" stroke-width="3" fill="none" stroke-linecap="round"/>
+</svg>
