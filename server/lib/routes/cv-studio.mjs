@@ -176,6 +176,25 @@ export function registerCvStudioRoutes(app) {
   // file writes. Returns the tailored résumé + a short "what changed & why" note.
   app.post('/api/cv-studio/tailor', llmRateLimit, async (req, res) => {
     const body = (req.body && typeof req.body === 'object') ? req.body : {};
+    // Prompt-override: if the caller supplies a `prompt`, run it VERBATIM instead
+    // of rebuilding from jd/ctx. This is what the Tailoring page's editable prompt
+    // uses — what you see in the textarea is exactly what runs.
+    const override = (typeof body.prompt === 'string' ? body.prompt : '').trim();
+    if (override) {
+      if (override.length < 40) {
+        return res.status(400).json({ error: 'prompt too short — paste or keep the assembled tailoring prompt (~40+ characters)' });
+      }
+      if (!body.run) {
+        return res.json({ mode: 'manual', prompt: override, message: 'Set { run: true } to run this exact prompt, or copy it into any LLM.' });
+      }
+      const rr = await runActiveProvider(override);
+      if (rr.mode === 'too-large') {
+        return res.status(413).json({ error: 'prompt too large', details: [`prompt is ${rr.size} bytes; soft cap is ${rr.cap}.`] });
+      }
+      if (rr.mode === 'manual') return res.json({ mode: 'manual', prompt: override, message: 'No provider available — copy this prompt into any LLM.' });
+      if (rr.error) return res.status(502).json({ mode: rr.mode, prompt: override, error: rr.error });
+      return res.json({ mode: rr.mode, prompt: override, markdown: cleanLlmMarkdown(rr.markdown), usage: rr.usage });
+    }
     const jd = (typeof body.jd === 'string' ? body.jd : '').slice(0, MAX_JD).trim();
     if (!jd || jd.length < 40) {
       return res.status(400).json({ error: 'paste the target job description (~40+ characters) to tailor against' });

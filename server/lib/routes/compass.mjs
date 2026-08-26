@@ -160,7 +160,10 @@ function bodyForJob(job) {
   if (job.type === 'networking') return { company: job.company, role: job.role, jd: job.jd || '', run: true };
   if (job.type === 'evaluate') return { jd: job.jd || '', save: false };
   if (job.type === 'cover') return { jd: job.jd || '', company: job.company, role: job.role, run: true }; // → /api/mode/cover
-  return { jd: job.jd || '', headline: job.role || '', run: true }; // tailor → /api/cv-studio/tailor
+  // tailor → /api/cv-studio/tailor. A verbatim prompt override (from the Tailoring
+  // page's editable prompt) runs as-is; otherwise the endpoint rebuilds from jd.
+  if (job.prompt) return { prompt: job.prompt, run: true };
+  return { jd: job.jd || '', headline: job.role || '', run: true };
 }
 async function runJob(job) {
   if (job.status === 'cancelled') return; // cancelled while queued → skip entirely
@@ -381,6 +384,7 @@ export function registerCompassRoutes(app) {
       company: String(b.company || '').slice(0, 200), role: String(b.role || '').slice(0, 200),
       url: String(b.url || '').trim(), jobNum: b.jobNum != null ? String(b.jobNum) : null,
       jd: b.jd ? String(b.jd).slice(0, 20000) : '',
+      prompt: (type === 'tailor' && b.prompt) ? String(b.prompt).slice(0, 40000) : '',
       status: 'queued', provider: null, model: null,
       created: new Date().toISOString(), started: null, finished: null,
       artifactPath: null, bytes: 0, error: null,

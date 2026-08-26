@@ -733,6 +733,59 @@
     };
     loadVersions();
   }
+  // --- Tailor panel: editable/copyable assembled prompt + Generate here ---
+  function setupTailorPanel(panelSel) {
+    var panel = document.querySelector(panelSel); if (!panel) return;
+    var job = getCurrentJob();
+    var company = job ? (job.company || '') : '', role = job ? (job.role || job.title || '') : '', url = job ? (job.url || '') : '';
+    panel.innerHTML =
+      '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px">' +
+      '<div style="flex:1;min-width:0"><div style="font-family:var(--serif,Georgia);font-weight:600;font-size:18px;color:#16324F">Tailored résumé</div>' +
+      '<div style="font:12.5px system-ui;color:#8a8172">' + (company ? esc(company) + (role ? ' · ' + esc(role) : '') : 'Pick a job above') + ' · running on ' + esc(llmDesc()) + '</div></div></div>' +
+      '<details class="tailor-prompt" style="' + CARD + ';margin:8px 0 12px" open>' +
+        '<summary style="cursor:pointer;list-style:none;padding:12px 16px;font:600 13.5px system-ui;color:#16324F;display:flex;justify-content:space-between;align-items:center">The tailoring prompt<span style="font:400 12px system-ui;color:#b0a790">edit before running ▾</span></summary>' +
+        '<div style="padding:0 16px 14px">' +
+        '<div style="font:12px system-ui;color:#8a8172;margin-bottom:6px">This is the exact prompt — your résumé + this job + the surgical instructions. Edit it, copy it, or generate right here. What you see is what runs.</div>' +
+        '<textarea id="tailorPromptTa" spellcheck="false" style="width:100%;min-height:200px;box-sizing:border-box;padding:11px 12px;border:1px solid #d8cdb8;border-radius:10px;font:12.5px/1.5 ui-monospace,Menlo,monospace;resize:vertical" placeholder="Assembling the prompt…"></textarea>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">' +
+          '<button class="btn btn--outline btn--sm" id="tailorCopyBtn" type="button">Copy prompt</button>' +
+          '<button class="btn btn--outline btn--sm" id="tailorReassemble" type="button">Reset prompt</button>' +
+          '<button class="btn btn--primary btn--sm" id="tailorGenBtn" type="button">Generate here</button>' +
+        '</div></div></details>' +
+      '<div class="compass-doc-out" style="margin-top:10px"></div>';
+    var ta = panel.querySelector('#tailorPromptTa');
+    var out = panel.querySelector('.compass-doc-out');
+    function assemble() {
+      ta.value = ''; ta.placeholder = 'Assembling the prompt…';
+      var jdP = url ? jGet('/api/pipeline/preview?url=' + encodeURIComponent(url)).then(function (p) { return (p && p.text) || ''; }).catch(function () { return ''; }) : Promise.resolve('');
+      jdP.then(function (jd) {
+        if (!jd || jd.length < 40) jd = (role || 'Finance role') + ' at ' + (company || 'the company') + '. Responsibilities include FP&A, budgeting, forecasting, and business partnering.';
+        jPost('/api/cv-studio/tailor', { jd: jd, headline: role, run: false }).then(function (r) {
+          if (r.body && r.body.prompt) ta.value = r.body.prompt;
+          else ta.placeholder = 'Could not assemble the prompt (' + ((r.body && r.body.error) || r.status) + ')';
+        });
+      });
+    }
+    function loadVersions(selectId) {
+      jGet('/api/compass/jobs').then(function (d) {
+        var vs = ((d && d.jobs) || []).filter(function (j) { return j.type === 'tailor' && j.status === 'done' && docMatch(j, company, role); }).sort(function (a, b) { return String(a.created).localeCompare(String(b.created)); });
+        renderVersioned(out, 'tailor', vs, selectId);
+      });
+    }
+    panel.querySelector('#tailorCopyBtn').onclick = function () { var b = this; navigator.clipboard.writeText(ta.value || '').then(function () { var o = b.textContent; b.textContent = 'Copied ✓'; setTimeout(function () { b.textContent = o; }, 1400); }); };
+    panel.querySelector('#tailorReassemble').onclick = function () { assemble(); };
+    panel.querySelector('#tailorGenBtn').onclick = function () {
+      var prompt = (ta.value || '').trim();
+      if (prompt.length < 40) { toastMsg('The prompt is empty — reset it first', 'info'); return; }
+      out.innerHTML = docSpinner(llmProgress('Tailoring'));
+      startJob({ type: 'tailor', company: company, role: role, url: url, prompt: prompt }, null,
+        function (j) { toastMsg('Résumé ready', 'success'); loadVersions(j.id); },
+        function (err) { out.innerHTML = '<div style="padding:16px;background:#f7ece7;border:1px solid #e6c9bb;border-radius:10px;color:#9c5231;font:13.5px system-ui">Generation failed: ' + esc(err) + '</div>'; });
+    };
+    loadVersions();
+    assemble();
+  }
+
   // --- Tailoring job picker: search her tracker jobs by title/company ---
   var __trackerRows = null;
   function loadTrackerRows() {
@@ -793,10 +846,10 @@
   function wireDocs() {
     buildTailoringHeader(function () {
       // Re-point both panels at the newly picked job.
-      setupDocPanel('#panelTailor', 'tailor', 'Tailor your résumé');
+      setupTailorPanel('#panelTailor');
       setupDocPanel('#panelCover', 'cover', 'Generate cover letter');
     });
-    setupDocPanel('#panelTailor', 'tailor', 'Tailor your résumé');
+    setupTailorPanel('#panelTailor');
     setupDocPanel('#panelCover', 'cover', 'Generate cover letter');
     // Focused workspace: land on the Tailor tab (unless a specific hash targets another).
     if (!location.hash || location.hash === '#tailor') { var tt = document.getElementById('tabTailor'); if (tt) tt.click(); }
