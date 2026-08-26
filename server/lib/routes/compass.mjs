@@ -310,6 +310,38 @@ export function registerCompassRoutes(app) {
     res.json({ map, count: Object.keys(map).length });
   });
 
+  // Real "where your search runs" data: newest scan date + how many jobs landed
+  // that day (from data/scan-history.tsv), and genuine last-ran times from the
+  // cron log mtimes. Cheap: one file read + a few stat()s. No fabricated "ran today".
+  app.get('/api/compass/runs', (_req, res) => {
+    const out = { ok: true, lastNew: null, logs: {} };
+    try {
+      const tsv = readFileSync(DATA_ROOT + '/data/scan-history.tsv', 'utf8');
+      const dayCount = {};
+      let maxDate = '';
+      tsv.split('\n').forEach((ln) => {
+        const d = ln.split('\t')[0];
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
+        dayCount[d] = (dayCount[d] || 0) + 1;
+        if (d > maxDate) maxDate = d;
+      });
+      if (maxDate) out.lastNew = { date: maxDate, count: dayCount[maxDate] || 0 };
+    } catch { /* no scan-history yet */ }
+    // Genuine last-ran timestamps from cron log mtimes (real, per pipeline).
+    const LOGS = {
+      scan: '/tmp/career-ops-scan.log',
+      scrape: '/tmp/career-ops-scrape.log',
+      discover: '/tmp/career-ops-discover.log',
+      linkedin: '/tmp/career-ops-linkedin.log',
+      liveness: '/tmp/career-ops-liveness.out.log',
+      fitscore: '/tmp/career-ops-fitscore.out.log',
+    };
+    for (const [k, p] of Object.entries(LOGS)) {
+      try { out.logs[k] = statSync(p).mtime.toISOString(); } catch { /* missing */ }
+    }
+    res.json(out);
+  });
+
   // ── Liveness: trigger a bounded sweep (default 100 URLs). The daily launchd
   //    agent (com.nick.career-ops-liveness) does the full staggered sweep. ──
   app.post('/api/compass/liveness/refresh', (req, res) => {

@@ -1084,8 +1084,42 @@
     sectionHelp(wrap);
   }
 
+  // Compact the mockup's "Where your search runs" panel + replace the fake
+  // "Ran today ✓" badges with REAL last-run times (cron log mtimes) and a real
+  // "last new jobs added" line, from GET /api/compass/runs.
+  function fmtRan(iso) {
+    if (!iso) return '';
+    var d = new Date(iso), now = new Date(), t = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    if (d.toDateString() === now.toDateString()) return 'today ' + t;
+    if (d.toDateString() === new Date(now.getTime() - 864e5).toDateString()) return 'yesterday ' + t;
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + t;
+  }
+  function wireRunsPanel() {
+    var runs = document.querySelector('.runs'); if (!runs) return;
+    var card = runs.closest('.card') || runs.parentNode;
+    if (!document.getElementById('compassRunsCompact')) {
+      var st = document.createElement('style'); st.id = 'compassRunsCompact';
+      st.textContent = '.runs .run-row{padding:7px 0 !important}.runs .run-t{font-size:13px !important}.runs .run-d{font-size:11.5px !important}.runs .run-sched{font-size:11.5px !important;color:#8a8172}.runs .run-status .badge{font-size:10.5px !important;padding:2px 8px !important}#compassRunsMeta{font:12px system-ui;color:#6b6255;margin:2px 0 10px}';
+      document.head.appendChild(st);
+    }
+    jGet('/api/compass/runs').then(function (r) {
+      if (r && r.lastNew) {
+        var h = document.getElementById('compassRunsMeta');
+        if (!h) { h = document.createElement('div'); h.id = 'compassRunsMeta'; var hint = card.querySelector('.hint'); if (hint) hint.parentNode.insertBefore(h, hint.nextSibling); else runs.parentNode.insertBefore(h, runs); }
+        h.innerHTML = 'Last new jobs added: <b>' + esc(r.lastNew.date) + '</b> · ' + (+r.lastNew.count || 0) + ' new';
+      }
+      var order = ['scan', 'scrape', 'discover', 'linkedin']; // matches the 4 run-rows in DOM order
+      runs.querySelectorAll('.run-row').forEach(function (row, i) {
+        var stt = row.querySelector('.run-status'); if (!stt) return;
+        var iso = r && r.logs && r.logs[order[i]];
+        if (iso) stt.innerHTML = '<span class="badge badge--live"><span class="tk"></span>Last ran ' + esc(fmtRan(iso)) + '</span>';
+        else stt.innerHTML = '<span style="font:11px system-ui;color:#b0a790">on schedule</span>';
+      });
+    }).catch(function () { });
+  }
   function wireSetup() {
     buildNativeSetup();
+    wireRunsPanel();
     var btn = document.getElementById('saveBtn');
     if (btn) btn.addEventListener('click', function () {
       var settings = { includeTitles: (window.includeTitles || []).slice(), excludeTitles: (window.excludeTitles || []).slice(), searchTerms: (window.searchTerms || []).slice(), cities: (window.cities || []).map(function (c) { return c && c.name ? c.name : c; }), remoteUS: !!window.remoteUS };

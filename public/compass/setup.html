@@ -600,6 +600,17 @@ function toast(msg, type){
 var SKEY="compass_setup";
 function load(){ try{ return JSON.parse(localStorage.getItem(SKEY)||"null"); }catch(e){ return null; } }
 function save(o){ localStorage.setItem(SKEY, JSON.stringify(o)); }
+/* Persist the current filter/search state to compass_setup on every add/remove so
+   changes (esp. Extra phrases / searchTerms) survive a refresh — not only on Save. */
+function persist(){
+  try{
+    var o = load() || {};
+    o.roles=roles; o.floor=floor; o.works=works;
+    o.includeTitles=includeTitles; o.excludeTitles=excludeTitles;
+    o.searchTerms=searchTerms; o.cities=cities; o.companies=companies; o.remoteUS=remoteUS;
+    save(o);
+  }catch(e){}
+}
 
 var DEFAULT_ROLES=["Director, FP&A","Content / Media Finance","Strategic Finance","Finance Business Partner","Sr Manager, FP&A"];
 /* Iteration 6 — defaults mirror portals.yml (title_filter, locations, tracked_companies, discovery queries) */
@@ -666,12 +677,12 @@ function renderRoles(){
     var el=document.createElement("span");
     el.className="rchip";
     el.innerHTML=esc(r)+'<button type="button" aria-label="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></button>';
-    el.querySelector("button").onclick=function(){ roles=roles.filter(function(x){return x!==r;}); renderRoles(); };
+    el.querySelector("button").onclick=function(){ roles=roles.filter(function(x){return x!==r;}); persist(); renderRoles(); };
     roleChips.insertBefore(el, addLabel);
   });
 }
 roleInput.addEventListener("keydown", function(e){
-  if(e.key==="Enter" && roleInput.value.trim()){ roles.push(roleInput.value.trim()); roleInput.value=""; renderRoles(); }
+  if(e.key==="Enter" && roleInput.value.trim()){ roles.push(roleInput.value.trim()); roleInput.value=""; persist(); renderRoles(); }
 });
 renderRoles();
 
@@ -686,13 +697,13 @@ function makeChipList(containerId, inputId, getArr, variant){
       var el=document.createElement("span");
       el.className="rchip "+variant;
       el.innerHTML=esc(v)+'<button type="button" aria-label="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></button>';
-      el.querySelector("button").onclick=function(){ var a=getArr(); var i=a.indexOf(v); if(i>=0) a.splice(i,1); render(); };
+      el.querySelector("button").onclick=function(){ var a=getArr(); var i=a.indexOf(v); if(i>=0) a.splice(i,1); persist(); render(); };
       container.insertBefore(el, addLabel);
     });
     if(window.pvRefresh) window.pvRefresh();
   }
   input.addEventListener("keydown", function(e){
-    if(e.key==="Enter" && input.value.trim()){ var a=getArr(); if(a.indexOf(input.value.trim())<0) a.push(input.value.trim()); input.value=""; render(); }
+    if(e.key==="Enter" && input.value.trim()){ var a=getArr(); if(a.indexOf(input.value.trim())<0) a.push(input.value.trim()); input.value=""; persist(); render(); }
   });
   render();
   return render;
@@ -714,16 +725,16 @@ function renderCities(){
     '</div>';
   }).join("");
   locList.querySelectorAll(".pin-toggle").forEach(function(b){
-    b.onclick=function(){ var i=+b.getAttribute("data-i"); cities.forEach(function(c,j){ c.priority=(j===i); }); renderCities(); };
+    b.onclick=function(){ var i=+b.getAttribute("data-i"); cities.forEach(function(c,j){ c.priority=(j===i); }); persist(); renderCities(); };
   });
   locList.querySelectorAll(".rm-city").forEach(function(b){
-    b.onclick=function(){ var i=+b.getAttribute("data-i"); var wasPri=cities[i].priority; cities.splice(i,1); if(wasPri && cities.length) cities[0].priority=true; renderCities(); };
+    b.onclick=function(){ var i=+b.getAttribute("data-i"); var wasPri=cities[i].priority; cities.splice(i,1); if(wasPri && cities.length) cities[0].priority=true; persist(); renderCities(); };
   });
   if(window.pvRefresh) window.pvRefresh();
 }
 renderCities();
 var cityInput=document.getElementById("cityInput");
-function addCity(){ var v=cityInput.value.trim(); if(v){ cities.push({name:v, priority:cities.length===0}); cityInput.value=""; renderCities(); } }
+function addCity(){ var v=cityInput.value.trim(); if(v){ cities.push({name:v, priority:cities.length===0}); cityInput.value=""; persist(); renderCities(); } }
 document.getElementById("cityAdd").onclick=addCity;
 cityInput.addEventListener("keydown", function(e){ if(e.key==="Enter") addCity(); });
 
@@ -731,7 +742,7 @@ cityInput.addEventListener("keydown", function(e){ if(e.key==="Enter") addCity()
 var swRemote=document.getElementById("swRemote");
 function paintRemote(){ swRemote.classList.toggle("on", !!remoteUS); swRemote.setAttribute("aria-checked", remoteUS?"true":"false"); if(window.pvRefresh) window.pvRefresh(); }
 paintRemote();
-swRemote.onclick=function(){ remoteUS=!remoteUS; paintRemote(); };
+swRemote.onclick=function(){ remoteUS=!remoteUS; persist(); paintRemote(); };
 
 /* ---- Iteration 6: companies to watch (logos + add/remove) ---- */
 var coList=document.getElementById("coList"), coInput=document.getElementById("coInput");
@@ -747,12 +758,12 @@ function renderCompanies(){
     '</div>';
   }).join("");
   coList.querySelectorAll(".rm").forEach(function(b){
-    b.onclick=function(){ companies.splice(+b.getAttribute("data-i"),1); renderCompanies(); };
+    b.onclick=function(){ companies.splice(+b.getAttribute("data-i"),1); persist(); renderCompanies(); };
   });
   if(window.pvRefresh) window.pvRefresh();
 }
 renderCompanies();
-function addCompany(){ var v=coInput.value.trim(); if(v){ companies.push({name:v, domain:domainFor(v), mono:monoFor(v), color:"#16324F"}); coInput.value=""; renderCompanies(); } }
+function addCompany(){ var v=coInput.value.trim(); if(v){ companies.push({name:v, domain:domainFor(v), mono:monoFor(v), color:"#16324F"}); coInput.value=""; persist(); renderCompanies(); } }
 document.getElementById("coAdd").onclick=addCompany;
 coInput.addEventListener("keydown", function(e){ if(e.key==="Enter") addCompany(); });
 
@@ -776,7 +787,7 @@ function paintFloor(){
   floorEl.setAttribute("aria-valuetext", "$"+v+"K"+plus);   /* announce dollars, not raw number */
 }
 floorEl.value=floor; paintFloor();
-floorEl.addEventListener("input", function(){ floor=+floorEl.value; paintFloor(); });
+floorEl.addEventListener("input", function(){ floor=+floorEl.value; persist(); paintFloor(); });
 
 /* ---- work types ---- */
 document.querySelectorAll(".wt").forEach(function(b){
