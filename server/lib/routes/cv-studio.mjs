@@ -125,6 +125,15 @@ const TAILOR_INSTRUCTIONS = [
   '',
   'Use ONLY the candidate materials in <project_context> and the JD below.',
   '',
+  '## Grounding (critical)',
+  'Base every edit STRICTLY on the job description below. Do NOT assume or invent',
+  "the company's industry, business model, or type (e.g. do not call it an 'agency',",
+  "'studio', 'startup', 'media company', etc.) unless the JD explicitly states it.",
+  'If the job description is missing, thin, or unreadable (boilerplate, navigation,',
+  'or CSS/markup rather than a real posting), DO NOT fabricate a tailored résumé —',
+  'say you could not read the posting and to open the original link to verify, and',
+  'return the résumé unchanged.',
+  '',
 ].join('\n');
 
 /** Build the SURGICAL résumé-tailoring prompt (résumé only — no cover letter).

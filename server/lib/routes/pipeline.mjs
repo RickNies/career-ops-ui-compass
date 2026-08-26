@@ -21,6 +21,90 @@ import { withFileLock } from '../file-lock.mjs';
 
 const PREVIEW_TIMEOUT_MS = 15_000;
 const PREVIEW_MAX_BODY_BYTES = 8000;
+// Raw HTML budget for extraction — big enough to reach JSON-LD / JobPosting that
+// often sits deep in the document (e.g. Ashby embeds it past 40 KB).
+const PREVIEW_RAW_BUDGET = 1_500_000;
+
+// ── JD extraction: pull the REAL job description out of a fetched HTML page ──
+// Priority: (a) JSON-LD JobPosting.description, (b) og:description / meta
+// description if substantial, (c) cleaned <body> text with <script>/<style> and
+// CSS-in-JS/styled-components noise removed. A junk guard rejects CSS/markup
+// shells (anti-bot challenges, JS-only boards) so we never return garbage.
+function decodeEntities(s) {
+  return String(s || '')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'").replace(/&nbsp;/g, ' ')
+    .replace(/&#(\d+);/g, (_, n) => { try { return String.fromCharCode(+n); } catch { return ' '; } })
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => { try { return String.fromCharCode(parseInt(n, 16)); } catch { return ' '; } })
+    .replace(/&[a-z]+;/gi, ' ');
+}
+function htmlToText(html) {
+  return decodeEntities(String(html || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<li[^>]*>/gi, '\n- ')
+    .replace(/<\/(p|div|li|h[1-6]|section|article|ul|ol|tr)>/gi, '\n')
+    .replace(/<br\s*\/?>(?=)/gi, '\n')
+    .replace(/<[^>]+>/g, ' '))
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+// Remove styled-components / CSS-in-JS leftovers that slip past <style> stripping.
+function stripCssNoise(s) {
+  return String(s || '')
+    .replace(/\/\*![\s\S]*?\*\//g, ' ')                                   // /*!sc*/ markers
+    .replace(/data-styled[.\w-]*\[[^\]]*\]\s*\{[^{}]*\}/g, ' ')           // data-styled.gN[id=...]{...}
+    .replace(/[.#][-\w]+(?:\s*[,>+~]\s*[.#:\[\]"'=\w-]+)*\s*\{[^{}]*\}/g, ' ') // .class{...} rules
+    .replace(/@[-\w]+[^{]*\{[^{}]*\}/g, ' ')                              // @media/@font-face blocks
+    .replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+}
+// Junk guard: is this text actually a readable posting, not a CSS/JS shell?
+function looksReadable(s) {
+  s = String(s || '');
+  if (s.length < 40) return false;
+  if (/\/\*!sc\*\/|data-styled|awsWafCookie|gokuProps|__NEXT_DATA__|enable JavaScript|are you a (human|robot)/i.test(s)) return false;
+  const words = s.match(/[A-Za-z][A-Za-z'-]{1,}/g) || [];
+  if (words.length < 18) return false;                     // essentially empty extraction
+  const braces = (s.match(/[{};]/g) || []).length;
+  if (braces > s.length * 0.03) return false;              // CSS/code-heavy
+  const spaces = (s.match(/\s/g) || []).length;
+  if (spaces / s.length < 0.08) return false;              // minified-looking junk
+  return true;
+}
+function extractJobDescription(html) {
+  html = String(html || '');
+  // (a) JSON-LD JobPosting.description
+  const blocks = [...html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)];
+  for (const b of blocks) {
+    let parsed = null;
+    try { parsed = JSON.parse(b[1].trim()); }
+    catch { try { parsed = JSON.parse(b[1].trim().replace(/,\s*([}\]])/g, '$1')); } catch { /* skip */ } }
+    if (!parsed) continue;
+    const arr = Array.isArray(parsed) ? parsed
+      : (parsed['@graph'] && Array.isArray(parsed['@graph']) ? parsed['@graph'] : [parsed]);
+    for (const o of arr) {
+      const t = o && o['@type'];
+      const isJob = t && (Array.isArray(t) ? t.some((x) => /JobPosting/i.test(x)) : /JobPosting/i.test(t));
+      if (isJob && o.description) {
+        const txt = htmlToText(o.description);
+        if (txt && txt.length >= 80) return { text: txt, source: 'jsonld' };
+      }
+    }
+  }
+  // og:description / meta description
+  const ogM = html.match(/<meta[^>]+property=["']og:description["'][^>]*content=["']([\s\S]*?)["']/i)
+    || html.match(/<meta[^>]+name=["']description["'][^>]*content=["']([\s\S]*?)["']/i);
+  const ogTxt = ogM ? decodeEntities(ogM[1]).replace(/\s+/g, ' ').trim() : '';
+  // (c) cleaned body
+  const bodyTxt = stripCssNoise(htmlToText(html));
+  // Prefer a rich, readable body; then a substantial og; then a shorter readable body.
+  if (bodyTxt && looksReadable(bodyTxt) && bodyTxt.length >= 600) return { text: bodyTxt, source: 'body' };
+  if (ogTxt && ogTxt.length >= 120) return { text: ogTxt, source: 'og' };
+  if (bodyTxt && looksReadable(bodyTxt)) return { text: bodyTxt, source: 'body' };
+  return { text: '', source: 'none' };
+}
 
 export function registerPipelineRoutes(app) {
   app.get('/api/pipeline', (_req, res) => {
@@ -76,24 +160,24 @@ export function registerPipelineRoutes(app) {
     try {
       const r = await safeGet(url, {
         signal: ctrl.signal,
-        maxBytes: PREVIEW_MAX_BODY_BYTES * 4, // raw HTML budget before strip
-        userAgent: 'Mozilla/5.0 (career-ops-ui preview) AppleWebKit/537.36',
+        maxBytes: PREVIEW_RAW_BUDGET, // raw HTML budget (JSON-LD can sit deep in the page)
+        userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       });
       // Preserve the historical "(HTTP 4xx)" preview text for non-2xx
       // upstreams — the SPA renders this directly in the preview pane.
       if (r.status < 200 || r.status >= 300) {
         return res.json({ status: r.status, text: '(HTTP ' + r.status + ')' });
       }
-      const text = r.text
-        .replace(/<script[\s\S]*?<\/script>/gi, '')
-        .replace(/<style[\s\S]*?<\/style>/gi, '')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/&[a-z]+;/gi, ' ')
-        .replace(/[ \t]+/g, ' ')
-        .replace(/\n\s*\n+/g, '\n\n')
-        .trim()
-        .slice(0, PREVIEW_MAX_BODY_BYTES);
-      res.json({ status: r.status, text });
+      // Extract the REAL job description (JSON-LD → og/meta → cleaned body),
+      // then junk-guard: if it's a CSS/JS shell (anti-bot challenge, JS-only
+      // board), return thin instead of returning garbage the LLM would
+      // hallucinate on. (A Camoufox browser fetch is the future fallback.)
+      const ex = extractJobDescription(r.text);
+      const text = (ex.text || '').slice(0, PREVIEW_MAX_BODY_BYTES);
+      if (!text || !looksReadable(text)) {
+        return res.json({ status: r.status, text: '', thin: true, reason: 'could not read posting (JS-rendered or bot-protected board — open the original to verify)' });
+      }
+      res.json({ status: r.status, text, source: ex.source });
     } catch (e) {
       const msg = e.message || String(e);
       // Map known safeGet errors to user-friendly preview text.

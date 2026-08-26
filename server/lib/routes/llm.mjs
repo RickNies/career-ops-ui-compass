@@ -110,6 +110,18 @@ const SMOKE_JD = 'Smoke test: Senior Backend Engineer with PHP and Go responsibi
 // while flagging clearly when something is off.
 const PROMPT_SIZE_SOFT_CAP = 200 * 1024;
 
+// Junk/thin JD detector — true when the text is a CSS/JS shell or too sparse to
+// be a real posting (so we don't feed the LLM garbage it would hallucinate on).
+function jdUnreadable(s) {
+  s = String(s || '');
+  if (/\/\*!sc\*\/|data-styled|awsWafCookie|gokuProps|enable JavaScript|are you a (human|robot)/i.test(s)) return true;
+  const words = s.match(/[A-Za-z][A-Za-z'-]{1,}/g) || [];
+  if (words.length < 18) return true;                 // essentially empty extraction
+  const braces = (s.match(/[{};]/g) || []).length;
+  if (braces > s.length * 0.03) return true;          // CSS/code-heavy
+  return false;
+}
+
 export function registerLlmRoutes(app) {
   // ─── /api/evaluate ──────────────────────────────────────────────────
   app.post('/api/evaluate', llmRateLimit, async (req, res) => {
@@ -117,6 +129,15 @@ export function registerLlmRoutes(app) {
     const jd = sanitizeJobDescription(rawJd);
     if (!jd || jd.length < 50) {
       return res.status(400).json({ error: 'JD text required (min 50 chars after sanitization)' });
+    }
+    // Grounding guard: refuse to evaluate a thin/unreadable JD (a CSS/JS shell from
+    // a bot-protected or JS-rendered board) — the model would otherwise hallucinate
+    // company facts. Return a clear "couldn't read" state instead of running.
+    if (jdUnreadable(jd)) {
+      return res.json({
+        mode: 'thin', couldNotRead: true,
+        markdown: "## Couldn't read this posting\n\nThe job description couldn't be read automatically — this board looks JS-rendered or bot-protected, so only page scaffolding came through, not the actual posting. No evaluation was run, to avoid inventing company or role details.\n\n**Open the original posting ↗ to read it, or paste the description text in manually and try again.**",
+      });
     }
     const lang = resolveLocale(req);
 

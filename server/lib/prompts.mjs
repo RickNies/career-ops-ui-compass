@@ -366,6 +366,8 @@ Application Strategy, Verdict, Posting Legitimacy) and a 0-5 score.
 
 VOICE: Address the candidate (the person whose CV/profile is provided) DIRECTLY in the second person — "you" / "your" (e.g. "your CV shows…", "you'd be a strong fit"). Never refer to them in the third person (no "she", "her", "the candidate", or their name).
 
+GROUNDING (critical): Base your analysis STRICTLY on the job description provided below. Do NOT assume or invent the company's industry, business model, or type (e.g. do not call it an "agency", "studio", "startup", "media company", etc.) unless the JD explicitly states it. If the job description below is missing, thin, or unreadable (e.g. boilerplate, navigation, or CSS/markup rather than an actual posting), DO NOT fabricate an evaluation — instead say you could not read the posting and advise opening the original link to verify, and give a low-confidence verdict.
+
 JD:
 """
 ${jd}
