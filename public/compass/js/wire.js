@@ -323,45 +323,61 @@
 
   // ======================= JOBS ============================================
   var PAGE_SIZE = 50;
-  // Fit-score range filter (preset bands) + "Saved only" toggle on the Jobs feed.
-  var SCORE_BANDS = [
-    { key: 'all', label: 'All', band: null },
-    { key: '80', label: '80+', band: { min: 80, max: 100 } },
-    { key: '70', label: '70–80', band: { min: 70, max: 79 } },
-    { key: '60', label: '60–70', band: { min: 60, max: 69 } },
-    { key: '40', label: '40–60', band: { min: 40, max: 59 } },
-    { key: 'lt40', label: '<40', band: { min: 0, max: 39 } }
-  ];
+  // Fit-score dual-range slider (0–100) — reuses the mockup's salary .range
+  // component — + a "Saved only" toggle on the Jobs feed.
+  var FIT_GAP = 5;
   function ensureScoreBar() {
     var cnt = document.getElementById('count'); if (!cnt) return;
     var bar = document.getElementById('compassScoreBar');
     if (!bar) {
       bar = document.createElement('div'); bar.id = 'compassScoreBar';
-      bar.style.cssText = 'display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:10px 0 2px';
-      bar.innerHTML = '<span style="font:700 10.5px system-ui;letter-spacing:.05em;text-transform:uppercase;color:#b0a790;margin-right:2px">Fit score</span>' +
-        SCORE_BANDS.map(function (b) { return '<button type="button" class="cscore-chip" data-key="' + b.key + '" style="border:1px solid #e6ddc9;border-radius:999px;padding:4px 11px;font:600 12px system-ui;cursor:pointer;background:#fff;color:#2a3b4d">' + esc(b.label) + '</button>'; }).join('') +
-        '<span style="width:1px;height:18px;background:#e6ddc9;margin:0 4px"></span>' +
-        '<button type="button" id="cscoreSaved" style="display:inline-flex;align-items:center;gap:6px;border:1px solid #e6ddc9;border-radius:999px;padding:4px 12px;font:600 12px system-ui;cursor:pointer;background:#fff;color:#2a3b4d"><span style="color:#B5623B">♥</span> Saved only</button>';
+      bar.style.cssText = 'display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin:10px 0 2px';
+      bar.innerHTML =
+        '<div style="display:flex;align-items:center;gap:11px">' +
+        '<span style="font:700 10.5px system-ui;letter-spacing:.05em;text-transform:uppercase;color:#b0a790">Fit score</span>' +
+        '<div class="range" id="fitRange" style="width:210px" aria-label="Fit score range">' +
+        '<div class="range-track"></div><div class="range-fill" id="fitFill"></div>' +
+        '<input type="range" id="fitLow" min="0" max="100" step="5" value="0" aria-label="Minimum fit score">' +
+        '<input type="range" id="fitHigh" min="0" max="100" step="5" value="100" aria-label="Maximum fit score">' +
+        '</div>' +
+        '<span id="fitVals" style="font:600 13px system-ui;color:#16324F;white-space:nowrap;min-width:52px">0–100</span></div>' +
+        '<span style="width:1px;height:18px;background:#e6ddc9"></span>' +
+        '<button type="button" id="cscoreSaved" style="display:inline-flex;align-items:center;gap:6px;border:1px solid #e6ddc9;border-radius:999px;padding:5px 12px;font:600 12px system-ui;cursor:pointer;background:#fff;color:#2a3b4d"><span style="color:#B5623B">♥</span> Saved only</button>';
       (cnt.parentNode || cnt).insertBefore(bar, cnt.nextSibling);
-      bar.querySelectorAll('.cscore-chip').forEach(function (chip) {
-        chip.onclick = function () {
-          var found = SCORE_BANDS.filter(function (b) { return b.key === chip.getAttribute('data-key'); })[0];
-          window.__scoreBand = (found && found.band) ? { key: found.key, min: found.band.min, max: found.band.max } : null;
-          try { localStorage.setItem('compass_scoreband', window.__scoreBand ? JSON.stringify(window.__scoreBand) : ''); } catch (e) {}
-          window.__compassShown = PAGE_SIZE; compassRender();
-        };
-      });
+      var fitLow = bar.querySelector('#fitLow'), fitHigh = bar.querySelector('#fitHigh'), fill = bar.querySelector('#fitFill'), vals = bar.querySelector('#fitVals');
+      function paint() {
+        var a = +fitLow.value, b = +fitHigh.value;
+        fill.style.left = a + '%'; fill.style.right = (100 - b) + '%';
+        vals.textContent = a + '–' + b;
+        if (b <= FIT_GAP * 2) { fitHigh.style.zIndex = 6; fitLow.style.zIndex = 5; }
+        else if (a >= 100 - FIT_GAP * 2) { fitLow.style.zIndex = 6; fitHigh.style.zIndex = 5; }
+        fitLow.setAttribute('aria-valuetext', a + ' out of 100'); fitHigh.setAttribute('aria-valuetext', b + ' out of 100');
+      }
+      function commit() {
+        var a = +fitLow.value, b = +fitHigh.value;
+        // Full range 0–100 = no fit filter; any narrowing = explicit band.
+        window.__scoreBand = (a <= 0 && b >= 100) ? null : { min: a, max: b };
+        try { localStorage.setItem('compass_scoreband', window.__scoreBand ? JSON.stringify(window.__scoreBand) : ''); } catch (e) {}
+        window.__compassShown = PAGE_SIZE; compassRender();
+      }
+      function onSlide() {
+        var a = +fitLow.value, b = +fitHigh.value;
+        if (this === fitLow) { if (a > b - FIT_GAP) { a = b - FIT_GAP; fitLow.value = a; } fitLow.style.zIndex = 6; fitHigh.style.zIndex = 5; }
+        else { if (b < a + FIT_GAP) { b = a + FIT_GAP; fitHigh.value = b; } fitHigh.style.zIndex = 6; fitLow.style.zIndex = 5; }
+        paint(); commit();
+      }
+      fitLow.addEventListener('input', onSlide);
+      fitHigh.addEventListener('input', onSlide);
+      bar.__paint = paint;
       bar.querySelector('#cscoreSaved').onclick = function () {
         window.__compassSavedOnly = !window.__compassSavedOnly;
         try { localStorage.setItem('compass_savedonly', window.__compassSavedOnly ? '1' : '0'); } catch (e) {}
         window.__compassShown = PAGE_SIZE; compassRender();
       };
     }
-    var curKey = window.__scoreBand ? window.__scoreBand.key : 'all';
-    bar.querySelectorAll('.cscore-chip').forEach(function (chip) {
-      var on = chip.getAttribute('data-key') === curKey;
-      chip.style.background = on ? '#ffb300' : '#fff'; chip.style.color = on ? '#3a2600' : '#2a3b4d'; chip.style.borderColor = on ? '#ffb300' : '#e6ddc9';
-    });
+    // Sync slider handles to the persisted band each render (idempotent).
+    var fl = bar.querySelector('#fitLow'), fh = bar.querySelector('#fitHigh');
+    if (fl && fh) { var bnd = window.__scoreBand; fl.value = bnd ? bnd.min : 0; fh.value = bnd ? bnd.max : 100; if (bar.__paint) bar.__paint(); }
     var sv = bar.querySelector('#cscoreSaved');
     if (sv) { var so = !!window.__compassSavedOnly; sv.style.background = so ? '#ffb300' : '#fff'; sv.style.color = so ? '#3a2600' : '#2a3b4d'; sv.style.borderColor = so ? '#ffb300' : '#e6ddc9'; }
   }
