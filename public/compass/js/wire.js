@@ -75,10 +75,11 @@
   function jGet(u) { return fetch(u).then(function (r) { return r.json(); }); }
   function jPost(u, b) { return fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(function (r) { return r.json().then(function (j) { return { status: r.status, body: j }; }); }); }
 
+  // Dev-scaffolding narrator bar — retired. No-op so every existing banner(...) call
+  // site is safe; also removes any stray element if one was ever created.
   function banner(msg) {
     var b = document.getElementById('compassWireBanner');
-    if (!b) { b = document.createElement('div'); b.id = 'compassWireBanner'; b.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#16324F;color:#fff;font:600 12.5px/1.4 system-ui,sans-serif;padding:8px 16px;text-align:center;box-shadow:0 -2px 12px rgba(0,0,0,.18)'; document.body.appendChild(b); }
-    b.innerHTML = '🧭 COMPASS FORK (:8100, LIVE on real career-ops data) — ' + esc(msg);
+    if (b && b.parentNode) b.parentNode.removeChild(b);
   }
   function toastMsg(msg, type) { if (window.toast) { try { window.toast(msg, type || 'info'); return; } catch (e) {} } }
 
