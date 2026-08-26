@@ -1379,7 +1379,9 @@
     root.innerHTML =
       '<h1 style="font:700 26px/1.2 var(--serif,Georgia);color:#16324F;margin:6px 0 4px">Find people to reach out to</h1>' +
       '<div style="' + CARD + ';padding:18px 20px;margin-bottom:14px">' +
-      '<label style="' + LBL + '">Pick from your jobs<select id="oJob" style="' + INP + '"><option value="">— manual entry —</option></select></label>' +
+      '<div style="position:relative;margin-bottom:2px"><label style="' + LBL + '">Pick a job — search your tracker</label>' +
+      '<input id="oJobSearch" type="search" autocomplete="off" placeholder="Search by title or company…" style="' + INP + '">' +
+      '<div id="oJobResults" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:40;background:#fff;border:1px solid #e6ddc9;border-radius:11px;box-shadow:0 8px 28px rgba(22,50,79,.14);padding:8px;max-height:300px;overflow:auto"></div></div>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
       '<label style="' + LBL + '">Company<input id="oCompany" type="text" style="' + INP + '"></label>' +
       '<label style="' + LBL + '">Role (optional)<input id="oRole" type="text" style="' + INP + '"></label></div>' +
@@ -1388,26 +1390,45 @@
       '<div id="oSaveBar" style="display:none;margin-bottom:12px"><button class="btn btn--primary btn--sm" id="oSave" type="button">Save this plan</button> <span id="oSaveMsg" style="font:12px system-ui;color:#2f6f5b"></span></div>' +
       '<div id="oOut"></div>' +
       '<div style="' + CARD + ';padding:16px 20px;margin-top:14px"><h3 style="font:600 15px system-ui;color:#16324F;margin:0 0 8px">Saved plans</h3><div id="oSaved" style="font:13px system-ui;color:#6b6255">Loading…</div></div>';
-    var jobsRef = [];
-    jGet('/api/tracker').then(function (d) {
-      jobsRef = ((d && d.rows) || []).filter(function (r) { return !isDead(r.url); }).slice(0, 300);
-      var sel = document.getElementById('oJob');
-      jobsRef.forEach(function (r, i) { var o = document.createElement('option'); o.value = String(i); o.textContent = r.company + ' — ' + r.role; sel.appendChild(o); });
-    });
-    document.getElementById('oJob').onchange = function () {
-      var v = this.value; if (v === '') return;
-      var r = jobsRef[+v]; if (!r) return;
-      document.getElementById('oCompany').value = r.company || '';
-      document.getElementById('oRole').value = r.role || '';
-      this.setAttribute('data-url', r.url || '');
-    };
+    // Job picker — same search-with-dropdown UX as the Tailoring page.
+    var pickedUrl = '';
+    var oSearch = document.getElementById('oJobSearch');
+    var oResults = document.getElementById('oJobResults');
+    function renderOResults(q) {
+      loadTrackerRows().then(function (rows) {
+        var qq = (q || '').trim().toLowerCase();
+        var list = rows.filter(function (r) { return !qq || (String(r.role || '') + ' ' + String(r.company || '')).toLowerCase().indexOf(qq) >= 0; }).slice(0, 12);
+        if (!list.length) { oResults.innerHTML = '<div style="padding:10px 12px;color:#8a8172;font:13px system-ui">No matching tracker jobs.</div>'; return; }
+        oResults.innerHTML = list.map(function (r) {
+          var f = fitFor(r.url);
+          return '<button type="button" class="o-pick-row" data-num="' + esc(String(r.num)) + '" style="display:flex;gap:10px;align-items:center;width:100%;text-align:left;background:#fff;border:1px solid #f0ece2;border-radius:9px;padding:8px 10px;margin-bottom:6px;cursor:pointer">' +
+            '<span style="flex:1;min-width:0"><span style="display:block;font:600 13px system-ui;color:#16324F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(r.role || '(untitled)') + '</span>' +
+            '<span style="display:block;font:12px system-ui;color:#8a8172;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(r.company || '') + (r.location ? ' · ' + esc(r.location) : '') + '</span></span>' +
+            (f && typeof f.score === 'number' ? '<span style="flex:none;font:600 12px system-ui;color:#16324F">' + f.score + '<span style="font-size:9px;color:#b0a790">/100</span></span>' : '') + '</button>';
+        }).join('');
+        oResults.querySelectorAll('.o-pick-row').forEach(function (b) {
+          b.onclick = function () {
+            var r = rows.filter(function (x) { return String(x.num) === b.getAttribute('data-num'); })[0];
+            if (!r) return;
+            document.getElementById('oCompany').value = r.company || '';
+            document.getElementById('oRole').value = r.role || '';
+            pickedUrl = r.url || '';
+            oSearch.value = r.company + (r.role ? ' — ' + r.role : '');
+            oResults.style.display = 'none';
+          };
+        });
+      });
+    }
+    oSearch.addEventListener('focus', function () { renderOResults(oSearch.value); oResults.style.display = 'block'; });
+    oSearch.addEventListener('input', function () { pickedUrl = ''; renderOResults(oSearch.value); oResults.style.display = 'block'; });
+    document.addEventListener('click', function (e) { if (oResults.style.display !== 'none' && e.target !== oSearch && !oResults.contains(e.target)) oResults.style.display = 'none'; }, true);
     var lastPlan = null;
     document.getElementById('oGen').onclick = function () {
       var company = document.getElementById('oCompany').value.trim();
       var role = document.getElementById('oRole').value.trim();
       if (!company) { toastMsg('Enter or pick a company first', 'info'); return; }
       var status = document.getElementById('oStatus');
-      var url = document.getElementById('oJob').getAttribute('data-url') || '';
+      var url = pickedUrl || '';
       status.textContent = 'Started in the background (survives navigation; see the Library). ' + llmProgress('Building your plan');
       startJob({ type: 'networking', company: company, role: role, url: url },
         null,
@@ -1849,44 +1870,87 @@
       jobsL.forEach(function (j) { grp(j.company, j.role).items.push({ kind: 'job', type: j.type, status: j.status, id: j.id, provider: j.provider, model: j.model, error: j.error, created: j.created, url: j.url }); });
       plans.forEach(function (p) { grp('Saved networking plans', '').items.push({ kind: 'net', type: 'networking', status: 'done', name: p.name }); });
       (Array.isArray(reports) ? reports : []).slice(0, 40).forEach(function (r) { var name = r.slug || r.name || r; grp('Saved evaluations', '').items.push({ kind: 'report', type: 'evaluate', status: 'done', name: name }); });
-      if (!order.length) { root.innerHTML = '<div style="font:14px system-ui;color:#8a8172;padding:20px 0">No generated content yet. Generate a tailored CV, cover letter, evaluation, or networking plan (from Documents, a job, or Outreach) and it appears here — even while still running.</div>'; return; }
-      // ── per-JOB card: header (+ View job detail) + labeled sub-groups of ACCORDIONS ──
-      root.innerHTML = order.map(function (k) {
+      if (!order.length) { root.innerHTML = '<div style="font:14px system-ui;color:#8a8172;padding:20px 0">No generated content yet. Generate a tailored CV, cover letter, evaluation, or networking plan (from Tailoring, a job, or Outreach) and it appears here — even while still running.</div>'; return; }
+      // ── TYPE-FIRST sections: Tailored → Networking → the rest → Evaluations ──
+      var SECTIONS = [
+        { key: 'tailored', label: 'Tailored content', match: function (t) { return t === 'tailor'; } },
+        { key: 'networking', label: 'Networking plans', match: function (t) { return t === 'networking'; } },
+        { key: 'rest', label: 'Cover letters & more', match: function (t) { return t !== 'tailor' && t !== 'networking' && t !== 'evaluate'; } },
+        { key: 'evaluations', label: 'Saved evaluations', match: function (t) { return t === 'evaluate'; } }
+      ];
+      function typeAccordions(g, k, matchFn) {
+        var arts = g.items.filter(function (it) { return matchFn(it.type); });
+        if (!arts.length) return '';
+        var byType = {}, torder = [];
+        arts.forEach(function (it) { if (!byType[it.type]) { byType[it.type] = []; torder.push(it.type); } byType[it.type].push(it); });
+        return torder.map(function (t) {
+          var items = byType[t];
+          var anyRun = items.some(function (i) { return i.status === 'running' || i.status === 'queued'; });
+          var anyDone = items.some(function (i) { return i.status === 'done'; });
+          var st = anyRun ? 'running' : (anyDone ? 'done' : 'error');
+          var meta = items.length > 1 ? ' <span style="font-weight:500;color:#8a8172">· ' + items.length + ' versions</span>' : (st !== 'done' ? ' <span style="font-weight:500;color:#8a8172">· ' + esc(st) + '</span>' : '');
+          return '<div class="lib-acc" data-key="' + esc(k) + '" data-type="' + esc(t) + '" style="border:1px solid #e6ddc9;border-radius:12px;margin-bottom:9px;overflow:hidden;background:#fff">' +
+            '<button class="lib-acc-btn" type="button" aria-expanded="false" style="width:100%;display:flex;align-items:center;gap:10px;padding:11px 14px;background:none;border:none;cursor:pointer;font:600 13.5px system-ui;color:#16324F;text-align:left">' +
+            '<span class="chev" style="display:inline-block;transition:transform .18s;color:#b0a790;font-size:11px">▶</span>' +
+            '<span style="width:8px;height:8px;border-radius:50%;background:' + statusDot(st) + ';flex:none"></span>' +
+            '<span style="flex:1">' + esc(DOC_LABEL[t] || t) + meta + '</span></button>' +
+            '<div class="lib-acc-body" hidden style="padding:4px 16px 16px;border-top:1px solid #f3eee1"></div></div>';
+        }).join('');
+      }
+      function jobCard(k, matchFn) {
         var g = groups[k];
+        var accs = typeAccordions(g, k, matchFn);
+        if (!accs) return '';
         var jdates = g.items.map(function (i) { return i.created; }).filter(Boolean).sort();
         var when = jdates.length ? new Date(jdates[jdates.length - 1]).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
-        var note = g.items.some(function (i) { return i.status === 'running' || i.status === 'queued'; }) ? '· generating…' : (g.items.some(function (i) { return i.status === 'error'; }) ? '· needs attention' : '');
         var hasUrl = g.items.some(function (i) { return i.url; });
         var libFit = null; g.items.forEach(function (i) { if (!libFit && i.url) { var f = fitFor(i.url); if (f && typeof f.score === 'number') libFit = f; } });
-        var subs = SUBGROUPS.map(function (sg) {
-          var arts = g.items.filter(function (it) { return subGroupOf(it.type) === sg.key; });
-          if (!arts.length) return '';
-          var byType = {}, torder = [];
-          arts.forEach(function (it) { if (!byType[it.type]) { byType[it.type] = []; torder.push(it.type); } byType[it.type].push(it); });
-          return '<div style="padding:2px 20px 12px">' +
-            '<div style="font:700 10.5px system-ui;letter-spacing:.05em;text-transform:uppercase;color:#b0a790;margin:8px 0 8px">' + esc(sg.label) + '</div>' +
-            torder.map(function (t) {
-              var items = byType[t];
-              var anyRun = items.some(function (i) { return i.status === 'running' || i.status === 'queued'; });
-              var anyDone = items.some(function (i) { return i.status === 'done'; });
-              var st = anyRun ? 'running' : (anyDone ? 'done' : 'error');
-              var meta = items.length > 1 ? ' <span style="font-weight:500;color:#8a8172">· ' + items.length + ' versions</span>' : (st !== 'done' ? ' <span style="font-weight:500;color:#8a8172">· ' + esc(st) + '</span>' : '');
-              return '<div class="lib-acc" data-key="' + esc(k) + '" data-type="' + esc(t) + '" style="border:1px solid #e6ddc9;border-radius:12px;margin-bottom:9px;overflow:hidden;background:#fff">' +
-                '<button class="lib-acc-btn" type="button" aria-expanded="false" style="width:100%;display:flex;align-items:center;gap:10px;padding:11px 14px;background:none;border:none;cursor:pointer;font:600 13.5px system-ui;color:#16324F;text-align:left">' +
-                '<span class="chev" style="display:inline-block;transition:transform .18s;color:#b0a790;font-size:11px">▶</span>' +
-                '<span style="width:8px;height:8px;border-radius:50%;background:' + statusDot(st) + ';flex:none"></span>' +
-                '<span style="flex:1">' + esc(DOC_LABEL[t] || t) + meta + '</span></button>' +
-                '<div class="lib-acc-body" hidden style="padding:4px 16px 16px;border-top:1px solid #f3eee1"></div></div>';
-            }).join('') + '</div>';
-        }).join('');
-        return '<div class="lib-job" style="' + CARD + ';padding:0;margin-bottom:14px;overflow:hidden">' +
-          '<div style="padding:16px 20px 12px;border-bottom:1px solid #f3eee1;display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">' +
-          '<div style="flex:1;min-width:0"><div style="font-family:var(--serif,\'Iowan Old Style\',Georgia,serif);font-weight:600;font-size:17px;color:#16324F">' + esc(g.company) + (g.role ? ' <span style="color:#8a8172;font-weight:500">— ' + esc(g.role) + '</span>' : '') + '</div>' +
-          '<div style="font:12px system-ui;color:#8a8172;margin-top:3px">' + (when ? esc(when) + ' ' : '') + esc(note) + '</div></div>' +
-          (libFit ? '<div style="flex:none;display:flex;align-items:center;gap:8px;padding-top:1px" title="AI fit">' + '<span style="font-family:var(--serif,Georgia);font-weight:600;font-size:19px;color:#16324F">' + libFit.score + '<span style="font-size:11px;color:#8a8172">/100</span></span>' + (libFit.verdict ? verdictPill(libFit.verdict) : '') + '</div>' : '') +
-          '<a class="lib-detail-link" data-key="' + esc(k) + '" href="job-detail.html" title="' + (hasUrl ? 'Open the AI job-detail view for this posting' : 'Open the job-detail view (from the role info)') + '" style="flex:none;font:600 12.5px system-ui;color:#2f6f5b;text-decoration:none;white-space:nowrap;padding-top:2px">View job detail →</a>' +
-          '</div>' + subs + '</div>';
+        return '<div class="lib-job" data-search="' + esc(((g.company || '') + ' ' + (g.role || '')).toLowerCase()) + '" style="' + CARD + ';padding:0;margin-bottom:12px;overflow:hidden">' +
+          '<div style="padding:14px 18px 10px;border-bottom:1px solid #f3eee1;display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">' +
+          '<div style="flex:1;min-width:0"><div style="font-family:var(--serif,\'Iowan Old Style\',Georgia,serif);font-weight:600;font-size:16px;color:#16324F">' + esc(g.company) + (g.role ? ' <span style="color:#8a8172;font-weight:500">— ' + esc(g.role) + '</span>' : '') + '</div>' +
+          '<div style="font:12px system-ui;color:#8a8172;margin-top:2px">' + (when ? esc(when) : '') + '</div></div>' +
+          (libFit ? '<div style="flex:none;display:flex;align-items:center;gap:8px;padding-top:1px" title="AI fit"><span style="font-family:var(--serif,Georgia);font-weight:600;font-size:18px;color:#16324F">' + libFit.score + '<span style="font-size:11px;color:#8a8172">/100</span></span>' + (libFit.verdict ? verdictPill(libFit.verdict) : '') + '</div>' : '') +
+          '<a class="lib-detail-link" data-key="' + esc(k) + '" href="job-detail.html" style="flex:none;font:600 12.5px system-ui;color:#2f6f5b;text-decoration:none;white-space:nowrap;padding-top:2px">View job detail →</a>' +
+          '</div><div style="padding:8px 18px 12px">' + accs + '</div></div>';
+      }
+      var jump = '<div id="libJump" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 14px"><span style="font:700 10.5px system-ui;letter-spacing:.05em;text-transform:uppercase;color:#b0a790;margin-right:2px">Jump to:</span>' +
+        SECTIONS.map(function (s) { return '<a href="#libsec-' + s.key + '" class="lib-jump" data-sec="' + s.key + '" style="font:600 12.5px system-ui;color:#2f6f5b;text-decoration:none;padding:4px 10px;border:1px solid #e6ddc9;border-radius:999px;background:#fff">' + esc(s.label) + '</a>'; }).join('') + '</div>';
+      var search = '<div style="margin:0 0 14px"><input id="libSearch" type="search" autocomplete="off" placeholder="Search your generated content by company, role, or type…" style="width:100%;max-width:520px;box-sizing:border-box;padding:9px 12px;border:1px solid #d8cdb8;border-radius:10px;font:13.5px system-ui"></div>';
+      var sectionsHtml = SECTIONS.map(function (sec) {
+        var cards = order.map(function (k) { return jobCard(k, sec.match); }).filter(Boolean).join('');
+        var n = (cards.match(/class="lib-job"/g) || []).length;
+        var bodyHtml = cards || '<div class="lib-empty" style="font:13px system-ui;color:#b0a790;padding:6px 2px 10px">Nothing here yet.</div>';
+        return '<section class="lib-section" id="libsec-' + sec.key + '" data-sec="' + sec.key + '" style="margin-bottom:18px;scroll-margin-top:14px">' +
+          '<button class="lib-sec-head" type="button" aria-expanded="true" style="width:100%;display:flex;align-items:center;gap:10px;padding:10px 4px;background:none;border:none;border-bottom:2px solid #ece5d6;cursor:pointer;text-align:left">' +
+          '<span class="lib-sec-chev" style="display:inline-block;transition:transform .18s;color:#b0a790;font-size:12px;transform:rotate(90deg)">▶</span>' +
+          '<span style="flex:1;font-family:var(--serif,\'Iowan Old Style\',Georgia,serif);font-weight:600;font-size:18px;color:#16324F">' + esc(sec.label) + '</span>' +
+          '<span class="lib-sec-count" style="font:600 12px system-ui;color:#b0a790">' + n + '</span></button>' +
+          '<div class="lib-sec-body" style="padding-top:12px">' + bodyHtml + '</div></section>';
       }).join('');
+      root.innerHTML = search + jump + sectionsHtml;
+
+      // Section collapse/expand
+      root.querySelectorAll('.lib-sec-head').forEach(function (h) {
+        var body = h.nextElementSibling, chev = h.querySelector('.lib-sec-chev');
+        h.onclick = function () { var open = body.style.display !== 'none'; body.style.display = open ? 'none' : ''; h.setAttribute('aria-expanded', String(!open)); chev.style.transform = open ? 'rotate(0deg)' : 'rotate(90deg)'; };
+      });
+      // Jump-nav smooth scroll
+      root.querySelectorAll('.lib-jump').forEach(function (a2) { a2.onclick = function (e) { e.preventDefault(); var t = document.getElementById('libsec-' + a2.getAttribute('data-sec')); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }; });
+      // Live search filter — hide non-matching job cards, keep section headers.
+      var searchEl = root.querySelector('#libSearch');
+      if (searchEl) searchEl.addEventListener('input', function () {
+        var q = this.value.trim().toLowerCase();
+        root.querySelectorAll('.lib-section').forEach(function (sec) {
+          var secLabel = (sec.getAttribute('data-sec') || '');
+          var shown = 0;
+          sec.querySelectorAll('.lib-job').forEach(function (card) {
+            var hay = (card.getAttribute('data-search') || '') + ' ' + secLabel;
+            var hit = !q || hay.indexOf(q) >= 0;
+            card.style.display = hit ? '' : 'none'; if (hit) shown++;
+          });
+          var empty = sec.querySelector('.lib-empty'); if (empty) empty.style.display = q ? 'none' : '';
+        });
+      });
 
       // View job detail links
       root.querySelectorAll('.lib-detail-link').forEach(function (a2) { a2.onclick = function (e) { e.preventDefault(); libViewJobDetail(groups[a2.getAttribute('data-key')]); }; });
@@ -1903,6 +1967,14 @@
         accIndex[key + '||' + type] = { expand: expand, el: acc };
       });
 
+      // Deep-link: library.html?type=<tailor|networking|cover|evaluate> → jump to that section.
+      var qType = (location.search.match(/[?&]type=([^&]+)/) || [])[1];
+      if (qType) {
+        qType = decodeURIComponent(qType);
+        var secKey = qType === 'tailor' ? 'tailored' : (qType === 'networking' ? 'networking' : (qType === 'evaluate' ? 'evaluations' : 'rest'));
+        var secEl = document.getElementById('libsec-' + secKey);
+        if (secEl) setTimeout(function () { secEl.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60);
+      }
       // Deep-link: library.html?job=<artifact-id OR job slug> → expand + select.
       var qJob = (location.search.match(/[?&]job=([^&]+)/) || [])[1];
       if (qJob) {
@@ -1940,7 +2012,7 @@
         });
       });
     });
-    banner('Generated-content Library — grouped by job. Each artifact is an accordion: click to expand its rich workspace INLINE under the button (versions v1/v2, per-section Copy, Edit, downloads, evaluation summary); click again to collapse. “View job detail →” opens the AI job-detail page for that job.');
+    banner('Library — organized into typed sections (Tailored content · Networking plans · Cover letters & more · Saved evaluations) with a jump-nav, collapsible headers, and a live search filter. Within each section, jobs list their artifacts as accordions (versions, per-section Copy/Edit/downloads); slug deep-links + View job detail still work.');
   }
 
   // ======================= AI-TASK ACTIVITY SYSTEM =========================
