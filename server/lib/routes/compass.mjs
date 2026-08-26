@@ -84,6 +84,29 @@ function readSalaryMap() {
 const LIVENESS_STORE = DATA_ROOT + '/data/liveness.tsv';
 const LIVENESS_PY = SCRAPE_DIR + '/liveness.py';
 
+// Real POSTED dates (data/posted.jsonl, written by career-ops-scrape's
+// posted_store.py — JobSpy date_posted + ATS/browser-read posted dates),
+// keyed by url → 'YYYY-MM-DD'. Partial/growing, same mtime-cache pattern as
+// fit/salary above. A url absent here just means "posted date unknown" —
+// the UI falls back to "found" for that row.
+const POSTED_STORE = DATA_ROOT + '/data/posted.jsonl';
+let _postedCache = null, _postedMtime = -1;
+function readPostedMap() {
+  try {
+    const st = statSync(POSTED_STORE);
+    if (_postedCache && st.mtimeMs === _postedMtime) return _postedCache;
+    const map = {};
+    readFileSync(POSTED_STORE, 'utf8').trim().split(/\r?\n/).forEach((l) => {
+      if (!l) return;
+      try {
+        const j = JSON.parse(l);
+        if (j && j.url && j.date_posted) map[normFitUrl(j.url)] = j.date_posted; // last (newest) wins
+      } catch { /* skip bad line */ }
+    });
+    _postedCache = map; _postedMtime = st.mtimeMs; return map;
+  } catch { return _postedCache || {}; }
+}
+
 // ── Background generation job layer ──────────────────────────────────────────
 // LLM generations (tailor/cover/evaluate/networking) run server-side async so
 // they survive navigation. Persisted to data/compass-jobs.jsonl; artifacts to
@@ -340,6 +363,14 @@ export function registerCompassRoutes(app) {
   // Read the salary bands (thousands), keyed by normalized url.
   app.get('/api/compass/salary', (_req, res) => {
     const map = readSalaryMap();
+    res.json({ map, count: Object.keys(map).length });
+  });
+
+  // Read the real POSTED-date map (data/posted.jsonl), keyed by normalized
+  // url → 'YYYY-MM-DD'. Powers the honest "Newest (posted)" sort — count is
+  // how many tracker jobs have a real posted date (vs. just a found date).
+  app.get('/api/compass/posted', (_req, res) => {
+    const map = readPostedMap();
     res.json({ map, count: Object.keys(map).length });
   });
 
