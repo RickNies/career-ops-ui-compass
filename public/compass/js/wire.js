@@ -539,6 +539,22 @@
     var lbl = wrap.querySelector('.lff-lbl');
     if (lbl) lbl.textContent = window.__compassShowLowFit ? 'Showing low-fit' : ('Show low-fit' + (lowHidden ? ' (' + lowHidden + ')' : ''));
   }
+  // Two distinct empty states for the jobs feed: a brand-new account with
+  // NOTHING scraped yet ("no jobs loaded at all") reads very differently from
+  // an existing account whose filters happen to exclude everything. Branches
+  // on window.JOBS.length rather than the filtered/rendered count. The
+  // filtered-empty copy is captured from the page's own static markup on
+  // first render so it stays in sync with jobs.html if that text ever changes.
+  var EMPTY_NO_JOBS_YET =
+    '<img src="/compass/img/mascot.svg" alt="" width="30" height="30" style="display:block;margin:0 auto 10px;opacity:.85">' +
+    '<div style="font-weight:600;color:var(--ink-soft, #2a3b4d)">Our robots are out searching the web for the best jobs for you</div>' +
+    '<div style="margin-top:4px">They&rsquo;ll report back soon — check back in a little while.</div>';
+  function fillEmptyState(empty, matchedCount) {
+    if (!empty.dataset.filteredHtml) empty.dataset.filteredHtml = empty.innerHTML; // capture original "no matches" copy once
+    if (matchedCount) { empty.style.display = 'none'; return; }
+    empty.innerHTML = (window.JOBS && window.JOBS.length) ? empty.dataset.filteredHtml : EMPTY_NO_JOBS_YET;
+    empty.style.display = 'block';
+  }
   function compassRender() {
     if (!window.JOBS || typeof window.matches !== 'function' || typeof window.cardHTML !== 'function') return;
     var all = window.JOBS.filter(window.matches);
@@ -559,7 +575,7 @@
     var shown = Math.min(window.__compassShown || PAGE_SIZE, all.length);
     var list = document.getElementById('list');
     if (list) list.innerHTML = all.slice(0, shown).map(window.cardHTML).join('');
-    var empty = document.getElementById('empty'); if (empty) empty.style.display = all.length ? 'none' : 'block';
+    var empty = document.getElementById('empty'); if (empty) fillEmptyState(empty, all.length);
     var cnt = document.getElementById('count');
     // How many low-fit (Pass) jobs are currently hidden by the toggle (they pass all
     // OTHER filters). Count by momentarily enabling the flag so matches() includes them.
