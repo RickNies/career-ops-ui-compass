@@ -6,12 +6,15 @@
  *   GET    /api/pipeline/preview?url → stripped HTML snippet (≤ 8 KB)
  *   DELETE /api/pipeline?url=…       → remove
  *
- * The preview endpoint walks redirects manually, revalidating each
+ * The preview endpoint first checks a read-through cache of the fetch
+ * pipeline's own JD store (data/jd-cache.jsonl) — see readPipelineJdCache()
+ * below — and only does a live fetch when that cache has nothing usable for
+ * the url. The live path walks redirects manually, revalidating each
  * Location through isValidJobUrl (REVIEW-B1). Cap: 3 hops, 15 s timeout,
  * 8 KB body. SSRF surface is bounded by isValidJobUrl which rejects
  * loopback, file://, IP literals, etc.
  */
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
 import { PATHS, path as projPath } from '../paths.mjs';
 import { parsePipeline, addPipelineUrl, removePipelineUrl } from '../parsers.mjs';
 import { isValidJobUrl } from '../security.mjs';
@@ -24,6 +27,48 @@ const PREVIEW_MAX_BODY_BYTES = 8000;
 // Raw HTML budget for extraction — big enough to reach JSON-LD / JobPosting that
 // often sits deep in the document (e.g. Ashby embeds it past 40 KB).
 const PREVIEW_RAW_BUDGET = 1_500_000;
+
+// ── Pipeline JD cache read-through ──────────────────────────────────────────
+// The scrape/fetch pipeline already fetches + caches full JDs (JSON-LD/body
+// extraction, same as this file's own extractJobDescription) to
+// data/jd-cache.jsonl — one JSON object per line: {url, jd, source, company,
+// title, ts, ...}, appended (not deduped), so a url can appear multiple times
+// and the LAST line wins. Before this read-through, /api/pipeline/preview
+// never looked at that file and instead did a live raw fetch — which comes
+// back thin for JS-rendered boards (e.g. Welcome to the Jungle) even though
+// the pipeline already has the real body cached. We read the file into an
+// in-memory map keyed by the same normalized url used elsewhere in the app,
+// and only re-parse it when its mtime changes (it's ~1,500 lines — cheap to
+// re-read, but no need to do it on every preview request).
+const JD_CACHE_PATH = projPath('data', 'jd-cache.jsonl');
+const JD_CACHE_MIN_LEN = 200; // below this, treat as thin/not-useful (same spirit as looksReadable's floor)
+let _jdCacheMap = null;
+let _jdCacheMtime = -1;
+function normPipelineUrl(u) { return String(u || '').split('#')[0].replace(/\/+$/, ''); }
+function readPipelineJdCache() {
+  try {
+    const st = statSync(JD_CACHE_PATH);
+    if (_jdCacheMap && st.mtimeMs === _jdCacheMtime) return _jdCacheMap;
+    const map = {};
+    const lines = readFileSync(JD_CACHE_PATH, 'utf8').split(/\r?\n/);
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const j = JSON.parse(line);
+        if (j && j.url && typeof j.jd === 'string' && j.jd.length) {
+          map[normPipelineUrl(j.url)] = j.jd; // last line for a url wins (later append = fresher fetch)
+        }
+      } catch { /* skip malformed line */ }
+    }
+    _jdCacheMap = map;
+    _jdCacheMtime = st.mtimeMs;
+    return map;
+  } catch {
+    // File missing (fresh checkout, or CAREER_OPS_ROOT not pointed at the real
+    // tree yet) — fall through to the live fetch path, don't hard-fail.
+    return _jdCacheMap || {};
+  }
+}
 
 // ── JD extraction: pull the REAL job description out of a fetched HTML page ──
 // Priority: (a) JSON-LD JobPosting.description, (b) og:description / meta
@@ -149,6 +194,15 @@ export function registerPipelineRoutes(app) {
   app.get('/api/pipeline/preview', async (req, res) => {
     const url = (req.query.url || '').toString();
     if (!isValidJobUrl(url)) return res.status(400).json({ error: 'invalid url' });
+    // Read-through: the fetch pipeline already cached a real JD for this url
+    // (data/jd-cache.jsonl) — serve that instead of doing a live fetch that
+    // may come back thin for JS-rendered boards the pipeline already solved.
+    // Only fall through to the live fetch below when the cache has nothing
+    // (or something too short to be a real posting).
+    const cachedJd = readPipelineJdCache()[normPipelineUrl(url)];
+    if (cachedJd && cachedJd.length >= JD_CACHE_MIN_LEN) {
+      return res.json({ status: 200, text: cachedJd.slice(0, PREVIEW_MAX_BODY_BYTES), source: 'pipeline-cache' });
+    }
     // v1.20.1 (B-1) — safeGet does the DNS resolve ONCE, validates the
     // address against isPrivateOrLoopbackHost, then pins the TCP
     // connection to that exact IP (with SNI/Host targeting the original

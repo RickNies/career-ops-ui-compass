@@ -177,6 +177,8 @@
   .sal-vals{display:block;font-size:14px;font-weight:600;color:var(--ink);white-space:nowrap;text-align:center;margin:12px 0}
   .sal-unknown{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--ink-soft);cursor:pointer;padding-top:12px;border-top:1px solid var(--line-soft)}
   .sal-unknown input{accent-color:var(--ink);width:15px;height:15px;flex:none}
+  .new-only{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--ink-soft);cursor:pointer;white-space:nowrap}
+  .new-only input{accent-color:var(--gold-deep);width:15px;height:15px;flex:none}
   .sal-done-row{display:flex;justify-content:flex-end;margin-top:13px}
 
   /* active filters bar */
@@ -423,6 +425,7 @@
             </div>
 
             <div class="right">
+              <label class="new-only"><input type="checkbox" id="newOnly">New only</label>
               <select class="select" id="sort" aria-label="Sort by">
                 <option value="best" selected>Sort: Best match</option>
                 <option value="found">Sort: Newest (found)</option>
@@ -620,7 +623,7 @@ function clearReview(id){ var m=getReviews(); delete m[id]; setReviews(m); }
 
 /* ============ filter state + persistence ============ */
 var FKEY="compass_filters";
-var DEF={q:"", works:[], locs:[], cats:[], funcs:[], levels:[], salLow:80, salHigh:300, showUnknown:true, rev:"not", sort:"best"};
+var DEF={q:"", works:[], locs:[], cats:[], funcs:[], levels:[], salLow:80, salHigh:300, showUnknown:true, newOnly:false, rev:"not", sort:"best"};
 function loadFilters(){
   var s=Object.assign({}, DEF);
   try{ var saved=JSON.parse(localStorage.getItem(FKEY)||"null"); if(saved) s=Object.assign(s, saved); }catch(e){}
@@ -709,6 +712,7 @@ function matches(j){
   if(state.levels.length && state.levels.indexOf(j.level)===-1) return false;
   if(j.salMax==null){ if(!state.showUnknown) return false; }
   else { if(j.salMax<state.salLow || j.salMin>state.salHigh) return false; }
+  if(state.newOnly && !j.isNew) return false;
   var r=isReviewed(j.id);
   if(state.rev==="not" && r) return false;
   if(state.rev==="reviewed" && !r) return false;
@@ -965,6 +969,7 @@ buildMenu("lvlMenu","lvl-cb",LEVELS);
 document.getElementById("q").addEventListener("input", function(e){ state.q=e.target.value; render(); });
 document.getElementById("sort").addEventListener("change", function(e){ state.sort=e.target.value; render(); });
 document.getElementById("salUnknown").addEventListener("change", function(e){ state.showUnknown=e.target.checked; render(); });
+document.getElementById("newOnly").addEventListener("change", function(e){ state.newOnly=e.target.checked; render(); });
 
 document.querySelectorAll(".chip[data-work]").forEach(function(chip){
   chip.addEventListener("click", function(){ toggleIn(state.works, chip.getAttribute("data-work")); applyControls(); render(); });
@@ -1001,6 +1006,7 @@ function applyControls(){
   document.getElementById("sort").value=(state.sort==="new"?"found":state.sort);
   salLow.value=state.salLow; salHigh.value=state.salHigh; paintSlider();
   document.getElementById("salUnknown").checked=state.showUnknown;
+  document.getElementById("newOnly").checked=state.newOnly;
   document.querySelectorAll(".chip[data-work]").forEach(function(c){ c.classList.toggle("on", state.works.indexOf(c.getAttribute("data-work"))>=0); });
   document.querySelectorAll(".loc-cb").forEach(function(cb){ cb.checked=state.locs.indexOf(cb.value)>=0; });
   document.querySelectorAll(".cat-cb").forEach(function(cb){ cb.checked=state.cats.indexOf(cb.value)>=0; });
