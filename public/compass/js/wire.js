@@ -10,6 +10,32 @@
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
   function hostFrom(url) { try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return ''; } }
   function normUrl(u) { return String(u || '').split('#')[0].replace(/\/+$/, ''); }
+  // Host → human "posted on" label, purely derived from the canonical job URL
+  // (where the posting lives) — display-only, not verified/scraped metadata.
+  // First match wins; unmatched hosts fall back to the company's own domain.
+  var SOURCE_HOST_RULES = [
+    [/(^|\.)linkedin\.com$/, 'LinkedIn'],
+    [/(^|\.)indeed\.com$/, 'Indeed'],
+    [/(^|\.)greenhouse\.io$/, 'Greenhouse'],
+    [/(^|\.)lever\.co$/, 'Lever'],
+    [/myworkdayjobs\.com$/, 'Workday'],
+    [/(^|\.)welcometothejungle\.com$/, 'Welcome to the Jungle'],
+    [/(^|\.)ashbyhq\.com$/, 'Ashby'],
+    [/(^|\.)smartrecruiters\.com$/, 'SmartRecruiters'],
+    [/(^|\.)icims\.com$/, 'iCIMS'],
+    [/(^|\.)jobvite\.com$/, 'Jobvite'],
+    [/(^|\.)bamboohr\.com$/, 'BambooHR'],
+    [/(^|\.)rippling\.com$/, 'Rippling'],
+    [/^job-boards\./, 'Job board']
+  ];
+  function sourceFromHost(host) {
+    host = String(host || '').toLowerCase();
+    if (!host) return 'Company careers';
+    for (var i = 0; i < SOURCE_HOST_RULES.length; i++) {
+      if (SOURCE_HOST_RULES[i][0].test(host)) return SOURCE_HOST_RULES[i][1];
+    }
+    return 'Company careers'; // unrecognized host — most likely the company's own site
+  }
   // Best-effort formatter for scraped JD plain text -> readable paragraphs +
   // bullet (-•*–) / numbered lists + light headings. Everything is esc()'d.
   function jdToHtml(raw) {
@@ -97,6 +123,7 @@
     var j = {
       id: 'c' + (row.num || Math.random().toString(36).slice(2)),
       num: row.num, title: title, company: row.company || '', domain: hostFrom(row.url),
+      source: sourceFromHost(hostFrom(row.url)),
       mono: initials(row.company || ''), color: colorFor(row.company || ''),
       loc: row.location || '', locKey: locKeyFor(row.location), work: /remote/i.test(row.location || '') ? 'Remote' : 'On-site',
       salMin: null, salMax: null, fit: scoreToFit(row), age: 0, isNew: false, saved: bookmarkFor(row.url),
@@ -800,6 +827,12 @@
         var salSpan = Array.prototype.filter.call(meta.querySelectorAll('span'), function (s) { return /\$|salary/i.test(s.textContent) && !s.classList.contains('pin') && !s.classList.contains('badge'); })[0];
         if (salSpan) salSpan.textContent = sal ? fmtSalary(sal) : 'Salary not listed';
         setOpenBadge(meta.querySelector('[data-live]'), job.url);
+        // Source chip: "via {board}" — host-derived from the job URL (display only).
+        if (job.source) {
+          var srcChip = meta.querySelector('.src-chip');
+          if (!srcChip) { srcChip = document.createElement('span'); srcChip.className = 'src-chip'; meta.appendChild(srcChip); }
+          srcChip.textContent = 'via ' + job.source;
+        }
         // Honest per-row date chip: "posted Xd ago" when we have a real posted
         // date, else "found Xd ago" (never fabricated when both are unknown).
         var dateTxt = job.postedKnown ? ('posted ' + job.postedAge + 'd ago')

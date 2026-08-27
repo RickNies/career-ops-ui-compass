@@ -253,6 +253,8 @@
   .save.on svg{fill:var(--terra)}
   .view svg{width:14px;height:14px}   /* .view is now a .btn .btn--primary; hook kept for card click handling */
   .new-dot{font-size:11px;color:var(--gold-deep);background:var(--gold-soft);border-radius:6px;padding:2px 8px;font-weight:600}
+  /* Source chip ("via LinkedIn" etc) — same size/muted treatment as .date-chip (inherits .meta) */
+  .src-chip{color:var(--muted)}
 
   .empty{display:none;text-align:center;color:var(--muted);background:var(--surface);border:1px dashed var(--line);border-radius:var(--radius);padding:40px 22px;font-size:14.5px}
   .footer-note{color:var(--muted);font-size:12.5px;text-align:center;margin-top:26px}
@@ -649,6 +651,8 @@ function cardHTML(j){
   // a fabricated found-date guess when neither is known.
   var dateChip = j.postedKnown ? ('<span class="date-chip">posted '+j.postedAge+'d ago</span>')
     : (j.foundAge!=null ? ('<span class="date-chip">found '+j.foundAge+'d ago</span>') : '');
+  // Source chip: "via {board}" — host-derived from the job URL (display only, mapRow.source).
+  var srcChip = j.source ? ('<span class="src-chip">via '+esc(j.source)+'</span>') : '';
   var liveBadge = j.open
     ? '<span class="badge badge--live" data-live="open"><span class="tk"></span>Open</span>'
     : '<span class="badge badge--closed" data-live="closed"><span class="tk"></span>Closed — no longer accepting</span>';
@@ -677,7 +681,7 @@ function cardHTML(j){
           '<div class="company">'+esc(j.company)+'</div>'+
         '</div>'+
       '</div>'+
-      '<div class="meta"><span class="pin"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>'+esc(j.loc)+'</span><span>'+esc(j.work)+'</span><span>'+fmtSal(j)+'</span>'+liveBadge+dateChip+newDot+'</div>'+
+      '<div class="meta"><span class="pin"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>'+esc(j.loc)+'</span><span>'+esc(j.work)+'</span><span>'+fmtSal(j)+'</span>'+liveBadge+srcChip+dateChip+newDot+'</div>'+
       '<div class="why"><b>Why it fits:</b> '+esc(j.why)+'</div>'+
       '<div class="tags">'+chips+'</div>'+
     '</div>'+
