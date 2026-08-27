@@ -118,6 +118,21 @@
     return Math.max(0, Math.floor((Date.now() - t) / 86400000));
   }
 
+  // "New" badge = the most-recently-found BATCH, not a fixed day window. Finds
+  // the smallest j.foundAge across all jobs (that's today's/most-recent scrape
+  // batch) and flags every job that shares it. Auto-moves forward: once a
+  // newer batch lands with a smaller foundAge, this recomputes and the badge
+  // follows it — no fixed "last N days" cutoff to go stale. No-op (nothing
+  // flagged) if no job has a known foundAge. Call this any time window.JOBS is
+  // (re)built.
+  function markNewestBatch(jobs) {
+    var minFoundAge = null;
+    jobs.forEach(function (j) {
+      if (j.foundAge != null && (minFoundAge === null || j.foundAge < minFoundAge)) minFoundAge = j.foundAge;
+    });
+    jobs.forEach(function (j) { j.isNew = (minFoundAge != null && j.foundAge != null && j.foundAge === minFoundAge); });
+  }
+
   function mapRow(row) {
     var title = row.role || '';
     var j = {
@@ -671,6 +686,7 @@
       var loaded = rows.length;
       window.JOBS = rows.map(mapRow).filter(function (j) { return !isDead(j.url); });
       window.JOBS.forEach(function (j) { j.open = !isDead(j.url); });
+      markNewestBatch(window.JOBS);
       // "Newest (posted)" is only a meaningful, non-duplicate choice once at
       // least one job has a REAL posted date — hide it (never fabricate one)
       // until the posted-date store has coverage.

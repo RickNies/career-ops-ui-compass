@@ -645,7 +645,7 @@ function cardHTML(j){
   var revCls = rev ? (" is-reviewed rev-"+rev.verdict) : "";
   var fitClass = j.fit>=86 ? "fit-strong" : (j.fit>=75 ? "fit-good" : "fit-fair");
   var fitLabel = j.fit>=86 ? "Strong fit" : (j.fit>=75 ? "Good fit" : "Fair fit");
-  var newDot = j.isNew ? '<span class="new-dot">New · '+j.age+' days ago</span>' : '';
+  var newDot = j.isNew ? ('<span class="new-dot">New'+(j.foundAge ? (' · '+j.foundAge+'d ago') : '')+'</span>') : '';
   // Honest per-row date chip: "posted Xd ago" when we have a REAL posted date,
   // else "found Xd ago" from the tracker's real found date — never both, never
   // a fabricated found-date guess when neither is known.
