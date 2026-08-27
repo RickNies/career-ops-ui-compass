@@ -19,7 +19,7 @@
     [/(^|\.)greenhouse\.io$/, 'Greenhouse'],
     [/(^|\.)lever\.co$/, 'Lever'],
     [/myworkdayjobs\.com$/, 'Workday'],
-    [/(^|\.)welcometothejungle\.com$/, 'Welcome to the Jungle'],
+    [/(^|\.)welcometothejungle\.com$/, 'WTTJ'],
     [/(^|\.)ashbyhq\.com$/, 'Ashby'],
     [/(^|\.)smartrecruiters\.com$/, 'SmartRecruiters'],
     [/(^|\.)icims\.com$/, 'iCIMS'],
