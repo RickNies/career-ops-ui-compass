@@ -576,7 +576,7 @@
     var st = window.state ? window.state.sort : 'best';
     // "best" = AI-scored jobs first (by fit score desc), then the rest.
     if (st === 'best') all.sort(function (a, b) { var as = a.fitScored ? 1 : 0, bs = b.fitScored ? 1 : 0; if (as !== bs) return bs - as; return (b.fit || 0) - (a.fit || 0); });
-    else if (st === 'new') all.sort(function (a, b) { return a.age - b.age; });
+    else if (st === 'found' || st === 'new') all.sort(function (a, b) { var af = a.foundAge == null ? Infinity : a.foundAge, bf = b.foundAge == null ? Infinity : b.foundAge; return af - bf; });  // Newest (found): smallest foundAge (0 = found today) first
     // "Newest (posted)" — real posted-date rows sort first (soonest→oldest by
     // real days-since-posted); rows with no real posted date sort after them,
     // using the found date as a tiebreak. "Newest (found)" (st === 'found',
