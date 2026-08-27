@@ -100,7 +100,7 @@
   .scan-status b{color:var(--ink-soft);font-weight:600}
   @keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}
 
-  /* ---- company logo (clearbit + monogram fallback) ---- */
+  /* ---- company logo (same-origin /api/logo favicon proxy + monogram fallback) ---- */
   .logo{flex:none;width:46px;height:46px;border-radius:11px;overflow:hidden;background:var(--surface-2);border:1px solid var(--line);display:grid;place-items:center;position:relative}
   .logo img{width:100%;height:100%;object-fit:contain;display:block;padding:5px;background:#fff}
   .logo.failed{background:var(--mc,#16324F);border-color:transparent}
@@ -675,7 +675,7 @@ function cardHTML(j){
     '<div class="fit '+fitClass+'"><div class="ring">'+j.fit+'</div><div class="lbl">'+fitLabel+'</div></div>'+
     '<div class="body">'+
       '<div class="body-head">'+
-        '<span class="logo" style="--mc:'+j.color+'" data-mono="'+esc(j.mono)+'"><img src="https://logo.clearbit.com/'+j.domain+'" alt="'+esc(j.company)+' logo" onerror="this.parentNode.classList.add(\'failed\');this.remove()"></span>'+
+        '<span class="logo" style="--mc:'+j.color+'" data-mono="'+esc(j.mono)+'"><img src="/api/logo?domain='+encodeURIComponent(j.domain)+'" alt="'+esc(j.company)+' logo" onerror="this.parentNode.classList.add(\'failed\');this.remove()"></span>'+
         '<div>'+
           '<h3><a href="job-detail.html">'+esc(j.title)+'</a>'+
             '<span class="rev-flag f-good"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>Liked</span>'+

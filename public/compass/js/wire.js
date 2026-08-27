@@ -36,6 +36,339 @@
     }
     return 'Company careers'; // unrecognized host — most likely the company's own site
   }
+  // ---- company logo domain (for /api/logo?domain=) --------------------------
+  // The job URL host is frequently an ATS/aggregator (Greenhouse, Lever,
+  // Workday, WTTJ, LinkedIn, …), not the employer's own domain — fetching a
+  // favicon for that host would show the ATS's icon, not the company's. When
+  // the URL host looks like the company's own site, use its registrable
+  // domain; otherwise derive a best-guess domain from the company NAME, and
+  // only fall back to an ATS-embedded company slug when the name doesn't
+  // yield anything. Imperfect for multi-word/branded names by design — a bad
+  // guess just 404s the proxy and the existing monogram onerror takes over.
+  var ATS_HOSTS = [
+    'greenhouse.io', 'lever.co', 'ashbyhq.com', 'myworkdayjobs.com',
+    'welcometothejungle.com', 'rippling.com', 'linkedin.com', 'indeed.com',
+    'builtin.com', 'dailyremote.com', 'speedrun-talent-network.com',
+  ];
+  function isAtsHost(host) {
+    host = String(host || '').toLowerCase();
+    return ATS_HOSTS.some(function (h) { return host === h || host.slice(-(h.length + 1)) === ('.' + h); });
+  }
+  // Last two labels — good enough for .com/.io/.co/etc, not a full public-
+  // suffix-list implementation (co.uk-style TLDs aren't specially handled).
+  function registrableDomain(host) {
+    var parts = String(host || '').split('.').filter(Boolean);
+    return parts.length <= 2 ? host : parts.slice(-2).join('.');
+  }
+  var CORP_SUFFIX_RE = /\b(inc|llc|corp|corporation|ltd|limited|co|the)\b/g;
+  function domainFromCompanyName(name) {
+    var s = String(name || '').toLowerCase()
+      .replace(/[.,&'’()]/g, ' ')
+      .replace(CORP_SUFFIX_RE, ' ')
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, '');
+    return s.length >= 2 ? s + '.com' : '';
+  }
+  // ATS-hosted posting → the company slug baked into the URL path/subdomain,
+  // as a last-resort fallback when the company name doesn't yield a domain.
+  function atsSlugDomain(host, url) {
+    try {
+      var path = new URL(url).pathname || '';
+      var m = null;
+      if (/(^|\.)welcometothejungle\.com$/.test(host)) {
+        m = path.match(/\/companies\/([^\/]+)/);
+      } else if (/myworkdayjobs\.com$/.test(host)) {
+        m = [null, host.split('.')[0]]; // {tenant}.wdN.myworkdayjobs.com
+      } else if (/(^|\.)greenhouse\.io$/.test(host) || /(^|\.)lever\.co$/.test(host) || /(^|\.)ashbyhq\.com$/.test(host)) {
+        m = path.match(/^\/([^\/]+)/);
+      }
+      var slug = m && m[1] && m[1].replace(/[^a-z0-9]/gi, '').toLowerCase();
+      return slug ? slug + '.com' : '';
+    } catch (e) { return ''; }
+  }
+  function logoDomainFor(company, url) {
+    var host = hostFrom(url);
+    if (!host) return domainFromCompanyName(company);
+    if (!isAtsHost(host)) return registrableDomain(host);
+    return domainFromCompanyName(company) || atsSlugDomain(host, url) || '';
+  }
+  // ============================================================================
+  // Heuristic flat-JD reflow (pure regex, no AI) — v1 (2026-08-27).
+  // A handful of cached JDs (plain-text sources the pipeline's markdown sweep
+  // couldn't restructure — near-zero newlines, no bullets) render as an
+  // unreadable wall of text. This recovers headings + bullet structure FOR
+  // DISPLAY ONLY (the cache itself is untouched) so jdToHtml() below can
+  // render them like any other structured JD. Gated to run ONLY on text that
+  // already looks flat (looksFlatJd) — a well-structured markdown JD is
+  // returned unchanged. Conservative by design: prefers to under-split prose
+  // rather than mangle it. This is a heuristic, not NLP — expect it to miss
+  // section headers outside the curated list and to leave some dense
+  // requirement/paragraph text unsplit.
+  // ---- gate: does this JD look "flat" (a wall of text)? ----------------------
+  function looksFlatJd(text) {
+    var t = String(text || '');
+    if (t.length < 300) return false;
+    var nl = (t.match(/\n/g) || []).length;
+    var density = nl / t.length;
+    if (/(^|\n)[ \t]*[-•*–▪·◦][ \t]+\S/.test(t)) return false;   // already bulleted
+    if (/(^|\n)[ \t]*\d{1,2}[.)][ \t]+\S/.test(t)) return false;  // already numbered
+    if (/(^|\n)[ \t]*#{1,6}[ \t]+\S/.test(t)) return false;       // already ATX heading
+    return nl <= 1 || density < 0.0008;
+  }
+  // ---- section headings -------------------------------------------------------
+  // Conservative, curated JD section-header phrases. Matched case-insensitively
+  // on word boundaries. A couple of entries carry small, common filler-word
+  // tolerances (e.g. "Key job responsibilities", bare "Role") beyond the
+  // literal spec because they showed up verbatim in real flat JDs in testing.
+  var JD_HEADING_PATTERNS = [
+    /\babout (?:the role|us|the team|the company|you)\b/gi,
+    /\b(?:key\s+)?(?:job\s+)?responsibilities\b/gi,
+    /\bwhat you'?ll do\b/gi,
+    /\brequirements\b/gi,
+    /\b(?:minimum |preferred |basic )?qualifications\b/gi,
+    /\bwhat we'?re looking for\b/gi,
+    /\bwho you are\b/gi,
+    /\bnice[\s-]?to[\s-]?have\b/gi,
+    /\bbenefits(?: (?:&|and) perks)?\b/gi,
+    /\bcompensation\b/gi,
+    /\bthe role\b/gi,
+    /\byour impact\b/gi,
+    /\bday to day\b/gi,
+  ];
+  function titleCaseJdHeading(s) {
+    return s.replace(/\w\S*/g, function (w) {
+      return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+    }).replace(/\bYou'?ll\b/gi, "You'll").replace(/\bWe'?re\b/gi, "We're");
+  }
+  // A heading candidate is only trusted at a genuine clause boundary: text
+  // start, or right after a sentence-ending '.'/'!'/'?'. Flat blobs have no
+  // layout signal left, so a bare word like "Compensation" or "Benefits"
+  // appearing mid-sentence ("Amazon also offers comprehensive Benefits
+  // including...") is common — accepting it would mangle prose with a bogus
+  // heading. Requiring a preceding sentence boundary filters those out while
+  // still catching genuine "<prev section>. <Next Heading> <content>" joins.
+  function jdHeadingAtClauseBoundary(text, idx) {
+    if (idx <= 0) return true;
+    var before = text.slice(Math.max(0, idx - 3), idx);
+    return /[.!?]\s*$/.test(before);
+  }
+  // A genuine heading is followed by real content — either the end of text or
+  // a capitalized/numeric clause start, never a lowercase word (which means we
+  // landed mid-sentence, e.g. "...experience with requirements gathering").
+  function jdHeadingFollowedByContent(text, idx) {
+    var rest = text.slice(idx).replace(/^[:\s]+/, '').replace(/^-\s+/, '');
+    if (!rest) return true;
+    return /^[A-Z0-9]/.test(rest);
+  }
+  // Insert a paragraph break + ATX heading marker before each recognized
+  // section-header phrase found mid-text.
+  function insertJdHeadingBreaks(text) {
+    var matches = [];
+    JD_HEADING_PATTERNS.forEach(function (re) {
+      var m;
+      re.lastIndex = 0;
+      while ((m = re.exec(text))) {
+        if (jdHeadingAtClauseBoundary(text, m.index) && jdHeadingFollowedByContent(text, m.index + m[0].length)) {
+          matches.push({ start: m.index, end: m.index + m[0].length, text: m[0] });
+        }
+        if (m.index === re.lastIndex) re.lastIndex++;
+      }
+    });
+    if (!matches.length) return text;
+    matches.sort(function (a, b) { return a.start - b.start; });
+    // De-overlap: drop any match nested inside a previously-kept one.
+    var kept = [];
+    matches.forEach(function (m) {
+      var prev = kept[kept.length - 1];
+      if (prev && m.start < prev.end) return;
+      kept.push(m);
+    });
+    var out = '';
+    var cursor = 0;
+    kept.forEach(function (m) {
+      out += text.slice(cursor, m.start);
+      if (!/\n\n$/.test(out) && out.trim().length) out += '\n\n';
+      out += '## ' + titleCaseJdHeading(m.text) + '\n\n';
+      cursor = m.end;
+      // Consume a following ':' (and a stray flattened "- " bullet marker
+      // immediately after the heading, e.g. "Responsibilities - Lead the...")
+      // so neither leaks into the body as an orphan artifact.
+      while (cursor < text.length && /[:\s]/.test(text[cursor]) && text[cursor] !== '\n') cursor++;
+      if (text[cursor] === '-' && /\s/.test(text[cursor + 1] || '')) {
+        cursor += 2;
+        while (cursor < text.length && /[ \t]/.test(text[cursor])) cursor++;
+      }
+    });
+    out += text.slice(cursor);
+    return out;
+  }
+  // ---- bullet-run detection ---------------------------------------------------
+  var JD_VERB_WORDS = ('Support|Build|Develop|Manage|Lead|Own|Drive|Create|Design|Analyze|Partner|' +
+    'Collaborate|Help|Deliver|Maintain|Prepare|Ensure|Provide|Establish|Identify|Coordinate|' +
+    'Oversee|Contribute|Execute|Monitor|Report|Define|Implement|Optimize');
+  // Case-SENSITIVE (capitalized only) — a lowercase mid-sentence verb use isn't
+  // a bullet-run signal; a capitalized one that isn't a true sentence start is
+  // usually the flattened first word of what used to be a separate <li>.
+  var JD_VERB_RE_SRC = '\\b(?:' + JD_VERB_WORDS + ')\\b';
+  var JD_REQ_RE_SRCS = [
+    "\\b\\d{1,2}\\+?\\s+years?\\b",
+    "\\bBachelor'?s\\b",
+    "\\bMaster'?s\\b",
+    "\\bExperience (?:with|in)\\b",
+    "\\bProficiency (?:with|in)\\b",
+    "\\bStrong\\b[^.]{0,40}?\\bskills\\b",
+    "\\bAbility to\\b",
+  ];
+  // A flattened "- " list separator: the original markup had real <li> bullets,
+  // but the scrape lost the newlines while leaving the "- " glyph behind mid-
+  // string (e.g. "...topline growth - Conduct comprehensive..."). This is a
+  // stronger, more literal signal than the verb/requirement wordlists below —
+  // when present it IS the original bullet marker, not an inference. The
+  // lookahead deliberately excludes a bare digit run (so "$135,000 - $200,000"
+  // / "95,400.00 - 163,200.00" salary ranges aren't mistaken for list items —
+  // a real digit-led bullet in a JD is almost always "N+ years").
+  var JD_DASH_SEP_RE_SRC = '\\s-\\s(?=[A-Z]|\\d+\\+)';
+  function findJdMarkerRuns(text) {
+    var hits = [];
+    var re = new RegExp(JD_VERB_RE_SRC, 'g'), m;
+    while ((m = re.exec(text))) hits.push({ start: m.index, end: re.lastIndex });
+    JD_REQ_RE_SRCS.forEach(function (src) {
+      var rr = new RegExp(src, 'g'), mm;
+      while ((mm = rr.exec(text))) hits.push({ start: mm.index, end: rr.lastIndex });
+    });
+    var dre = new RegExp(JD_DASH_SEP_RE_SRC, 'g'), dm;
+    while ((dm = dre.exec(text))) {
+      var boundary = dm.index + dm[0].length; // right at the capital/digit, dash consumed
+      hits.push({ start: boundary, end: boundary, dash: true });
+    }
+    hits.sort(function (a, b) { return a.start - b.start; });
+    // De-dupe near-identical overlapping hits (e.g. two patterns matching the
+    // same word) by dropping any hit that starts inside the previous one.
+    var out = [];
+    hits.forEach(function (h) {
+      var prev = out[out.length - 1];
+      if (prev && h.start < prev.end) return;
+      out.push(h);
+    });
+    return out;
+  }
+  // Split a prose block into `- ` bullets wherever it contains a tight run of
+  // clause-start markers (>= 3, each within ~400 chars of the previous one —
+  // consistent with short-to-medium JD bullet items, generous enough for a
+  // verbose one). Isolated markers are left alone (that's normal prose, not a
+  // flattened list).
+  var JD_RUN_GAP_MAX = 400;
+  function splitJdBulletRuns(block) {
+    var hits = findJdMarkerRuns(block);
+    if (hits.length < 3) return block;
+    var runs = [], cur = [hits[0]];
+    for (var i = 1; i < hits.length; i++) {
+      var gap = hits[i].start - cur[cur.length - 1].start;
+      if (gap <= JD_RUN_GAP_MAX) { cur.push(hits[i]); }
+      else { if (cur.length >= 3) runs.push(cur); cur = [hits[i]]; }
+    }
+    if (cur.length >= 3) runs.push(cur);
+    if (!runs.length) return block;
+    var out = '';
+    var cursor = 0;
+    runs.forEach(function (run, ri) {
+      var runStart = run[0].start;
+      var lead = block.slice(cursor, runStart).trim();
+      if (lead) out += lead + '\n\n';
+      var nextRunStart = (ri + 1 < runs.length) ? runs[ri + 1][0].start : block.length;
+      for (var j = 0; j < run.length; j++) {
+        var itemStart = run[j].start;
+        var isLast = (j === run.length - 1);
+        var itemEnd = isLast ? nextRunStart : run[j + 1].start;
+        var raw = block.slice(itemStart, itemEnd);
+        // Cap a runaway last item (no further marker in sight, so it would
+        // otherwise swallow the rest of the document as one "bullet"). Prefer
+        // cutting at a sentence end within budget; some flat blobs run on
+        // without any punctuation for a long stretch, so fall back to the
+        // nearest word boundary rather than not cutting at all.
+        if (isLast && raw.length > 600) {
+          var budget = raw.slice(0, 600);
+          var cut = budget.lastIndexOf('. ');
+          var cutLen = (cut > 40) ? cut + 1 : -1;
+          if (cutLen < 0) {
+            var wb = budget.lastIndexOf(' ');
+            if (wb > 40) cutLen = wb;
+          }
+          if (cutLen > 0) { raw = raw.slice(0, cutLen); itemEnd = itemStart + cutLen; }
+        }
+        // Strip a trailing flattened "- " separator that belongs to the *next*
+        // item's boundary, not this one's content (see JD_DASH_SEP above).
+        var item = raw.trim().replace(/\s+-\s*$/, '').trim();
+        if (item) out += '- ' + item + '\n';
+        cursor = itemEnd;
+      }
+      out += '\n';
+    });
+    out += block.slice(cursor);
+    return out;
+  }
+  // ---- sentence-boundary paragraph breaks for whatever's still a wall -------
+  // Applied last, only to spans that are still one big undifferentiated block
+  // (no blank-line paragraph break already introduced by the steps above).
+  // Conservative: groups ~3 sentences per paragraph, never splits inside
+  // obvious abbreviations (Inc., U.S., e.g., etc.) or decimals.
+  var JD_ABBR_RE = /\b(?:Inc|Corp|Co|Ltd|LLC|St|Ave|Dr|Mr|Mrs|Ms|Jr|Sr|vs|etc|e\.g|i\.e|U\.S|U\.K|approx|no|Fig|Dept)\.$/;
+  function splitJdSentences(text) {
+    var out = [], start = 0;
+    for (var i = 0; i < text.length - 1; i++) {
+      if ((text[i] === '.' || text[i] === '!' || text[i] === '?') && /\s/.test(text[i + 1])) {
+        var lead = text.slice(Math.max(0, i - 12), i + 1);
+        if (JD_ABBR_RE.test(lead)) continue;
+        // Don't split mid-decimal or mid-abbreviation-initial ("U.S. based").
+        var nextNonSpace = text.slice(i + 1).match(/\S/);
+        if (nextNonSpace && /[a-z]/.test(nextNonSpace[0])) continue; // lowercase after '.' → not a sentence end
+        out.push(text.slice(start, i + 1).trim());
+        start = i + 1;
+      }
+    }
+    var rest = text.slice(start).trim();
+    if (rest) out.push(rest);
+    return out.filter(Boolean);
+  }
+  function paragraphizeJdBlock(block) {
+    var t = block.trim();
+    if (!t) return t;
+    if (t.length < 500) return t; // short enough as one paragraph
+    var sentences = splitJdSentences(t);
+    if (sentences.length < 4) return t;
+    var paras = [], cur = [], curLen = 0;
+    sentences.forEach(function (s) {
+      cur.push(s); curLen += s.length;
+      if (cur.length >= 3 || curLen > 420) { paras.push(cur.join(' ')); cur = []; curLen = 0; }
+    });
+    if (cur.length) paras.push(cur.join(' '));
+    return paras.join('\n\n');
+  }
+  // Apply paragraphization only to the plain-prose spans of a heading+bullet
+  // -reflowed doc — i.e. blocks of text between blank lines that are NOT
+  // already `- `/`##` structured.
+  function paragraphizeJdProse(text) {
+    var blocks = text.split(/\n{2,}/);
+    return blocks.map(function (b) {
+      if (/^#{1,6}\s/.test(b.trim())) return b;
+      if (/^[-•*–▪·◦]\s/.test(b.trim())) return b; // a single bullet line (rare)
+      if (b.split('\n').every(function (l) { return /^[-•*–▪·◦]\s/.test(l.trim()) || !l.trim(); })) return b; // bullet block
+      return paragraphizeJdBlock(b);
+    }).join('\n\n');
+  }
+  // ---- entry point -------------------------------------------------------------
+  function reflowFlatJd(raw) {
+    var text = String(raw || '');
+    if (!looksFlatJd(text)) return text;
+    var withHeadings = insertJdHeadingBreaks(text);
+    var blocks = withHeadings.split(/\n{2,}/);
+    var withBullets = blocks.map(function (b) {
+      if (/^#{1,6}\s/.test(b.trim())) return b;
+      return splitJdBulletRuns(b);
+    }).join('\n\n');
+    return paragraphizeJdProse(withBullets);
+  }
+
   // Formatter for the JD body -> readable paragraphs + bullet (-•*–) /
   // numbered lists + headings. Handles two inputs gracefully:
   //   1) clean markdown from the pipeline (jd-cache): "# "/"## " ATX
@@ -47,7 +380,13 @@
   // re-introduce **bold**/*italic*/`code`/[link](url) as real tags) so
   // there is no raw-HTML injection path from JD content either way.
   function jdToHtml(raw) {
-    var text = String(raw || '').replace(/\r\n?/g, '\n').replace(/ /g, ' ').replace(/\n{3,}/g, '\n\n');
+    var text = String(raw || '').replace(/\r\n?/g, '\n');
+    // Flat plain-text JDs (near-zero newlines, no bullets/headings) get a
+    // heuristic pre-pass to recover structure before the normal markdown-ish
+    // parse below. No-op (returns text unchanged) for anything that already
+    // has real structure — see looksFlatJd().
+    text = reflowFlatJd(text);
+    text = text.replace(/ /g, ' ').replace(/\n{3,}/g, '\n\n');
     var lines = text.split('\n');
     function isBullet(l) { return /^\s*[-•*–▪·◦]\s+/.test(l); }
     function isNum(l) { return /^\s*\d{1,2}[.)]\s+/.test(l); }
@@ -148,7 +487,7 @@
     var title = row.role || '';
     var j = {
       id: 'c' + (row.num || Math.random().toString(36).slice(2)),
-      num: row.num, title: title, company: row.company || '', domain: hostFrom(row.url),
+      num: row.num, title: title, company: row.company || '', domain: logoDomainFor(row.company, row.url),
       source: sourceFromHost(hostFrom(row.url)),
       mono: initials(row.company || ''), color: colorFor(row.company || ''),
       loc: row.location || '', locKey: locKeyFor(row.location), work: /remote/i.test(row.location || '') ? 'Remote' : 'On-site',
@@ -838,7 +1177,7 @@
     var loc = (row.location || '') + (row.location && !/remote/i.test(row.location) ? ' · On-site' : '');
     return '<div class="match" data-num="' + esc(row.num) + '">' +
       '<div class="fitmini ' + cls + '">' + fit + '</div>' +
-      '<span class="logo" style="--mc:' + colorFor(row.company) + '" data-mono="' + esc(initials(row.company)) + '"><img src="https://logo.clearbit.com/' + esc(hostFrom(row.url)) + '" alt="' + esc(row.company) + ' logo" onerror="this.parentNode.classList.add(\'failed\');this.remove()"></span>' +
+      '<span class="logo" style="--mc:' + colorFor(row.company) + '" data-mono="' + esc(initials(row.company)) + '"><img src="/api/logo?domain=' + encodeURIComponent(logoDomainFor(row.company, row.url)) + '" alt="' + esc(row.company) + ' logo" onerror="this.parentNode.classList.add(\'failed\');this.remove()"></span>' +
       '<div class="minfo"><div class="t"><a href="' + esc(jobHref('job-detail.html', { company: row.company, role: row.role, num: row.num })) + '">' + esc(row.role) + '</a></div><div class="m"><span>' + esc(row.company) + '</span><span>' + esc(loc) + '</span></div></div>' +
       '<a class="btn btn--outline btn--sm go" href="' + esc(jobHref('job-detail.html', { company: row.company, role: row.role, num: row.num })) + '">View<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>' +
       '</div>';
@@ -902,7 +1241,7 @@
       setJobUrl('job-detail.html', job); // shareable slug URL in the address bar
       var h1 = document.querySelector('.head h1'); if (h1) h1.textContent = job.title;
       var co = document.querySelector('.head .company'); if (co) co.textContent = job.company;
-      var logo = document.querySelector('.head .logo'); if (logo) { logo.setAttribute('data-mono', job.mono); logo.style.setProperty('--mc', job.color); var img = logo.querySelector('img'); if (img) { img.src = 'https://logo.clearbit.com/' + job.domain; img.alt = job.company + ' logo'; } }
+      var logo = document.querySelector('.head .logo'); if (logo) { logo.setAttribute('data-mono', job.mono); logo.style.setProperty('--mc', job.color); var img = logo.querySelector('img'); if (img) { img.src = '/api/logo?domain=' + encodeURIComponent(job.domain); img.alt = job.company + ' logo'; } }
       var pin = document.querySelector('.meta .pin'); if (pin && pin.lastChild && pin.lastChild.nodeType === 3) pin.lastChild.textContent = (job.loc || 'Location n/a') + ' · ' + job.work;
       // Real cat/func/level tag chips (derived per-job by mapRow) + their filter links.
       (function () {
@@ -1053,7 +1392,7 @@
         var sal = salaryFor(r.url);
         var salHtml = '<span style="font:12px system-ui;color:' + (sal ? '#16324F' : '#b0a790') + '">' + (sal ? fmtSalary(sal) : 'not listed') + '</span>';
         return '<div class="c-brow" data-bi="' + i + '" style="display:flex;align-items:center;gap:14px;background:#fff;border:1px solid #ece5d6;border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.04);padding:14px 16px;margin-bottom:10px;cursor:pointer">' +
-          '<span class="logo" style="--mc:' + colorFor(r.company) + ';flex:none" data-mono="' + esc(initials(r.company)) + '"><img src="https://logo.clearbit.com/' + esc(hostFrom(r.url)) + '" onerror="this.parentNode.classList.add(\'failed\');this.remove()"></span>' +
+          '<span class="logo" style="--mc:' + colorFor(r.company) + ';flex:none" data-mono="' + esc(initials(r.company)) + '"><img src="/api/logo?domain=' + encodeURIComponent(logoDomainFor(r.company, r.url)) + '" onerror="this.parentNode.classList.add(\'failed\');this.remove()"></span>' +
           '<div style="flex:1;min-width:0"><div style="font-weight:600;color:#16324F">' + esc(r.role) + '</div><div style="font-size:13px;color:#8a8172;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px"><span>' + esc(r.company) + (r.location ? ' · ' + esc(r.location) : '') + '</span>' + salHtml + fitHtml + '</div></div>' +
           openPillHtml(r.url) +
           (SAVED_APP_STAGE.test(r.status || '') ? savedStagePill(r.status) : '') +
@@ -1087,7 +1426,7 @@
         var sal = salaryFor(r.url);
         var salHtml = '<span style="font:12px system-ui;color:' + (sal ? '#16324F' : '#b0a790') + '">' + (sal ? fmtSalary(sal) : 'not listed') + '</span>';
         return '<div class="c-srow" data-i="' + i + '" style="display:flex;align-items:center;gap:14px;background:#fff;border:1px solid #ece5d6;border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.04);padding:14px 16px;margin-bottom:10px;cursor:pointer">' +
-          '<span class="logo" style="--mc:' + colorFor(r.company) + ';flex:none" data-mono="' + esc(initials(r.company)) + '"><img src="https://logo.clearbit.com/' + esc(hostFrom(r.url)) + '" onerror="this.parentNode.classList.add(\'failed\');this.remove()"></span>' +
+          '<span class="logo" style="--mc:' + colorFor(r.company) + ';flex:none" data-mono="' + esc(initials(r.company)) + '"><img src="/api/logo?domain=' + encodeURIComponent(logoDomainFor(r.company, r.url)) + '" onerror="this.parentNode.classList.add(\'failed\');this.remove()"></span>' +
           '<div style="flex:1;min-width:0"><div style="font-weight:600;color:#16324F">' + esc(r.role) + '</div><div style="font-size:13px;color:#8a8172;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px"><span>' + esc(r.company) + (r.location ? ' · ' + esc(r.location) : '') + '</span>' + salHtml + fitHtml + '</div></div>' +
           openPillHtml(r.url) +
           savedStagePill(r.status || '') +
@@ -2272,7 +2611,7 @@
   // the Jobs feed (sessionStorage 'compass_current_job' → job-detail.html).
   function libViewJobDetail(g) {
     var url = g.items.map(function (i) { return i.url; }).find(Boolean) || '';
-    var lj = { id: 'lib-' + g.key, title: g.role || g.company, role: g.role || '', company: g.company || '', url: url, mono: initials(g.company), color: colorFor(g.company), domain: hostFrom(url), loc: '', work: '', fit: '', why: '', open: true };
+    var lj = { id: 'lib-' + g.key, title: g.role || g.company, role: g.role || '', company: g.company || '', url: url, mono: initials(g.company), color: colorFor(g.company), domain: logoDomainFor(g.company, url), loc: '', work: '', fit: '', why: '', open: true };
     setCurrentJob(lj);
     location.href = jobHref('job-detail.html', lj);
   }
