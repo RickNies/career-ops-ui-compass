@@ -1954,6 +1954,54 @@
     s.body.innerHTML = '<div style="font:13px/1.6 system-ui;color:#3a3428">CV tailoring, humanize, and cover-letter drafting are wired live on the <a href="documents.html" style="color:#2f6f5b">Documents</a> page (POST /api/cv-studio/tailor + /api/export/docx). Your source CV is editable in the “CV (cv.md)” section above.</div>';
   }
 
+  // ---- TWO-PAGER (your fit preferences — loves/must-haves/hates/deal-breakers/non-negotiables) ----
+  var TP_LISTS = [
+    ['loves', 'What you love (one per line)'],
+    ['must_haves', 'Must-haves (one per line)'],
+    ['hates', 'What you hate (one per line)'],
+    ['deal_breakers', 'Deal-breakers (one per line)'],
+    ['non_negotiables', 'Non-negotiables (one per line)']
+  ];
+  function sectionTwoPager(host) {
+    var s = details('Your two-pager (#/two-pager)', true); host.appendChild(s.d);
+    s.body.insertAdjacentHTML('beforeend', '<div style="font:13px/1.6 system-ui;color:#6b6255;margin:0 0 12px">What YOU actually want from your next role — feeds every fit score on your matches.</div>');
+    var box = el('div'); s.body.appendChild(box);
+    var m = msgLine(); s.body.appendChild(m);
+    var actions = el('div', 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px');
+    actions.innerHTML = '<button class="btn btn--primary btn--sm" id="tpSave" type="button">Save</button><button class="btn btn--outline btn--sm" id="tpDraft" type="button">✨ Re-draft from your résumé</button>';
+    s.body.appendChild(actions);
+
+    function render(d) {
+      d = d || {};
+      box.innerHTML =
+        '<label style="' + LBL + '">Who you are<textarea id="tpWho" rows="5" style="' + INP + '">' + esc(d.who_i_am || '') + '</textarea></label>' +
+        TP_LISTS.map(function (x) { return '<label style="' + LBL + '">' + x[1] + '<textarea id="tp_' + x[0] + '" rows="3" style="' + INP + '">' + esc(chips(d[x[0]])) + '</textarea></label>'; }).join('') +
+        '<label style="' + LBL + '">Target environment<textarea id="tpEnv" rows="3" style="' + INP + '">' + esc(d.target_environment || '') + '</textarea></label>';
+    }
+    function collect() {
+      var out = { who_i_am: box.querySelector('#tpWho').value, target_environment: box.querySelector('#tpEnv').value };
+      TP_LISTS.forEach(function (x) { out[x[0]] = fromLines(box.querySelector('#tp_' + x[0]).value); });
+      return out;
+    }
+
+    jGet('/api/two-pager').then(function (r) { render((r && r.twoPager) || {}); }).catch(function () { render({}); });
+
+    actions.querySelector('#tpSave').onclick = function () {
+      fetch('/api/two-pager', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(collect()) })
+        .then(function (r) { return r.json().then(function (j) { return { s: r.status, j: j }; }); })
+        .then(function (o) { say(m, o.s === 200 && o.j.ok ? 'Two-pager saved ✓' : ('Save failed: ' + (o.j.error || o.s)), o.s === 200 && o.j.ok); if (o.s === 200 && o.j.twoPager) render(o.j.twoPager); })
+        .catch(function (e) { say(m, 'Save error: ' + e, false); });
+    };
+    actions.querySelector('#tpDraft').onclick = function () {
+      say(m, llmProgress('Drafting'));
+      jPost('/api/two-pager/draft', { run: true }).then(function (r) {
+        if (r.body && r.body.fields) { render(r.body.fields); say(m, 'Drafted from your résumé — review, then Save ✓', true); }
+        else if (r.body && r.body.error) { say(m, 'Draft failed: ' + r.body.error, false); }
+        else { say(m, 'Could not draft — no fields returned.', false); }
+      }).catch(function (e) { say(m, 'Draft error: ' + e, false); });
+    };
+  }
+
   function buildNativeSetup() {
     if (document.getElementById('compassNativeSetup')) return;
     var main = document.querySelector('main .wrap') || document.querySelector('main') || document.body;
@@ -1963,6 +2011,7 @@
     sectionConfig(wrap);
     sectionPortals(wrap);
     sectionProfile(wrap);
+    sectionTwoPager(wrap);
     sectionDoc(wrap, 'CV (cv.md) (#/cv)', '/api/cv', '/api/cv');
     sectionDoc(wrap, 'Memory note (#/memory)', '/api/memory', '/api/memory');
     sectionCvStudioNote(wrap);
@@ -2049,7 +2098,7 @@
       var settings = { includeTitles: (window.includeTitles || []).slice(), excludeTitles: (window.excludeTitles || []).slice(), searchTerms: (window.searchTerms || []).slice(), cities: (window.cities || []).map(function (c) { return c && c.name ? c.name : c; }), remoteUS: !!window.remoteUS };
       jPost('/api/compass/setup', { settings: settings }).then(function (r) { toastMsg(r.body && r.body.ok ? 'Search filters written to the REAL portals.yml ✓' : ('portals write failed: ' + (r.body && r.body.error)), r.body && r.body.ok ? 'success' : 'info'); }).catch(function (e) { toastMsg('portals write error: ' + e, 'info'); });
     });
-    banner('Setup MIGRATED — full config, portals (companies w/ source keys), profile, CV, memory, health, usage, docs-assistant, orientation, help all native here via their real endpoints. Comp floor stays demo.');
+    banner('Setup MIGRATED — full config, portals (companies w/ source keys), profile, two-pager, CV, memory, health, usage, docs-assistant, orientation, help all native here via their real endpoints. Comp floor stays demo.');
   }
 
   // ======================= OUTREACH (AI networking plan) ===================
