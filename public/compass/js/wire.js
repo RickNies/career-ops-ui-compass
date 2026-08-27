@@ -340,7 +340,14 @@
       + '.badge--live .tk{background:#7bbf6a !important}'
       // subtle Mango footer on every page
       + '#mangoFooter{text-align:center;padding:26px 16px 40px;color:#b0a790;font:13px/1.5 system-ui;-webkit-user-select:none;user-select:none}'
-      + '#mangoFooter .h{color:#e0645a}';
+      + '#mangoFooter .h{color:#e0645a}'
+      // avatar → "Need support?" popover (mirrors the .ms/.ms-menu trigger-pill
+      // pattern used by the jobs-page filter dropdowns, self-contained so it
+      // works on every page even where that page-local controller isn't loaded)
+      + '.avatar-menu-wrap{position:relative;display:inline-flex}'
+      + '.avatar-menu-wrap .avatar{cursor:pointer}'
+      + '.avatar-menu{position:absolute;z-index:30;top:calc(100% + 8px);right:0;min-width:200px;background:#fff;border:1px solid #ece5d6;border-radius:11px;box-shadow:0 1px 3px rgba(0,0,0,.05);padding:11px 14px;font:13.5px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:#2a3b4d}'
+      + '.avatar-menu[hidden]{display:none}';
     document.head.appendChild(st);
   }
   // Rebrand chrome shared by every compass page: mascot wordmark, favicon, footer.
@@ -374,6 +381,64 @@
     nav.innerHTML = NAV_ITEMS.map(function (n) { return '<a href="' + n.href + '"' + (n.href === cur ? ' class="active"' : '') + '>' + esc(n.label) + '</a>'; }).join('');
     // Setup is now a first-class nav item — hide the redundant gear icon if present.
     var gear = document.querySelector('.gear'); if (gear) gear.style.display = 'none';
+  }
+
+  // Top-right name/avatar → "Need support? Contact Nick" popover. Wired once
+  // in wire.js so it's universal across every Compass page; no-ops cleanly on
+  // any page without a .avatar element (e.g. tasks.html). Follows the same
+  // click-to-toggle / Esc-closes / outside-click-closes / focus-return pattern
+  // as the jobs-page .ms/.ms-menu (Pop) and .rpop popovers, reimplemented
+  // locally since that page-scoped controller isn't loaded everywhere.
+  var avatarMenuOpen = false;
+  function closeAvatarMenu(returnFocus) {
+    var menu = document.getElementById('compassAvatarMenu');
+    var avatar = document.querySelector('.avatar');
+    if (!menu || menu.hidden) return;
+    menu.hidden = true;
+    if (avatar) avatar.setAttribute('aria-expanded', 'false');
+    avatarMenuOpen = false;
+    document.removeEventListener('mousedown', onAvatarMenuDocDown, true);
+    document.removeEventListener('keydown', onAvatarMenuKey, true);
+    if (returnFocus && avatar) avatar.focus();
+  }
+  function onAvatarMenuDocDown(e) {
+    var wrap = document.querySelector('.avatar-menu-wrap');
+    if (wrap && !wrap.contains(e.target)) closeAvatarMenu(false);
+  }
+  function onAvatarMenuKey(e) {
+    if (e.key === 'Escape') { e.preventDefault(); closeAvatarMenu(true); }
+  }
+  function openAvatarMenu() {
+    var menu = document.getElementById('compassAvatarMenu');
+    var avatar = document.querySelector('.avatar');
+    if (!menu) return;
+    menu.hidden = false;
+    if (avatar) avatar.setAttribute('aria-expanded', 'true');
+    avatarMenuOpen = true;
+    document.addEventListener('mousedown', onAvatarMenuDocDown, true);
+    document.addEventListener('keydown', onAvatarMenuKey, true);
+  }
+  function toggleAvatarMenu() { if (avatarMenuOpen) closeAvatarMenu(true); else openAvatarMenu(); }
+  function wireAvatarMenu() {
+    ensureHeaderStyles();
+    var avatar = document.querySelector('.avatar');
+    if (!avatar || avatar.getAttribute('data-menu-wired')) return; // no avatar on this page, or already wired
+    avatar.setAttribute('data-menu-wired', '1');
+    var wrap = document.createElement('div'); wrap.className = 'avatar-menu-wrap';
+    avatar.parentNode.insertBefore(wrap, avatar);
+    wrap.appendChild(avatar);
+    avatar.setAttribute('role', 'button');
+    avatar.setAttribute('tabindex', '0');
+    avatar.setAttribute('aria-haspopup', 'true');
+    avatar.setAttribute('aria-expanded', 'false');
+    var menu = document.createElement('div');
+    menu.id = 'compassAvatarMenu'; menu.className = 'avatar-menu'; menu.hidden = true;
+    menu.textContent = 'Need support? Contact Nick';
+    wrap.appendChild(menu);
+    avatar.addEventListener('click', function (e) { e.stopPropagation(); toggleAvatarMenu(); });
+    avatar.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAvatarMenu(); }
+    });
   }
 
   // ======================= JOBS ============================================
@@ -2418,6 +2483,13 @@
   // ======================= TASKS PAGE ======================================
   var STATUS_STYLE = { queued: ['#8a8172', '#f0ead9'], running: ['#8a6a3b', '#f6ecd6'], done: ['#2f6f5b', '#e3efe9'], error: ['#9c5231', '#f4e3db'], cancelled: ['#6b6255', '#eee9de'] };
   function fmtElapsed(ms) { if (ms < 0) ms = 0; var s = Math.round(ms / 1000); if (s < 60) return s + 's'; var m = Math.floor(s / 60); var r = s % 60; if (m < 60) return m + 'm ' + r + 's'; var h = Math.floor(m / 60); return h + 'h ' + (m % 60) + 'm'; }
+  // Compact "Aug 27, 8:04 AM" stamp — date + time together, since task rows can
+  // span multiple days (queued overnight, recently-finished from yesterday).
+  function fmtTaskStamp(iso) {
+    if (!iso) return '—';
+    var d = new Date(iso);
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ', ' + d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
   function renderTasks(list) {
     var root = document.getElementById('tasksRoot'); if (!root) return;
     var active = list.filter(function (j) { return j.status === 'running' || j.status === 'queued'; });
@@ -2433,7 +2505,7 @@
       var pm = j.provider ? (esc(j.provider) + (j.model ? ' · ' + esc(j.model) : '')) : '—';
       var startTs = j.started || j.created;
       var elapsed = j.status === 'running' ? fmtElapsed(now - new Date(startTs).getTime()) : ((j.finished && j.started) ? fmtElapsed(new Date(j.finished).getTime() - new Date(j.started).getTime()) : '—');
-      var startedStr = startTs ? new Date(startTs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '—';
+      var startedStr = fmtTaskStamp(startTs);
       var acts = '';
       if (j.status === 'running' || j.status === 'queued') acts = '<button class="btn btn--outline btn--sm task-cancel" data-id="' + j.id + '" type="button" style="font-size:12px">Cancel</button>';
       else if (j.status === 'done') acts = '<a class="btn btn--outline btn--sm" href="library.html?job=' + encodeURIComponent(j.id) + '" style="font-size:12px">View</a>';
@@ -2443,7 +2515,7 @@
         '<div style="flex:1.4;min-width:0"><div style="font-weight:600;color:#16324F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(j.company || '(unknown)') + (j.role ? ' <span style="color:#8a8172;font-weight:500">· ' + esc(j.role) + '</span>' : '') + '</div><div style="font:12px system-ui;color:#8a8172">' + esc(DOC_LABEL[j.type] || j.type) + '</div></div>' +
         '<div style="flex:0 0 92px">' + pill + '</div>' +
         '<div style="flex:1;font:12px system-ui;color:#8a8172;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + pm + '</div>' +
-        '<div style="flex:0 0 130px;font:12px system-ui;color:#8a8172">' + startedStr + ' · ' + elapsed + '</div>' +
+        '<div style="flex:0 0 172px;font:12px system-ui;color:#8a8172;white-space:nowrap">' + startedStr + ' · ' + elapsed + '</div>' +
         '<div style="flex:0 0 92px;text-align:right">' + acts + '</div></div>';
     }
     var html = '';
@@ -2466,6 +2538,7 @@
     renderNav();
     injectMangoChrome();
     injectActivity();
+    wireAvatarMenu();
     watchJobs(); setInterval(watchJobs, 6000);   // global watcher on every page
     if (page === 'jobs.html') wireJobs();
     else if (page === 'library.html') wireLibrary();
