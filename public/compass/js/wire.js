@@ -1971,12 +1971,22 @@
     actions.innerHTML = '<button class="btn btn--primary btn--sm" id="tpSave" type="button">Save</button><button class="btn btn--outline btn--sm" id="tpDraft" type="button">✨ Re-draft from your résumé</button>';
     s.body.appendChild(actions);
 
+    var TP_INP = INP + ';overflow:hidden';
+    function tpGrow(t) { t.style.height = 'auto'; t.style.height = (t.scrollHeight + 2) + 'px'; }
+    function tpGrowAll() {
+      var tas = box.querySelectorAll('textarea');
+      for (var i = 0; i < tas.length; i++) {
+        (function (t) { tpGrow(t); t.addEventListener('input', function () { tpGrow(t); }); })(tas[i]);
+      }
+    }
+
     function render(d) {
       d = d || {};
       box.innerHTML =
-        '<label style="' + LBL + '">Who you are<textarea id="tpWho" rows="5" style="' + INP + '">' + esc(d.who_i_am || '') + '</textarea></label>' +
-        TP_LISTS.map(function (x) { return '<label style="' + LBL + '">' + x[1] + '<textarea id="tp_' + x[0] + '" rows="3" style="' + INP + '">' + esc(chips(d[x[0]])) + '</textarea></label>'; }).join('') +
-        '<label style="' + LBL + '">Target environment<textarea id="tpEnv" rows="3" style="' + INP + '">' + esc(d.target_environment || '') + '</textarea></label>';
+        '<label style="' + LBL + '">Who you are<textarea id="tpWho" rows="5" style="' + TP_INP + '">' + esc(d.who_i_am || '') + '</textarea></label>' +
+        TP_LISTS.map(function (x) { return '<label style="' + LBL + '">' + x[1] + '<textarea id="tp_' + x[0] + '" rows="3" style="' + TP_INP + '">' + esc(chips(d[x[0]])) + '</textarea></label>'; }).join('') +
+        '<label style="' + LBL + '">Target environment<textarea id="tpEnv" rows="3" style="' + TP_INP + '">' + esc(d.target_environment || '') + '</textarea></label>';
+      tpGrowAll();
     }
     function collect() {
       var out = { who_i_am: box.querySelector('#tpWho').value, target_environment: box.querySelector('#tpEnv').value };
