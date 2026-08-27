@@ -596,7 +596,7 @@ var LOC_LABEL = {"new-york":"New York","los-angeles":"Los Angeles","sf-bay":"SF 
 /* reason chip sets */
 var REASONS = {
   good:["Great fit","Dream company","Right level","Great comp"],
-  bad:["Too junior","Wrong location","Below pay","Not my industry","Company"]
+  bad:["Too junior","Too senior","Wrong location","Below pay","Not my industry","Not relevant background","Company"]
 };
 
 /* ============ review state (localStorage, shared across pages by job id) ============ */
@@ -693,7 +693,11 @@ function cardHTML(j){
   '</div>';
 }
 
+/* applied/in-pipeline jobs live in My Jobs, not the Jobs feed — independent of the ✓/✗ review state */
+function isApplied(j){ return /appl|interview|phone|screen|offer|hired|reject|respond/i.test(String(j.status||'')); }
+
 function matches(j){
+  if(isApplied(j)) return false;
   if(state.q){
     var hay=(j.title+" "+j.company+" "+j.cat+" "+j.func+" "+j.level+" "+j.loc).toLowerCase();
     if(hay.indexOf(state.q.toLowerCase())===-1) return false;
