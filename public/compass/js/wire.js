@@ -36,8 +36,16 @@
     }
     return 'Company careers'; // unrecognized host — most likely the company's own site
   }
-  // Best-effort formatter for scraped JD plain text -> readable paragraphs +
-  // bullet (-•*–) / numbered lists + light headings. Everything is esc()'d.
+  // Formatter for the JD body -> readable paragraphs + bullet (-•*–) /
+  // numbered lists + headings. Handles two inputs gracefully:
+  //   1) clean markdown from the pipeline (jd-cache): "# "/"## " ATX
+  //      headings, "- " bullets on their own lines, blank-line paragraphs.
+  //   2) legacy scraped plain-text blobs: falls back to blank-line
+  //      paragraph splitting + heuristic ALL-CAPS / "Label:" headings +
+  //      run-on bullet-char detection.
+  // Inline text goes through mdInlineRich() (escape-first, then safely
+  // re-introduce **bold**/*italic*/`code`/[link](url) as real tags) so
+  // there is no raw-HTML injection path from JD content either way.
   function jdToHtml(raw) {
     var text = String(raw || '').replace(/\r\n?/g, '\n').replace(/ /g, ' ').replace(/\n{3,}/g, '\n\n');
     var lines = text.split('\n');
@@ -45,6 +53,8 @@
     function isNum(l) { return /^\s*\d{1,2}[.)]\s+/.test(l); }
     function stripBullet(l) { return l.replace(/^\s*[-•*–▪·◦]\s+/, ''); }
     function stripNum(l) { return l.replace(/^\s*\d{1,2}[.)]\s+/, ''); }
+    function isAtx(l) { return /^\s*#{1,6}\s+/.test(l); }
+    function stripAtx(l) { return l.replace(/^\s*#{1,6}\s+/, '').trim(); }
     function isHeading(l) {
       var t = l.trim();
       if (!t || t.length > 64) return false;
@@ -54,10 +64,11 @@
       return letters.length >= 3 && letters === letters.toUpperCase();
     }
     var out = [], para = [], i = 0;
-    function flushPara() { if (para.length) { out.push('<p>' + esc(para.join(' ').trim()) + '</p>'); para = []; } }
+    function flushPara() { if (para.length) { out.push('<p>' + mdInlineRich(para.join(' ').trim()) + '</p>'); para = []; } }
     while (i < lines.length) {
       var line = lines[i], t = line.trim();
       if (!t) { flushPara(); i++; continue; }
+      if (isAtx(line)) { flushPara(); out.push('<h3>' + mdInlineRich(stripAtx(line)) + '</h3>'); i++; continue; }
       if (isBullet(line) || isNum(line)) {
         flushPara();
         var ordered = isNum(line), typ = ordered ? isNum : isBullet, items = [];
@@ -65,14 +76,14 @@
           items.push((ordered ? stripNum(lines[i]) : stripBullet(lines[i])).trim());
           i++;
         }
-        out.push('<' + (ordered ? 'ol' : 'ul') + '>' + items.map(function (it) { return '<li>' + esc(it) + '</li>'; }).join('') + '</' + (ordered ? 'ol' : 'ul') + '>');
+        out.push('<' + (ordered ? 'ol' : 'ul') + '>' + items.map(function (it) { return '<li>' + mdInlineRich(it) + '</li>'; }).join('') + '</' + (ordered ? 'ol' : 'ul') + '>');
         continue;
       }
-      if (isHeading(line) && !para.length) { flushPara(); out.push('<h3>' + esc(t.replace(/:$/, '')) + '</h3>'); i++; continue; }
+      if (isHeading(line) && !para.length) { flushPara(); out.push('<h3>' + mdInlineRich(t.replace(/:$/, '')) + '</h3>'); i++; continue; }
       para.push(t); i++;
     }
     flushPara();
-    return out.join('') || '<p>' + esc(text.trim()) + '</p>';
+    return out.join('') || '<p>' + mdInlineRich(text.trim()) + '</p>';
   }
   function initials(name) {
     var w = String(name || '').replace(/[^A-Za-z0-9 ]/g, ' ').trim().split(/\s+/).filter(Boolean);
