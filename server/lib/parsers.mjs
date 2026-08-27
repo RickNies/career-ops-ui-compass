@@ -8,8 +8,11 @@ import { normalizeUrl } from './url-key.mjs';
 /**
  * Split `s` on `delim` but ignore occurrences preceded by a backslash.
  * Used by parseMarkdownTable so `\|` inside a cell stays inside the cell.
+ * Exported so other row-editing call sites (e.g. the tracker status-update
+ * write path in routes/compass.mjs) can split/rejoin a raw table row without
+ * re-implementing a naive, escape-unaware `split('|')`.
  */
-function splitUnescaped(s, delim) {
+export function splitUnescaped(s, delim) {
   const out = [];
   let buf = '';
   for (let i = 0; i < s.length; i++) {
@@ -138,11 +141,34 @@ export function parseApplications(text) {
     const norm = h.replace(/^#/, 'num').toLowerCase().trim();
     return HEADER_ALIASES[norm] ?? norm;
   });
+  const locationIdx = keys.indexOf('location');
 
   return rows.map((cells) => {
+    // BF-2 — a row can legitimately split into MORE cells than the header
+    // has columns: an escaped `\|` keeps ONE literal pipe from splitting its
+    // cell, but if a row's data (e.g. a stray value concatenated into
+    // Location) carries an extra correctly-escaped field beyond the normal
+    // 10-column shape, the cell count still exceeds the header count.
+    // Positionally assigning cells 1:1 by index would then shift every
+    // column after the overflow — landing a score in Status, truncating
+    // the URL, dropping Notes. Anchor the well-known FRONT columns
+    // (num/date/company/role) and BACK columns (score/status/url/report/
+    // notes) to their real position counted from each end, and fold
+    // whatever's left over into `location` — the one free-text field nothing
+    // downstream depends on having a strict format — instead of letting the
+    // overflow corrupt Status/URL/Notes.
+    let mapped = cells;
+    if (locationIdx >= 0 && cells.length > keys.length) {
+      const backLen = keys.length - locationIdx - 1;
+      const front = cells.slice(0, locationIdx);
+      const back = cells.slice(cells.length - backLen);
+      const middle = cells.slice(locationIdx, cells.length - backLen).join(' | ');
+      mapped = [...front, middle, ...back];
+    }
+
     const obj = {};
     keys.forEach((k, i) => {
-      obj[k] = cells[i] ?? '';
+      obj[k] = mapped[i] ?? '';
     });
 
     // Extract score number

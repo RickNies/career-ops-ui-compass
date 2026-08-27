@@ -27,6 +27,7 @@ import { execFile } from 'node:child_process';
 import { readFileSync, writeFileSync, renameSync, mkdirSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { dirname } from 'node:path';
+import { splitUnescaped } from '../parsers.mjs';
 
 const VENV_PY = '/Users/nick/apps/career-ops-scrape/venv/bin/python';
 const WRITE_SETTINGS = '/Users/nick/apps/career-ops-scrape/write_settings.py';
@@ -482,19 +483,43 @@ export function registerCompassRoutes(app) {
       const lines = content.split(/\r?\n/);
       let hi = -1, cols = null;
       for (let i = 0; i < lines.length; i++) {
-        if (/^\|\s*#\s*\|/.test(lines[i])) { hi = i; cols = lines[i].split('|').map((s) => s.trim()); break; }
+        // BF-1 — split on unescaped `|` only. A naive split('|') explodes a
+        // row that has a `\|`-escaped literal pipe (e.g. inside Role or
+        // Location) into extra cells, shifting every column after it — a
+        // score value would land in Status, or a Notes cell could get
+        // written into the Status column instead. splitUnescaped keeps an
+        // escaped pipe inside its cell (same helper the read-path parser
+        // in ../parsers.mjs uses).
+        if (/^\|\s*#\s*\|/.test(lines[i])) { hi = i; cols = splitUnescaped(lines[i], '|').map((s) => s.trim()); break; }
       }
       if (hi < 0 || !cols) return res.status(500).json({ error: 'tracker table header not found' });
       const idxStatus = cols.findIndex((c) => /^status$/i.test(c));
       const idxNum = cols.findIndex((c) => /^#$/.test(c));
       const idxUrl = cols.findIndex((c) => /^url$/i.test(c));
+      const idxLocation = cols.findIndex((c) => /^location$/i.test(c));
       if (idxStatus < 0) return res.status(500).json({ error: 'Status column not found in tracker' });
       let target = -1, beforeLine = null;
       for (let i = hi + 2; i < lines.length; i++) {
         if (!/^\|/.test(lines[i])) continue;
-        const cells = lines[i].split('|');
-        const numCell = idxNum >= 0 ? (cells[idxNum] || '').trim() : '';
-        const urlCell = idxUrl >= 0 ? (cells[idxUrl] || '') : '';
+        let cells = splitUnescaped(lines[i], '|');
+        // BF-2 — a row can have MORE cells than header columns: an escaped
+        // `\|` correctly keeps one literal pipe inside its cell, but if the
+        // row's data itself carries an extra field beyond the normal shape
+        // (e.g. a stray value concatenated into Location), the cell count
+        // still exceeds cols.length. Anchor the front (num/date/company/
+        // role) and back (score/status/url/report/notes) columns to their
+        // real position counted from each end, and fold the overflow back
+        // into `location` (rejoined with a plain `|`, reconstructing the
+        // exact original text) — so the overflow can't shift Status/URL.
+        if (idxLocation >= 0 && cells.length > cols.length) {
+          const backLen = cols.length - idxLocation - 1;
+          const front = cells.slice(0, idxLocation);
+          const back = cells.slice(cells.length - backLen);
+          const middle = cells.slice(idxLocation, cells.length - backLen).join('|');
+          cells = [...front, middle, ...back];
+        }
+        const numCell = idxNum >= 0 ? (cells[idxNum] || '').replace(/\\\|/g, '|').trim() : '';
+        const urlCell = idxUrl >= 0 ? (cells[idxUrl] || '').replace(/\\\|/g, '|') : '';
         const matchNum = num && numCell === num;
         const matchUrl = url && (urlCell.trim() === url || urlCell.indexOf(url) >= 0);
         if (matchNum || matchUrl) {

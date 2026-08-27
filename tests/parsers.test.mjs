@@ -86,6 +86,36 @@ test('parseApplications: empty tracker', () => {
   assert.deepEqual(parseApplications('# Tracker\n\nNo data'), []);
 });
 
+// BF-1/BF-2 — escaped pipes in the real 10-column schema (# | Date | Company |
+// Role | Location | Score | Status | URL | Report | Notes). A `\|` inside
+// Role must stay in Role and not shift Status/URL.
+test('parseApplications: escaped pipe in Role does not shift later columns', () => {
+  const md = `| # | Date | Company | Role | Location | Score | Status | URL | Report | Notes |
+|---|---|---|---|---|---|---|---|---|---|
+| 285 | 2026-08-25 | Amazon | Finance Manager, COIP \\| RO&I Finance | 1.9/5 | 4/5 | Scanned | https://example.com/job |  | Finance manager |`;
+  const a = parseApplications(md)[0];
+  assert.equal(a.role, 'Finance Manager, COIP | RO&I Finance');
+  assert.equal(a.status, 'Scanned');
+  assert.equal(a.url, 'https://example.com/job');
+  assert.equal(a.notes, 'Finance manager');
+});
+
+// BF-2 — a row with a genuinely EXTRA (correctly escaped) field beyond the
+// 10-column shape (e.g. a stray value concatenated into Location) must not
+// let the overflow shift Score/Status/URL/Notes; the overflow folds into
+// `location` instead.
+test('parseApplications: extra escaped-pipe field overflows into location, not Status/URL/Notes', () => {
+  const md = `| # | Date | Company | Role | Location | Score | Status | URL | Report | Notes |
+|---|---|---|---|---|---|---|---|---|---|
+| 565 | 2026-08-25 | OpenGov | Sr. Finance & Strategy Analyst | US \\| 0.5/5 | San Francisco | 2/5 | Scanned | https://example.com/job |  | Junior/analyst level |`;
+  const a = parseApplications(md)[0];
+  assert.equal(a.status, 'Scanned');
+  assert.equal(a.url, 'https://example.com/job');
+  assert.equal(a.notes, 'Junior/analyst level');
+  assert.equal(a.score, '2/5');
+  assert.equal(a.scoreNum, 2);
+});
+
 // ───────────────────────── parsePipeline ─────────────────────────
 
 test('parsePipeline: empty', () => {
