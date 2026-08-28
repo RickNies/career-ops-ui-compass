@@ -119,11 +119,31 @@
     background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7480' stroke-width='2.5'><path d='M6 9l6 6 6-6'/></svg>");background-repeat:no-repeat;background-position:right 11px center}
   .next{flex:none;color:var(--gold-deep);font-size:12.5px;font-weight:600;background:var(--gold-soft);border-radius:8px;padding:5px 10px;white-space:nowrap}
 
+  /* Review archive — reused verbatim from jobs.html's filter-bar search box and
+     .ms/.ms-trigger/.ms-menu popover (same CSS custom properties already in
+     :root above), so this page never introduces a second "search" or
+     "dropdown filter" affordance elsewhere in the app. */
+  .search{display:flex;align-items:center;gap:10px;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 13px}
+  .search svg{color:var(--muted);flex:none}
+  .search input{border:0;background:transparent;outline:none;font-size:15px;width:100%;color:var(--ink);font-family:inherit}
+  .ms{position:relative}
+  .ms-trigger{cursor:pointer;display:inline-flex;align-items:center;gap:7px;padding:7px 13px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);font-size:13.5px;font-weight:500}
+  .ms-trigger .cv{width:12px;height:12px;color:var(--muted);transition:transform .15s ease}
+  .ms.open .ms-trigger{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .ms.open .ms-trigger .cv{color:#fff;transform:rotate(180deg)}
+  .ms-menu[hidden]{display:none}
+  .ms-menu{position:absolute;z-index:15;top:calc(100% + 6px);left:0;min-width:210px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm);box-shadow:var(--shadow);padding:8px}
+  .ms-menu label{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:8px;font-size:14px;color:var(--ink-soft);cursor:pointer}
+  .ms-menu label:hover{background:var(--surface-2)}
+  .ms-menu input{accent-color:var(--ink);width:15px;height:15px}
+
   @media(max-width:700px){
     .summary{grid-template-columns:1fr}
     .brand span{display:none}
     .row{flex-wrap:wrap}
     .rmeta,.next{width:100%;text-align:left}
+    .arch-controls{flex-direction:column;align-items:stretch}
+    .arch-controls .ms-menu{left:0;right:0}
   }
 </style>
 </head>

@@ -1598,7 +1598,192 @@
       }
       renderBookmarks();
       render();
+      // Review archive is independent of tracker/bookmark data (own store,
+      // own failure domain) — wire it after the two sections above so it
+      // lands third in DOM order, per docs/review-archive-design.md §2.
+      wireReviewArchive(main);
     }).catch(function (e) { banner('Could not load saved/tracker: ' + e); });
+  }
+
+  // ── Review archive: past-week ✓/✗ reviews (search + verdict + timeframe),
+  // appended as a third section on My Jobs after Saved jobs/Applications.
+  // Read-mostly (filter/search/view — no writes), so no toast/confirmation
+  // machinery is needed here; see docs/review-archive-design.md §3-§6.
+  function wireReviewArchive(main) {
+    var old = document.getElementById('compassReviewArchive'); if (old) old.remove();
+    var sec = document.createElement('section');
+    sec.id = 'compassReviewArchive';
+    sec.style.cssText = 'margin-top:26px';
+    sec.innerHTML =
+      '<div style="display:flex;align-items:baseline;gap:10px;margin:6px 0 4px">' +
+        '<h2 style="font:600 20px var(--serif,\'Iowan Old Style\',Georgia,serif);color:#16324F;margin:0">Review archive</h2>' +
+        '<span id="archCount" style="font:12px system-ui;color:#8a8172">— jobs you reviewed in past weeks</span>' +
+      '</div>' +
+      '<div style="font:13px system-ui;color:#8a8172;margin-bottom:14px">' +
+        'Your current week’s ✓/✗ still live on the Jobs feed. Once a week ends, reviews move here — nothing is deleted.' +
+      '</div>' +
+      '<div class="arch-controls" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">' +
+        '<label class="search" style="flex:1;min-width:220px">' +
+          '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>' +
+          '<input id="archQ" type="text" placeholder="Search by job title or company…" />' +
+        '</label>' +
+        '<select id="archVerdict" class="stage-select" aria-label="Show">' +
+          '<option value="good" selected>Liked</option>' +
+          '<option value="bad">Passed</option>' +
+          '<option value="all">Liked + Passed</option>' +
+        '</select>' +
+        '<div class="ms" id="archTfMs">' +
+          '<button class="ms-trigger" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="archTfPanel">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>' +
+            '<span id="archTfLabel">All time</span>' +
+            '<svg class="cv" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>' +
+          '</button>' +
+          '<div class="ms-menu" id="archTfPanel" role="radiogroup" aria-label="Reviewed timeframe" hidden>' +
+            '<label><input type="radio" name="archTf" value="2w">Last 2 weeks</label>' +
+            '<label><input type="radio" name="archTf" value="1m">Last month</label>' +
+            '<label><input type="radio" name="archTf" value="3m">Last 3 months</label>' +
+            '<label><input type="radio" name="archTf" value="all" checked>All time</label>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div id="archList"><div style="color:#8a8172;font:14px system-ui;padding:16px 0">Loading your review archive…</div></div>';
+    main.appendChild(sec);
+
+    // Monday 00:00:00.000 local — byte-identical logic to jobs.html's own
+    // copy and the server's (compass.mjs), just ported to this file. Only
+    // used here to compute the timeframe presets' since/until bounds.
+    function startOfThisWeekLocal(d) {
+      d = d ? new Date(d) : new Date();
+      var day = d.getDay();
+      var diffToMonday = (day === 0) ? 6 : day - 1;
+      var mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - diffToMonday);
+      mon.setHours(0, 0, 0, 0);
+      return mon.getTime();
+    }
+    var TF_LABEL = { '2w': 'Last 2 weeks', '1m': 'Last month', '3m': 'Last 3 months', all: 'All time' };
+    var TF_DAYS = { '2w': 14, '1m': 30, '3m': 90 };
+    function tfBounds(tf) {
+      if (!TF_DAYS[tf]) return { since: null, until: null };
+      var until = startOfThisWeekLocal();
+      return { since: until - TF_DAYS[tf] * 86400000, until: until };
+    }
+
+    var listEl = sec.querySelector('#archList');
+    var qEl = sec.querySelector('#archQ');
+    var verdictEl = sec.querySelector('#archVerdict');
+    var tfMs = sec.querySelector('#archTfMs');
+    var tfTrigger = tfMs.querySelector('.ms-trigger');
+    var tfPanel = sec.querySelector('#archTfPanel');
+    var tfLabelEl = sec.querySelector('#archTfLabel');
+
+    var archState = { verdict: 'good', q: '', tf: 'all' };
+    var archRows = [];   // last server response for the current verdict+timeframe (pre-search)
+    var qTimer = null;
+    var archIsEmpty = null; // null = not yet probed; true/false once we know
+
+    function verdictBadge(v) {
+      return v === 'bad'
+        ? '<span style="flex:none;display:inline-flex;align-items:center;padding:3px 11px;border-radius:999px;background:var(--terra-soft);color:var(--terra);font:700 11px system-ui">Passed</span>'
+        : '<span style="flex:none;display:inline-flex;align-items:center;padding:3px 11px;border-radius:999px;background:var(--sage-soft);color:var(--sage);font:700 11px system-ui">Liked</span>';
+    }
+    function rowHtml(r) {
+      var when = r.ts ? new Date(r.ts).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+      var reason = r.reason ? '<span>' + esc(r.reason) + '</span>' : '';
+      return '<div class="c-arow" data-url="' + esc(r.url) + '" style="display:flex;align-items:center;gap:14px;background:#fff;border:1px solid #ece5d6;border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.04);padding:14px 16px;margin-bottom:10px;cursor:pointer">' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-weight:600;color:#16324F">' + esc(r.title || 'Untitled role') + '</div>' +
+          '<div style="font-size:13px;color:#8a8172;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px">' +
+            '<span>' + esc(r.company || 'Company not on file') + (r.source ? ' · via ' + esc(r.source) : '') + '</span>' + reason +
+          '</div>' +
+        '</div>' +
+        verdictBadge(r.verdict) +
+        '<span style="flex:none;color:#8a8172;font:12px system-ui">' + esc(when) + '</span>' +
+      '</div>';
+    }
+    function matchesQ(r, q) {
+      if (!q) return true;
+      var hay = ((r.title || '') + ' ' + (r.company || '')).toLowerCase();
+      return hay.indexOf(q.toLowerCase()) !== -1;
+    }
+    function probeArchiveEmpty() {
+      if (archIsEmpty !== null) return Promise.resolve(archIsEmpty);
+      return jGet('/api/compass/reviews/archive?verdict=all').then(function (r) {
+        archIsEmpty = !((r && r.rows && r.rows.length) > 0);
+        return archIsEmpty;
+      }).catch(function () { return false; }); // best-effort; default to the safer "no results" copy on failure
+    }
+    function renderList() {
+      var q = archState.q.trim();
+      var filtered = archRows.filter(function (r) { return matchesQ(r, q); });
+      if (!filtered.length) {
+        probeArchiveEmpty().then(function (empty) {
+          if (empty) {
+            listEl.innerHTML = '<div style="padding:26px 20px;text-align:center;color:#8a8172;font:14px/1.6 system-ui">Nothing archived yet — once this week ends, anything you’ve liked or passed moves here. Your current week’s reviews are still on the Jobs feed.</div>';
+          } else {
+            listEl.innerHTML = '<div style="padding:26px 20px;text-align:center;color:#8a8172;font:14px/1.6 system-ui">No reviews match — try a different search, or widen the timeframe.' +
+              (q ? ' <button id="archClearQ" class="btn btn--outline btn--sm" type="button" style="margin-left:6px">Clear search</button>' : '') + '</div>';
+            var cb = document.getElementById('archClearQ');
+            if (cb) cb.onclick = function () { qEl.value = ''; archState.q = ''; renderList(); qEl.focus(); };
+          }
+        });
+        return;
+      }
+      listEl.innerHTML = filtered.map(rowHtml).join('');
+      listEl.querySelectorAll('.c-arow').forEach(function (el) {
+        el.addEventListener('click', function () {
+          var url = el.getAttribute('data-url');
+          var r = filtered.filter(function (x) { return x.url === url; })[0] || {};
+          // Same slug-resolution path every other My Jobs row uses — if the
+          // job aged out of the live tracker, job-detail.html's own existing
+          // not-found fallback handles it (already shipped, honest copy).
+          location.href = jobHref('job-detail.html', { title: r.title || '', company: r.company || '' });
+        });
+      });
+    }
+    function fetchArchive() {
+      listEl.innerHTML = '<div style="color:#8a8172;font:14px system-ui;padding:16px 0">Loading your review archive…</div>';
+      var params = ['verdict=' + encodeURIComponent(archState.verdict)];
+      var b = tfBounds(archState.tf);
+      if (b.since != null) params.push('since=' + b.since);
+      if (b.until != null) params.push('until=' + b.until);
+      jGet('/api/compass/reviews/archive?' + params.join('&')).then(function (r) {
+        archRows = (r && r.rows) || [];
+        renderList();
+      }).catch(function () {
+        listEl.innerHTML = '<div style="padding:26px 20px;text-align:center;color:#8a8172;font:14px/1.6 system-ui">Couldn’t load your review archive — check your connection and try again.</div>';
+      });
+    }
+
+    verdictEl.addEventListener('change', function () { archState.verdict = verdictEl.value; fetchArchive(); });
+    qEl.addEventListener('input', function () {
+      clearTimeout(qTimer);
+      var v = qEl.value;
+      qTimer = setTimeout(function () { archState.q = v; renderList(); }, 300);
+    });
+
+    function closeTfMenu() {
+      tfPanel.hidden = true; tfMs.classList.remove('open'); tfTrigger.setAttribute('aria-expanded', 'false');
+      document.removeEventListener('mousedown', onTfDocDown, true);
+      document.removeEventListener('keydown', onTfKey, true);
+    }
+    function openTfMenu() {
+      tfPanel.hidden = false; tfMs.classList.add('open'); tfTrigger.setAttribute('aria-expanded', 'true');
+      document.addEventListener('mousedown', onTfDocDown, true);
+      document.addEventListener('keydown', onTfKey, true);
+    }
+    function onTfDocDown(e) { if (!tfMs.contains(e.target)) closeTfMenu(); }
+    function onTfKey(e) { if (e.key === 'Escape') { closeTfMenu(); tfTrigger.focus(); } }
+    tfTrigger.addEventListener('click', function () { if (tfPanel.hidden) openTfMenu(); else closeTfMenu(); });
+    Array.prototype.slice.call(tfPanel.querySelectorAll('input[name="archTf"]')).forEach(function (r) {
+      r.addEventListener('change', function () {
+        archState.tf = r.value;
+        tfLabelEl.textContent = TF_LABEL[r.value];
+        closeTfMenu();
+        fetchArchive();
+      });
+    });
+
+    fetchArchive();
   }
 
   // ======================= DOCUMENTS =======================================
