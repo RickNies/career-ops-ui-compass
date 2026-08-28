@@ -625,15 +625,24 @@
   // Write-through a review to the server. Debounced per-url so a note typed
   // character-by-character doesn't fire a request (and a full-file rewrite
   // server-side) on every keystroke; the local write (already done by the
-  // caller) stays instant.
-  function postReviewDebounced(url, rv) {
+  // caller) stays instant. `meta` ({title, company, source}) is an optional
+  // job snapshot — the caller already has the job object on hand at the vote
+  // moment — persisted alongside the verdict so the review archive is fully
+  // self-contained even after a job ages out of the live tracker (see
+  // docs/review-archive-design.md §4.2).
+  function postReviewDebounced(url, rv, meta) {
     if (!url || !rv || (rv.verdict !== 'good' && rv.verdict !== 'bad')) return;
     var key = normUrl(url);
+    meta = meta || {};
     clearTimeout(__reviewPostTimers[key]);
     __reviewPostTimers[key] = setTimeout(function () {
       delete __reviewPostTimers[key];
-      jPost('/api/compass/reviews', { url: url, verdict: rv.verdict, reason: rv.reason || '', note: rv.note || '', ts: rv.ts || Date.now() })
-        .then(function (r) { if (r && r.body && r.body.ok && window.__reviewsMap) window.__reviewsMap[key] = { verdict: rv.verdict, reason: rv.reason || '', note: rv.note || '', ts: rv.ts || Date.now() }; })
+      var body = {
+        url: url, verdict: rv.verdict, reason: rv.reason || '', note: rv.note || '', ts: rv.ts || Date.now(),
+        title: meta.title || '', company: meta.company || '', source: meta.source || '',
+      };
+      jPost('/api/compass/reviews', body)
+        .then(function (r) { if (r && r.body && r.body.ok && window.__reviewsMap) window.__reviewsMap[key] = { verdict: rv.verdict, reason: rv.reason || '', note: rv.note || '', ts: rv.ts || Date.now(), title: body.title, company: body.company, source: body.source }; })
         .catch(function () { /* localStorage already has it; best-effort sync */ });
     }, 400);
   }
@@ -1135,7 +1144,8 @@
           // Server-backed review store (verdict+reason+note+ts) — the feed's
           // actual "reviewed" source of truth; distinct from feedback.jsonl above.
           var rv = (typeof window.getReview === 'function') ? window.getReview(id) : null;
-          postReviewDebounced(job.url, rv || { verdict: verdict, reason: reason || '', note: note || '', ts: Date.now() });
+          postReviewDebounced(job.url, rv || { verdict: verdict, reason: reason || '', note: note || '', ts: Date.now() },
+            { title: job.title || '', company: job.company || '', source: job.source || '' });
         };
         window.__compassFbWrapped = true;
       }
@@ -1344,7 +1354,8 @@
               .catch(function () { if (isFirstTap) toastMsg('Saved on this device — server unreachable', 'error'); });
           }
           var rv = (typeof window.getReview === 'function') ? window.getReview() : null;
-          postReviewDebounced(job.url, rv || { verdict: verdict, reason: reason || '', note: note || '', ts: Date.now() });
+          postReviewDebounced(job.url, rv || { verdict: verdict, reason: reason || '', note: note || '', ts: Date.now() },
+            { title: job.title || '', company: job.company || '', source: job.source || '' });
         };
         if (typeof window.clearReview === 'function') {
           var origDetailClear = window.clearReview;

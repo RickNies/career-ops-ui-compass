@@ -27,6 +27,13 @@
  *       wrapper — which used to skip the feedback.py POST entirely — was
  *       brought in line with the feed's.)
  *
+ *   GET /api/compass/reviews/archive → past-week (never current-week) rows
+ *       from the same REVIEWS_STORE, filterable by verdict/search/timeframe,
+ *       for the "Review archive" section on saved.html. Self-contained: rows
+ *       carry their own title/company/source snapshot (written at review
+ *       time), so this never needs to join against the live tracker or
+ *       feedback.jsonl. See docs/review-archive-design.md.
+ *
  *   POST /api/compass/setup     → shells out to the shared write_settings.py
  *       (comment-preserving ruamel writer + validate-portals.mjs) targeting the
  *       REAL portals.yml. LLM/provider + Anthropic key are NOT here — the
@@ -166,7 +173,14 @@ function writeSavedMap(map) {
 // path above (that one is the AI-learning event log and is untouched). JSONL
 // keyed by normalized url, ONE row per url — rewritten in full on every write
 // (same shape as SAVED_STORE above), so it never grows unbounded even though a
-// note can be edited keystroke-by-keystroke. { url, verdict, reason, note, ts }.
+// note can be edited keystroke-by-keystroke. { url, verdict, reason, note, ts,
+// title, company, source }. The last three are a job snapshot taken at write
+// time (client already has them on hand — see postReviewDebounced in
+// wire.js) so the review-archive endpoint below is fully self-contained: it
+// never needs to re-join against the live tracker or the feedback.jsonl
+// event log to know what a past review WAS. Older rows written before this
+// snapshot existed simply have empty strings here until next-touched or
+// backfilled — see docs/review-archive-design.md §4.2.
 const REVIEWS_STORE = DATA_ROOT + '/data/compass-reviews.jsonl';
 function readReviewMap() {
   const map = {};
@@ -175,7 +189,10 @@ function readReviewMap() {
       ln = ln.trim(); if (!ln) return;
       try {
         const o = JSON.parse(ln);
-        if (o && o.url) map[normUrlSrv(o.url)] = { verdict: o.verdict, reason: o.reason || '', note: o.note || '', ts: Number(o.ts) || 0 };
+        if (o && o.url) map[normUrlSrv(o.url)] = {
+          verdict: o.verdict, reason: o.reason || '', note: o.note || '', ts: Number(o.ts) || 0,
+          title: o.title || '', company: o.company || '', source: o.source || '',
+        };
       } catch { /* skip bad line */ }
     });
   } catch { /* none yet */ }
@@ -187,6 +204,19 @@ function writeReviewMap(map) {
   const tmp = REVIEWS_STORE + '.tmp';
   writeFileSync(tmp, lines.join('\n') + (lines.length ? '\n' : ''));
   renameSync(tmp, REVIEWS_STORE);
+}
+// Monday 00:00:00.000 local → the "this week" boundary used everywhere in the
+// app (feed's Reviewed tab/rail in jobs.html + the archive endpoint below).
+// Ported byte-identical (just syntax) from the client copy in wire.js/jobs.html
+// per docs/review-archive-design.md §1 — same machine/timezone on both sides,
+// single-box app, so there is no clock-skew risk to guard against here.
+function startOfThisWeekLocal(d) {
+  d = d ? new Date(d) : new Date();
+  const day = d.getDay(); // 0=Sun .. 6=Sat
+  const diffToMonday = (day === 0) ? 6 : day - 1;
+  const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - diffToMonday);
+  mon.setHours(0, 0, 0, 0);
+  return mon.getTime();
 }
 const SELF = 'http://127.0.0.1:' + (process.env.PORT || '8100');
 // cover ≠ résumé: /api/cv-studio/tailor returns a COMBINED tailored-résumé doc, so
@@ -520,9 +550,46 @@ export function registerCompassRoutes(app) {
       reason: body.reason != null ? String(body.reason).slice(0, 200) : (cur ? cur.reason : ''),
       note: body.note != null ? String(body.note).slice(0, 2000) : (cur ? cur.note : ''),
       ts,
+      // Job snapshot (title/company/source) at write time — additive, optional
+      // fields so this stays backward-compatible with older rows that lack
+      // them. See docs/review-archive-design.md §4.2.
+      title: body.title != null ? String(body.title).slice(0, 300) : (cur ? cur.title || '' : ''),
+      company: body.company != null ? String(body.company).slice(0, 300) : (cur ? cur.company || '' : ''),
+      source: body.source != null ? String(body.source).slice(0, 100) : (cur ? cur.source || '' : ''),
     };
     writeReviewMap(map);
     res.json({ ok: true, url: key, review: map[key] });
+  });
+
+  // ── Review archive: past-week ✓/✗ reviews, for the "Review archive" section
+  // on My Jobs (public/compass/saved.html). Thin filter over the now-enriched
+  // readReviewMap() — no live join against the tracker or feedback.jsonl.
+  // ALWAYS excludes the current week (server-side mirror of the feed's own
+  // week-scoping in jobs.html) so the feed and the archive can never both
+  // claim the same review, even from a stale client mid-transition.
+  //   GET /api/compass/reviews/archive?verdict=good|bad|all&q=&since=&until=
+  //   → { rows:[{url,verdict,reason,note,ts,title,company,source}], count, weekCutoff }
+  app.get('/api/compass/reviews/archive', (req, res) => {
+    const q = req.query || {};
+    const verdict = String(q.verdict || 'good').trim(); // default matches the UI's default (belt-and-suspenders)
+    const term = String(q.q || '').trim().toLowerCase();
+    const since = (q.since != null && q.since !== '') ? Number(q.since) : null;
+    const until = (q.until != null && q.until !== '') ? Number(q.until) : null;
+    const weekCutoff = startOfThisWeekLocal();
+    const map = readReviewMap();
+    const rows = Object.keys(map)
+      .map((u) => Object.assign({ url: u }, map[u]))
+      .filter((r) => (r.ts || 0) < weekCutoff)
+      .filter((r) => (verdict === 'all') || r.verdict === verdict)
+      .filter((r) => since == null || (r.ts || 0) >= since)
+      .filter((r) => until == null || (r.ts || 0) < until)
+      .filter((r) => {
+        if (!term) return true;
+        const hay = ((r.title || '') + ' ' + (r.company || '')).toLowerCase();
+        return hay.indexOf(term) !== -1;
+      })
+      .sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    res.json({ rows, count: rows.length, weekCutoff });
   });
 
   // Pasted-JD cache: GET returns the cached JD for a url (or ''); POST stores one.
