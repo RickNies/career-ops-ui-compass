@@ -1050,7 +1050,7 @@
           saveBtn.classList.toggle('on', now);
           saveBtn.setAttribute('aria-pressed', String(now));
           saveBtn.setAttribute('aria-label', now ? 'Saved' : 'Save this job');
-          setBookmark(job.url, now).then(function (r) { if (!(r.body && r.body.ok)) toastMsg('Could not save the bookmark', 'info'); }).catch(function () { toastMsg('Save failed — server unreachable', 'info'); });
+          setBookmark(job.url, now).then(function (r) { if (!(r.body && r.body.ok)) toastMsg('Could not save the bookmark', 'error'); }).catch(function () { toastMsg('Save failed — server unreachable', 'error'); });
           if (window.__compassSavedOnly && !now) compassRender(); // drop it from the Saved-only view
         };
       }
@@ -1345,7 +1345,7 @@
         sb.addEventListener('click', function () {
           if (!job.url) { toastMsg('No posting URL on this row', 'info'); return; }
           var next = !bookmarkFor(job.url); sb.disabled = true;
-          setBookmark(job.url, next).then(function () { paintSave(); toastMsg(next ? 'Saved to My Jobs' : 'Removed bookmark', 'success'); }).catch(function () { toastMsg('Could not update bookmark', 'info'); }).finally(function () { sb.disabled = false; });
+          setBookmark(job.url, next).then(function () { paintSave(); toastMsg(next ? 'Saved to My Jobs' : 'Removed bookmark', 'success'); }).catch(function () { toastMsg('Could not update bookmark', 'error'); }).finally(function () { sb.disabled = false; });
         });
       })();
       // SINGLE SOURCE OF TRUTH for the fit score: fit-analysis /100 (GET /api/compass/fit).
@@ -1427,8 +1427,8 @@
                   toastMsg('Marked Applied in the tracker ✓', 'success');
                   job.status = 'Applied'; setCurrentJob(job);
                   var badge = document.querySelector('.head .badges'); if (badge) { var s = document.createElement('span'); s.className = 'badge badge--live'; s.style.marginLeft = '8px'; s.innerHTML = '<span class="tk"></span>Applied'; badge.appendChild(s); }
-                } else { toastMsg('Status update failed: ' + ((r.body && r.body.error) || r.status), 'info'); }
-              }).catch(function (er) { toastMsg('Status update error: ' + er, 'info'); });
+                } else { toastMsg('That didn\'t save — check your connection and try again.', 'error'); }
+              }).catch(function (er) { toastMsg('That didn\'t save — check your connection and try again.', 'error'); });
             }
           }, 300);
         });
@@ -1494,7 +1494,7 @@
           var i = +el.getAttribute('data-bi'); var r = savedRows[i];
           el.addEventListener('click', function (e) { if (e.target.closest && (e.target.closest('.compass-ext') || e.target.closest('.c-brow-remove'))) return; var mj = mapRow(r); setCurrentJob(mj); location.href = jobHref('job-detail.html', mj); });
           var rm = el.querySelector('.c-brow-remove');
-          if (rm) rm.onclick = function (e) { e.stopPropagation(); rm.disabled = true; setBookmark(r.url, false).then(function () { savedRows.splice(savedRows.indexOf(r), 1); renderBookmarks(); toastMsg('Removed bookmark', 'success'); }).catch(function () { rm.disabled = false; toastMsg('Could not remove bookmark', 'info'); }); };
+          if (rm) rm.onclick = function (e) { e.stopPropagation(); rm.disabled = true; setBookmark(r.url, false).then(function () { savedRows.splice(savedRows.indexOf(r), 1); renderBookmarks(); toastMsg('Removed bookmark', 'success'); }).catch(function () { rm.disabled = false; toastMsg('Could not remove bookmark', 'error'); }); };
         });
       }
 
@@ -1536,8 +1536,8 @@
       function persist(r, status, okMsg, onDone) {
         jPost('/api/compass/tracker/status', { num: r.num, url: r.url, status: status }).then(function (rr) {
           if (rr.body && rr.body.ok) { onDone(); toastMsg(okMsg, 'success'); }
-          else toastMsg('Update failed: ' + ((rr.body && rr.body.error) || rr.status), 'info');
-        }).catch(function (er) { toastMsg('Update error: ' + er, 'info'); });
+          else toastMsg('That didn\'t save — check your connection and try again.', 'error');
+        }).catch(function () { toastMsg('That didn\'t save — check your connection and try again.', 'error'); });
       }
       function bindRows() {
         wrap.querySelectorAll('.c-srow').forEach(function (el) {
@@ -2274,7 +2274,7 @@
       return '<div style="' + CARD + ';padding:18px 20px">' + (s.title ? '<h3 style="font:600 15px system-ui;color:#16324F;margin:0 0 8px">' + esc(s.title) + '</h3>' : '') + inner + '</div>';
     }).join('');
     container.querySelectorAll('.compass-copy').forEach(function (b) {
-      b.onclick = function () { var t = decodeURIComponent(b.getAttribute('data-copy')); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { b.textContent = 'Copied ✓'; setTimeout(function () { b.textContent = 'Copy message'; }, 1500); }, function () { toastMsg('Copy failed — select the text manually', 'info'); }); };
+      b.onclick = function () { var t = decodeURIComponent(b.getAttribute('data-copy')); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { b.textContent = 'Copied ✓'; setTimeout(function () { b.textContent = 'Copy message'; }, 1500); }, function () { toastMsg('Copy failed — select the text manually', 'error'); }); };
     });
   }
   function wireOutreach() {
@@ -2366,13 +2366,13 @@
   function libDownloadDocx(md, type) {
     fetch('/api/export/docx', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ markdown: md, title: DOC_LABEL[type] || 'document' }) })
       .then(function (r) { return r.blob(); }).then(function (blob) { downloadBlob(blob, (DOC_LABEL[type] || 'document').replace(/\s+/g, '-').toLowerCase() + '.docx'); toastMsg('Downloaded .docx', 'success'); })
-      .catch(function (e) { toastMsg('Export failed: ' + e, 'info'); });
+      .catch(function () { toastMsg('Couldn\'t export the document — try again in a moment.', 'error'); });
   }
   function downloadBlob(blob, name) { var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
   function downloadText(text, name, mime) { downloadBlob(new Blob([text], { type: mime || 'text/plain' }), name); }
   function copyText(text, btn) {
     function ok() { if (btn) { var o = btn.textContent; btn.textContent = 'Copied ✓'; setTimeout(function () { btn.textContent = o; }, 1400); } toastMsg('Copied to clipboard', 'success'); }
-    function fb() { try { var ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;left:-9999px;top:0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); ok(); } catch (e) { toastMsg('Copy failed — select the text manually', 'info'); } }
+    function fb() { try { var ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;left:-9999px;top:0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); ok(); } catch (e) { toastMsg('Copy failed — select the text manually', 'error'); } }
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(ok, fb); else fb();
   }
 
@@ -2670,10 +2670,10 @@
             return jPost('/api/compass/generate', { type: j.type, company: j.company, role: j.role, url: j.url, jd: j.jd });
           }).then(function (r) {
             var nid = r.body && r.body.jobId;
-            if (!nid) { retry.disabled = false; retry.textContent = 'Retry generation'; toastMsg('Could not restart: ' + ((r.body && r.body.error) || r.status), 'info'); return; }
+            if (!nid) { retry.disabled = false; retry.textContent = 'Retry generation'; toastMsg('Couldn\'t restart — try again in a moment.', 'error'); return; }
             it.id = nid; it.status = 'running'; it.error = null;   // re-run in place; poll the new job
             renderItemInto(it, container);
-          }).catch(function (e) { retry.disabled = false; retry.textContent = 'Retry generation'; toastMsg('Retry error: ' + e, 'info'); });
+          }).catch(function () { retry.disabled = false; retry.textContent = 'Retry generation'; toastMsg('Couldn\'t restart — try again in a moment.', 'error'); });
         };
       }
       else {
@@ -2977,10 +2977,10 @@
   var NKEY = 'compass_notified';
   function retryJob(id) {
     jGet('/api/compass/jobs/' + id).then(function (j) { return jPost('/api/compass/generate', { type: j.type, company: j.company, role: j.role, url: j.url, jd: j.jd }); })
-      .then(function (r) { toastMsg(r.body && r.body.jobId ? 'Retrying…' : ('Retry failed: ' + ((r.body && r.body.error) || r.status)), 'info'); });
+      .then(function (r) { var ok = r.body && r.body.jobId; toastMsg(ok ? 'Retrying…' : 'Couldn\'t retry — try again in a moment.', ok ? 'info' : 'error'); });
   }
   function cancelJob(id, cb) {
-    jPost('/api/compass/jobs/' + id + '/cancel', {}).then(function (r) { toastMsg(r.body && r.body.ok ? 'Task cancelled' : 'Cancel failed', r.body && r.body.ok ? 'success' : 'info'); if (cb) cb(r); });
+    jPost('/api/compass/jobs/' + id + '/cancel', {}).then(function (r) { toastMsg(r.body && r.body.ok ? 'Task cancelled' : 'Cancel failed', r.body && r.body.ok ? 'success' : 'error'); if (cb) cb(r); });
   }
   function completionToast(j) {
     var label = DOC_LABEL[j.type] || j.type; var suffix = j.company ? ' for ' + j.company : '';
