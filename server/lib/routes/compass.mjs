@@ -138,7 +138,6 @@ function readSalaryMap() {
   } catch { return _salCache || {}; }
 }
 const LIVENESS_STORE = DATA_ROOT + '/data/liveness.tsv';
-const LIVENESS_PY = SCRAPE_DIR + '/liveness.py';
 
 // Real POSTED dates (data/posted.jsonl, written by career-ops-scrape's
 // posted_store.py — JobSpy date_posted + ATS/browser-read posted dates),
@@ -779,18 +778,6 @@ export function registerCompassRoutes(app) {
     if (!u || jd.length < 40) return res.status(400).json({ error: 'url and jd (40+ chars) required' });
     const m = readJdCache(); m[u] = jd; writeJdCache(m);
     res.json({ ok: true, bytes: jd.length });
-  });
-
-  // ── Liveness: trigger a bounded sweep (default 100 URLs). The daily launchd
-  //    agent (com.nick.career-ops-liveness) does the full staggered sweep. ──
-  app.post('/api/compass/liveness/refresh', (req, res) => {
-    const raw = parseInt((req.body && req.body.limit) || 100, 10);
-    const limit = Math.min(1030, Math.max(1, isNaN(raw) ? 100 : raw));
-    execFile(VENV_PY, [LIVENESS_PY, 'sweep', '--limit', String(limit), '--concurrency', '12'],
-      { timeout: 300000, env: SUBPROC_ENV }, (err, stdout, stderr) => {
-        if (err) return res.status(500).json({ error: 'liveness sweep failed', details: String(stderr || err.message || '').slice(0, 800) });
-        res.json({ ok: true, output: String(stdout || '').slice(0, 800) });
-      });
   });
 
   // ── Tracker STATUS update (the app itself only appends). Finds the row in
