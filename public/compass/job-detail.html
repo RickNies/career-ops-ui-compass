@@ -191,6 +191,26 @@
     .rail{position:static;order:-1}
     .brand span{display:none}
   }
+
+  /* ---- confirm modal — same chrome/pattern as jobs.html's Quick Add dialog
+     (.modal/.modal-card), reused here for in-app confirmations (e.g. "Mark
+     Applied") instead of native window.confirm(). ---- */
+  @keyframes pop{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+  .modal{position:fixed;inset:0;z-index:80;background:rgba(22,50,79,.42);backdrop-filter:blur(2px);display:none;align-items:center;justify-content:center;padding:22px}
+  .modal.open{display:flex}
+  .modal-card{background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:0 22px 64px rgba(22,50,79,.30);width:100%;max-width:452px;padding:26px;animation:pop .16s ease}
+  .modal-card h2{font-size:21px;display:flex;align-items:center;gap:10px}
+  .modal-card h2 .mi{width:34px;height:34px;border-radius:10px;background:var(--gold-soft);color:var(--gold-deep);display:grid;place-items:center;flex:none}
+  .modal-card h2 .mi svg{width:18px;height:18px}
+  .modal-card .msub{color:var(--muted);font-size:13.5px;margin:8px 0 17px;line-height:1.5}
+  .modal-actions{display:flex;gap:9px;justify-content:flex-end}
+  /* pill buttons matching .btn--primary/.btn--outline's colors+hover, under
+     their own names since this page's .btn is overridden (rail: full-width
+     block buttons) and would collide if reused inside the modal. */
+  .modal-go{display:inline-flex;align-items:center;justify-content:center;gap:7px;font-family:inherit;font-weight:600;font-size:14px;border-radius:999px;border:1px solid var(--ink);background:var(--ink);color:#fff;padding:10px 22px;cursor:pointer;white-space:nowrap;box-shadow:var(--shadow-sm)}
+  .modal-go:hover{background:#0f2740}
+  .modal-cancel{display:inline-flex;align-items:center;justify-content:center;gap:7px;font-family:inherit;font-weight:600;font-size:14px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);padding:10px 18px;cursor:pointer;white-space:nowrap;box-shadow:var(--shadow-sm)}
+  .modal-cancel:hover{border-color:var(--gold);color:var(--gold-deep)}
 </style>
 </head>
 <body>
@@ -311,7 +331,17 @@
        jobs.html/setup.html) -->
   <div id="toastLive" class="toast-wrap" role="status" aria-live="polite" aria-atomic="false"></div>
 
+  <!-- in-app confirm dialog (same chrome as jobs.html's Quick Add modal) —
+       used by js/wire.js in place of native window.confirm() -->
+  <div class="modal" id="confirmModal" aria-hidden="true">
+    <div class="modal-card" id="confirmCard" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmSub">
+      <div id="confirmBody"></div>
+    </div>
+  </div>
+
 <script>
+/* shared HTML-escape helper — see jobs.html for the identical implementation. */
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 /* shared toast helper — see jobs.html for the identical implementation. */
 function toast(msg, type){
   var w=document.getElementById("toastLive"); if(!w) return;
@@ -380,6 +410,50 @@ goodBtn.addEventListener("click", function(){ var rv=getReview(); if(rv&&rv.verd
 badBtn.addEventListener("click", function(){ var rv=getReview(); if(rv&&rv.verdict==="bad"){ clearReview(); } else { saveReview("bad"); flashSaved(); } paint(); });
 noteEl.addEventListener("input", function(){ var rv=getReview(); if(rv){ saveReview(rv.verdict, null, noteEl.value); flashSaved(); } });
 paint();
+
+/* ============ in-app confirm dialog (replaces native window.confirm()) ============
+   Same shell (.modal/.modal-card), focus trap, Esc, backdrop click, scroll-lock,
+   focus return as jobs.html's Quick Add modal — reused, not reinvented.
+   Usage: window.compassConfirm({title, sub, confirmLabel, cancelLabel}) → Promise<boolean> */
+var confirmModal=document.getElementById("confirmModal"), confirmBody=document.getElementById("confirmBody"), confirmCard=document.getElementById("confirmCard");
+var confirmLastFocus=null, confirmResolve=null;
+function trapTabConfirm(container, e){
+  if(e.key!=="Tab") return;
+  var f=Array.prototype.slice.call(container.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'))
+        .filter(function(el){ return el.offsetParent!==null; });
+  if(!f.length) return;
+  var first=f[0], last=f[f.length-1];
+  if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); }
+  else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); }
+}
+function closeConfirmModal(result){
+  confirmModal.classList.remove("open"); confirmModal.setAttribute("aria-hidden","true");
+  document.body.style.overflow="";
+  if(confirmLastFocus && confirmLastFocus.focus){ confirmLastFocus.focus(); }
+  if(confirmResolve){ var r=confirmResolve; confirmResolve=null; r(!!result); }
+}
+confirmModal.addEventListener("mousedown", function(e){ if(e.target===confirmModal) closeConfirmModal(false); }); /* backdrop click */
+document.addEventListener("keydown", function(e){
+  if(!confirmModal.classList.contains("open")) return;
+  if(e.key==="Escape"){ closeConfirmModal(false); return; }
+  trapTabConfirm(confirmCard, e); /* Tab cycles inside the dialog */
+});
+window.compassConfirm=function(opts){
+  opts=opts||{};
+  return new Promise(function(resolve){
+    confirmLastFocus=document.activeElement;
+    confirmResolve=resolve;
+    confirmBody.innerHTML =
+      '<h2 id="confirmTitle"><span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg></span>'+esc(opts.title||"Are you sure?")+'</h2>'+
+      '<p class="msub" id="confirmSub">'+esc(opts.sub||"")+'</p>'+
+      '<div class="modal-actions"><button class="modal-cancel" type="button" id="confirmCancelBtn">'+esc(opts.cancelLabel||"Cancel")+'</button><button class="modal-go" type="button" id="confirmGoBtn">'+esc(opts.confirmLabel||"Confirm")+'</button></div>';
+    confirmModal.classList.add("open"); confirmModal.setAttribute("aria-hidden","false");
+    document.body.style.overflow="hidden"; /* scroll-lock */
+    document.getElementById("confirmCancelBtn").onclick=function(){ closeConfirmModal(false); };
+    document.getElementById("confirmGoBtn").onclick=function(){ closeConfirmModal(true); };
+    document.getElementById("confirmGoBtn").focus();
+  });
+};
 </script>
   <script src="js/wire.js"></script>
 </body>

@@ -1739,9 +1739,18 @@
         if (job.url) { applyBtn.setAttribute('target', '_blank'); applyBtn.setAttribute('rel', 'noopener'); }
         applyBtn.addEventListener('click', function (e) {
           if (!job.url) { e.preventDefault(); toastMsg('No posting URL on this row', 'info'); return; }
-          // let the browser open the tab (anchor target=_blank), then prompt
+          // let the browser open the tab (anchor target=_blank), then prompt —
+          // in-app confirm dialog (job-detail.html's window.compassConfirm),
+          // not the native window.confirm(), to stay in the app's visual language.
           setTimeout(function () {
-            if (window.confirm('Opened the posting in a new tab.\n\nMark “' + job.title + ' — ' + job.company + '” as Applied in your tracker?')) {
+            var askApplied = window.compassConfirm ? window.compassConfirm({
+              title: 'Mark this job as applied?',
+              sub: 'We opened the posting in a new tab. We’ll add “' + job.title + ' — ' + job.company + '” to your tracker as Applied.',
+              confirmLabel: 'Yes, mark it applied',
+              cancelLabel: 'Not yet'
+            }) : Promise.resolve(window.confirm('Opened the posting in a new tab.\n\nMark “' + job.title + ' — ' + job.company + '” as Applied in your tracker?'));
+            askApplied.then(function (ok) {
+              if (!ok) return;
               jPost('/api/compass/tracker/status', { num: job.num, url: job.url, status: 'Applied' }).then(function (r) {
                 if (r.body && r.body.ok) {
                   toastMsg('Marked Applied in the tracker ✓', 'success');
@@ -1749,7 +1758,7 @@
                   var badge = document.querySelector('.head .badges'); if (badge) { var s = document.createElement('span'); s.className = 'badge badge--live'; s.style.marginLeft = '8px'; s.innerHTML = '<span class="tk"></span>Applied'; badge.appendChild(s); }
                 } else { toastMsg('That didn\'t save — check your connection and try again.', 'error'); }
               }).catch(function (er) { toastMsg('That didn\'t save — check your connection and try again.', 'error'); });
-            }
+            });
           }, 300);
         });
       }
