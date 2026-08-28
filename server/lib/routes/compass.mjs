@@ -76,7 +76,7 @@
  * writer (mockup entries lack a source key → would wipe tracked_companies).
  */
 import { execFile } from 'node:child_process';
-import { readFileSync, writeFileSync, renameSync, mkdirSync, readdirSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, renameSync, mkdirSync, statSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { dirname } from 'node:path';
 import yaml from 'js-yaml';
