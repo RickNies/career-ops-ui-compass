@@ -598,6 +598,52 @@
     if (saved) window.__savedSet[normUrl(url)] = true; else delete window.__savedSet[normUrl(url)];
     return jPost('/api/compass/saved', { url: url, saved: !!saved });
   }
+  // ── Reviews (✓/✗ + reason + note): server is the source of truth so the feed's
+  // "reviewed" state survives a cache-clear or a different device. jobs.html and
+  // job-detail.html each keep their OWN localStorage-backed getReviews/setReviews
+  // (keyed by job id, shared key "compass_reviews") — this just seeds/merges the
+  // server's url-keyed map into whichever one is present on the current page, and
+  // write-throughs every save/clear back to the server (debounced for notes).
+  function loadReviews() {
+    return jGet('/api/compass/reviews').then(function (j) { window.__reviewsMap = (j && j.map) || {}; return window.__reviewsMap; }).catch(function () { window.__reviewsMap = {}; return {}; });
+  }
+  // Merge the server's review for `url` into the local (id-keyed) review map,
+  // newest ts wins — so a stale local cache (e.g. right after a cache-clear,
+  // where there IS no local cache) never shadows a review made elsewhere.
+  function mergeServerReview(id, url) {
+    if (!id || !url || typeof window.getReviews !== 'function' || typeof window.setReviews !== 'function') return;
+    var sv = window.__reviewsMap && window.__reviewsMap[normUrl(url)];
+    if (!sv) return;
+    var m = window.getReviews();
+    var cur = m[id];
+    if (!cur || (sv.ts || 0) > (cur.ts || 0)) {
+      m[id] = { verdict: sv.verdict, reason: sv.reason || '', note: sv.note || '', ts: sv.ts || Date.now() };
+      window.setReviews(m);
+    }
+  }
+  var __reviewPostTimers = {};
+  // Write-through a review to the server. Debounced per-url so a note typed
+  // character-by-character doesn't fire a request (and a full-file rewrite
+  // server-side) on every keystroke; the local write (already done by the
+  // caller) stays instant.
+  function postReviewDebounced(url, rv) {
+    if (!url || !rv || (rv.verdict !== 'good' && rv.verdict !== 'bad')) return;
+    var key = normUrl(url);
+    clearTimeout(__reviewPostTimers[key]);
+    __reviewPostTimers[key] = setTimeout(function () {
+      delete __reviewPostTimers[key];
+      jPost('/api/compass/reviews', { url: url, verdict: rv.verdict, reason: rv.reason || '', note: rv.note || '', ts: rv.ts || Date.now() })
+        .then(function (r) { if (r && r.body && r.body.ok && window.__reviewsMap) window.__reviewsMap[key] = { verdict: rv.verdict, reason: rv.reason || '', note: rv.note || '', ts: rv.ts || Date.now() }; })
+        .catch(function () { /* localStorage already has it; best-effort sync */ });
+    }, 400);
+  }
+  function postReviewClear(url) {
+    if (!url) return;
+    var key = normUrl(url);
+    clearTimeout(__reviewPostTimers[key]);
+    if (window.__reviewsMap) delete window.__reviewsMap[key];
+    jPost('/api/compass/reviews', { url: url, clear: true }).catch(function () { /* best-effort */ });
+  }
   function fmtSalary(s) { // {min,max} in K → "$185–225K" or "$260K"
     if (!s) return '';
     var lo = s.min, hi = s.max;
@@ -1036,6 +1082,10 @@
       var loaded = rows.length;
       window.JOBS = rows.map(mapRow).filter(function (j) { return !isDead(j.url); });
       window.JOBS.forEach(function (j) { j.open = !isDead(j.url); });
+      // Seed the localStorage review map from the server (source of truth) BEFORE
+      // the first render, so a job reviewed on another device/before a
+      // cache-clear still shows as reviewed here — newest ts wins per job.
+      window.JOBS.forEach(function (j) { mergeServerReview(j.id, j.url); });
       markNewestBatch(window.JOBS);
       // "Newest (posted)" is only a meaningful, non-duplicate choice once at
       // least one job has a REAL posted date — hide it (never fabricate one)
@@ -1070,8 +1120,21 @@
           jPost('/api/compass/feedback', { url: job.url, verdict: verdict, reason: reason || '' })
             .then(function (r) { toastMsg(r.body && r.body.ok ? 'Recorded to feedback.jsonl (' + verdict + ')' : 'Saved locally — server write failed', r.body && r.body.ok ? 'success' : 'info'); })
             .catch(function () { toastMsg('Saved locally — server unreachable', 'info'); });
+          // Server-backed review store (verdict+reason+note+ts) — the feed's
+          // actual "reviewed" source of truth; distinct from feedback.jsonl above.
+          var rv = (typeof window.getReview === 'function') ? window.getReview(id) : null;
+          postReviewDebounced(job.url, rv || { verdict: verdict, reason: reason || '', note: note || '', ts: Date.now() });
         };
         window.__compassFbWrapped = true;
+      }
+      if (typeof window.clearReview === 'function' && !window.__compassClearWrapped) {
+        var origClear = window.clearReview;
+        window.clearReview = function (id) {
+          origClear(id);
+          var job = (window.JOBS || []).find(function (x) { return x.id === id; });
+          if (job && job.url) postReviewClear(job.url);
+        };
+        window.__compassClearWrapped = true;
       }
 
       try {
@@ -1239,6 +1302,25 @@
       window.JOB_ID = job.id || window.JOB_ID;
       setCurrentJob(job); // so "Open in Tailoring" carries this job's identity
       setJobUrl('job-detail.html', job); // shareable slug URL in the address bar
+      // Seed this job's review from the server (source of truth) — newest ts
+      // wins — then re-paint: the inline script's own paint() ran already, with
+      // JOB_ID still "" (this resolves async), so the good/bad state wasn't
+      // showing yet even from localStorage alone.
+      mergeServerReview(window.JOB_ID, job.url);
+      if (typeof window.saveReview === 'function' && !window.__compassDetailFbWrapped) {
+        var origDetailSave = window.saveReview;
+        window.saveReview = function (verdict, reason, note) {
+          origDetailSave(verdict, reason, note);
+          var rv = (typeof window.getReview === 'function') ? window.getReview() : null;
+          postReviewDebounced(job.url, rv || { verdict: verdict, reason: reason || '', note: note || '', ts: Date.now() });
+        };
+        if (typeof window.clearReview === 'function') {
+          var origDetailClear = window.clearReview;
+          window.clearReview = function () { origDetailClear(); postReviewClear(job.url); };
+        }
+        window.__compassDetailFbWrapped = true;
+      }
+      if (typeof window.paint === 'function') window.paint();
       var h1 = document.querySelector('.head h1'); if (h1) h1.textContent = job.title;
       var co = document.querySelector('.head .company'); if (co) co.textContent = job.company;
       var logo = document.querySelector('.head .logo'); if (logo) { logo.setAttribute('data-mono', job.mono); logo.style.setProperty('--mc', job.color); var img = logo.querySelector('img'); if (img) { img.src = '/api/logo?domain=' + encodeURIComponent(job.domain); img.alt = job.company + ' logo'; } }
@@ -2975,7 +3057,7 @@
   }
 
   // ======================= dispatch ========================================
-  Promise.all([loadDead(), loadProvider(), loadFit(), loadSalary(), loadPosted(), loadBookmarks()]).then(function () {
+  Promise.all([loadDead(), loadProvider(), loadFit(), loadSalary(), loadPosted(), loadBookmarks(), loadReviews()]).then(function () {
     renderNav();
     injectMangoChrome();
     injectActivity();

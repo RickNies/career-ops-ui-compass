@@ -8,7 +8,15 @@
  *
  *   POST /api/compass/feedback  → shells out to the shared feedback.py
  *       (feedback.py add <url> <good|bad> --no-eval) so verdicts persist to the
- *       REAL data/feedback.jsonl — the same store the original :8099 uses.
+ *       REAL data/feedback.jsonl — the same store the original :8099 uses (AI
+ *       learning; append-only event log, untouched by the routes below).
+ *
+ *   GET/POST /api/compass/reviews → this fork's OWN review store
+ *       (data/compass-reviews.jsonl, one row per normalized url) — the feed's
+ *       "reviewed" state (verdict+reason+note+ts), server-backed so it survives
+ *       a cache-clear or a different device. Every good/bad/reason/note write
+ *       here ALSO fires the feedback.py POST above (kept, unchanged) so both
+ *       stores stay in sync.
  *
  *   POST /api/compass/setup     → shells out to the shared write_settings.py
  *       (comment-preserving ruamel writer + validate-portals.mjs) targeting the
@@ -141,6 +149,35 @@ function writeSavedMap(map) {
     const lines = Object.keys(map).filter((u) => map[u]).map((u) => JSON.stringify({ url: u, saved: true, ts: new Date().toISOString() }));
     writeFileSync(SAVED_STORE, lines.join('\n') + (lines.length ? '\n' : ''));
   } catch { /* best-effort */ }
+}
+
+// User's own ✓/✗ REVIEW of a job (the feed's "reviewed" state) — server-side
+// source of truth so it survives a cache-clear or a different device. Distinct
+// from the shared /api/compass/feedback → feedback.py → REAL_FEEDBACK_JSONL
+// path above (that one is the AI-learning event log and is untouched). JSONL
+// keyed by normalized url, ONE row per url — rewritten in full on every write
+// (same shape as SAVED_STORE above), so it never grows unbounded even though a
+// note can be edited keystroke-by-keystroke. { url, verdict, reason, note, ts }.
+const REVIEWS_STORE = DATA_ROOT + '/data/compass-reviews.jsonl';
+function readReviewMap() {
+  const map = {};
+  try {
+    readFileSync(REVIEWS_STORE, 'utf8').split('\n').forEach((ln) => {
+      ln = ln.trim(); if (!ln) return;
+      try {
+        const o = JSON.parse(ln);
+        if (o && o.url) map[normUrlSrv(o.url)] = { verdict: o.verdict, reason: o.reason || '', note: o.note || '', ts: Number(o.ts) || 0 };
+      } catch { /* skip bad line */ }
+    });
+  } catch { /* none yet */ }
+  return map;
+}
+function writeReviewMap(map) {
+  mkdirSync(dirname(REVIEWS_STORE), { recursive: true });
+  const lines = Object.keys(map).sort().map((u) => JSON.stringify(Object.assign({ url: u }, map[u])));
+  const tmp = REVIEWS_STORE + '.tmp';
+  writeFileSync(tmp, lines.join('\n') + (lines.length ? '\n' : ''));
+  renameSync(tmp, REVIEWS_STORE);
 }
 const SELF = 'http://127.0.0.1:' + (process.env.PORT || '8100');
 // cover ≠ résumé: /api/cv-studio/tailor returns a COMBINED tailored-résumé doc, so
@@ -438,6 +475,45 @@ export function registerCompassRoutes(app) {
     if (saved) map[u] = true; else delete map[u];
     writeSavedMap(map);
     res.json({ ok: true, url: u, saved });
+  });
+
+  // ── Reviews (✓/✗ + reason + note): server-side source of truth for the
+  // feed/detail "reviewed" state, so it persists across devices/cache-clears.
+  // GET → { map: { <normalizedUrl>: {verdict,reason,note,ts} }, count }.
+  app.get('/api/compass/reviews', (_req, res) => {
+    const map = readReviewMap();
+    res.json({ map, count: Object.keys(map).length });
+  });
+  // POST { url, verdict(good|bad), reason?, note?, ts? } → upsert one row,
+  // keyed by normalized url. Last-write-wins by ts (an out-of-order request
+  // from a stale tab never clobbers a newer review already recorded), except
+  // an explicit { clear:true } always removes the row (un-review is final).
+  app.post('/api/compass/reviews', (req, res) => {
+    const body = req.body || {};
+    const url = String(body.url || '').trim();
+    if (!url) return res.status(400).json({ error: 'url required' });
+    const key = normUrlSrv(url);
+    const map = readReviewMap();
+    if (body.clear) {
+      delete map[key];
+      writeReviewMap(map);
+      return res.json({ ok: true, url: key, cleared: true });
+    }
+    const verdict = String(body.verdict || '').trim();
+    if (verdict !== 'good' && verdict !== 'bad') {
+      return res.status(400).json({ error: 'url and verdict (good|bad) required' });
+    }
+    const cur = map[key];
+    const ts = Number(body.ts) || Date.now();
+    if (cur && cur.ts && ts < cur.ts) return res.json({ ok: true, review: cur, skipped: 'older-ts' });
+    map[key] = {
+      verdict,
+      reason: body.reason != null ? String(body.reason).slice(0, 200) : (cur ? cur.reason : ''),
+      note: body.note != null ? String(body.note).slice(0, 2000) : (cur ? cur.note : ''),
+      ts,
+    };
+    writeReviewMap(map);
+    res.json({ ok: true, url: key, review: map[key] });
   });
 
   // Pasted-JD cache: GET returns the cached JD for a url (or ''); POST stores one.
