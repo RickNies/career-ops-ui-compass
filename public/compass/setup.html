@@ -702,9 +702,9 @@ function makeChipList(containerId, inputId, getArr, variant){
   render();
   return render;
 }
-makeChipList("incChips","incInput", function(){ return includeTitles; }, "inc");
-makeChipList("excChips","excInput", function(){ return excludeTitles; }, "exc");
-makeChipList("termChips","termInput", function(){ return searchTerms; }, "term");
+var renderIncChips=makeChipList("incChips","incInput", function(){ return includeTitles; }, "inc");
+var renderExcChips=makeChipList("excChips","excInput", function(){ return excludeTitles; }, "exc");
+var renderTermChips=makeChipList("termChips","termInput", function(){ return searchTerms; }, "term");
 
 /* ---- Iteration 6: editable locations (star a priority, add/remove cities, Remote toggle) ---- */
 var locList=document.getElementById("locList");
@@ -908,6 +908,45 @@ window.pvRefresh=function(){
   }
 };
 window.pvRefresh();
+
+/* ---- seed the list fields (include/exclude titles, cities, search phrases,
+   Remote/US) from the LIVE portals.yml, so what you see here IS what's
+   actually saved — not the simplified starter list above, which can be
+   narrower than your real settings (e.g. it won't show hand-added city
+   aliases). Save then uses REPLACE semantics for these fields (see wire.js),
+   which only actually removes what you remove HERE because this now shows
+   the true full list.
+   FAIL-SAFE: if this fails for any reason, silently keep the starter-list/
+   localStorage seed already rendered above — window.compassSeededFromLive
+   stays false, so Save falls back to add-only merge behavior instead of a
+   wholesale replace that could otherwise wipe entries this load never saw. */
+window.compassSeededFromLive = false;
+fetch("/api/compass/setup/current", {credentials:"same-origin"}).then(function(r){
+  if(!r.ok) throw new Error("bad status");
+  return r.json();
+}).then(function(d){
+  if(!d || !d.ok || !d.settings) throw new Error("bad payload");
+  var live=d.settings;
+  if(Array.isArray(live.includeTitles)) includeTitles=live.includeTitles.slice();
+  if(Array.isArray(live.excludeTitles)) excludeTitles=live.excludeTitles.slice();
+  if(Array.isArray(live.searchTerms))   searchTerms=live.searchTerms.slice();
+  if(Array.isArray(live.cities)){
+    /* Carry over any "top priority" star from the previous (pre-seed) list by
+       name match — priority is a client-only display concept (never sent to
+       the server), so there's nothing authoritative to read it from. */
+    var prevPriority={};
+    (cities||[]).forEach(function(c){ if(c && c.priority) prevPriority[c.name]=true; });
+    cities=live.cities.map(function(name){ return {name:String(name), priority:!!prevPriority[String(name)]}; });
+  }
+  if(typeof live.remoteUS==="boolean") remoteUS=live.remoteUS;
+  window.compassSeededFromLive=true;
+  persist();
+  renderIncChips(); renderExcChips(); renderTermChips(); renderCities(); paintRemote();
+  if(window.pvRefresh) window.pvRefresh();
+}).catch(function(){
+  /* live-config load failed — keep the seed already on screen; Save will
+     fall back to the server's add-only merge (compassSeededFromLive=false). */
+});
 
 /* ---- save ---- */
 document.getElementById("saveBtn").onclick=function(){

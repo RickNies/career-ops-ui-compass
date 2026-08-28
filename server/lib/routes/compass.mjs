@@ -40,18 +40,33 @@
  *       as reviews above — a localStorage-only counter would reset on every
  *       new browser, defeating the point of "stop pestering me."
  *
- *   POST /api/compass/setup     → merges the submitted lists (includeTitles/
- *       excludeTitles/cities/searchTerms) with what's currently in portals.yml
- *       (mergeSetupSettings — union, submitted items always kept) BEFORE
- *       shelling out to the shared write_settings.py (comment-preserving
- *       ruamel writer + validate-portals.mjs) targeting the REAL portals.yml.
- *       Needed because setup.html's simplified form seeds its own state from
- *       localStorage/a starter list, not the live file, so its "full list" can
- *       be narrower than what's actually saved — without the merge, a save
- *       would wholesale-replace those sections and silently drop whatever the
- *       form doesn't display. LLM/provider + Anthropic key are NOT here — the
- *       Compass Setup page links to the full settings view (/spa#/config), which
- *       POSTs /api/config and writes this instance's .env.
+ *   GET  /api/compass/setup/current → the TRUE current includeTitles/
+ *       excludeTitles/cities/remoteUS/searchTerms, read straight off the real
+ *       portals.yml (readCurrentPortalsRaw). setup.html fetches this on load
+ *       and seeds its chip lists from it, so what the user sees IS what's
+ *       saved — including hand-added aliases (e.g. "NY"/"LA"/"USA") the old
+ *       hardcoded starter list never displayed as editable chips. Returns
+ *       {ok:false} (500) if portals.yml can't be read/parsed, so the client
+ *       can fall back to its old localStorage/starter-list seed instead of
+ *       showing an empty (and falsely "complete") form.
+ *
+ *   POST /api/compass/setup     → writes includeTitles/excludeTitles/cities/
+ *       searchTerms to the REAL portals.yml via the shared write_settings.py
+ *       (comment-preserving ruamel writer + validate-portals.mjs). Semantics
+ *       depend on `seededFromLive` in the request body:
+ *         - true  → REPLACE: the submitted lists are written wholesale, as-is.
+ *           Safe now that setup.html seeds those chips from the live file
+ *           (see the GET above), so what's submitted already reflects
+ *           anything the form doesn't manage — removing a shown chip now
+ *           actually removes it.
+ *         - falsy → FAIL-SAFE fallback to the old union-merge behavior
+ *           (mergeSetupSettings — submitted items always kept, unioned with
+ *           whatever's still on disk) so a client that couldn't load the live
+ *           config (seed fetch failed) can never wholesale-wipe entries it
+ *           never saw. This is add-only, matching the pre-fix behavior.
+ *       LLM/provider + Anthropic key are NOT here — the Compass Setup page
+ *       links to the full settings view (/spa#/config), which POSTs
+ *       /api/config and writes this instance's .env.
  *
  *   GET  /compass               → 302 to /compass/dashboard.html (landing).
  *
@@ -430,22 +445,59 @@ export function registerCompassRoutes(app) {
     });
   });
 
-  // ── Setup Save merge helpers ──────────────────────────────────────────────
-  // setup.html's simplified Setup form seeds its includeTitles/excludeTitles/
-  // cities/searchTerms state from localStorage (or a hardcoded starter list)
-  // on first load — NOT from the live portals.yml — so its own idea of "the
-  // full list" can be narrower than what's actually in the real file (e.g.
-  // location_filter.allow carries hand-added aliases like "NY"/"LA"/"USA"
-  // that the simplified UI never displays as editable chips). write_settings.py
-  // faithfully does "present list section replaced WHOLESALE" (documented,
-  // correct UI-save semantics for a form that shows its user the FULL list) —
-  // but for a form that only shows a PARTIAL view, wholesale-replace silently
-  // drops whatever it doesn't manage. So: read the current portals.yml here,
-  // and merge each submitted list with what's already on disk (submitted
-  // items always included — "submitted keys win" — union'd with whatever
-  // existing entries the submitted list doesn't already cover) before handing
-  // off to write_settings.py, so nothing the form never showed Nicole gets
-  // silently deleted out from under her.
+  // ── Setup: read the TRUE current lists straight off portals.yml ───────────
+  // Root fix for setup.html's simplified form seeding itself from
+  // localStorage/a hardcoded starter list (NOT the live file), which made its
+  // own idea of "the full list" narrower than what's actually saved — e.g.
+  // location_filter.allow can carry hand-added aliases like "NY"/"LA"/"USA"
+  // that starter list never displayed as editable chips. GET
+  // /api/compass/setup/current (below) exposes this so the client can seed
+  // from it instead, making the displayed list the true saved list.
+  //
+  // Throws on any read/parse failure — callers decide the fail-safe: the GET
+  // route below turns a throw into {ok:false} (client keeps its old seed);
+  // the POST route's merge fallback (readCurrentPortalsForMerge) turns a
+  // throw into empty arrays (merge just keeps whatever was submitted).
+  function readCurrentPortalsRaw() {
+    const doc = yaml.load(readFileSync(REAL_PORTALS, 'utf8')) || {};
+    const tf = doc.title_filter || {};
+    const lf = doc.location_filter || {};
+    const disc = doc.discovery || {};
+    const allow = Array.isArray(lf.allow) ? lf.allow : [];
+    const isBoilerplate = (x) => /^(remote|united states)$/i.test(String(x));
+    // location_filter.allow mixes real cities with the "Remote"/"United
+    // States" boilerplate that write_settings.py re-adds itself from the
+    // remoteUS flag — exclude those two so they aren't duplicated as "cities",
+    // and use their presence to report the true remoteUS state.
+    const cities = allow.filter((x) => !isBoilerplate(x));
+    const remoteUS = allow.some(isBoilerplate);
+    return {
+      includeTitles: Array.isArray(tf.positive) ? tf.positive : [],
+      excludeTitles: Array.isArray(tf.negative) ? tf.negative : [],
+      cities,
+      remoteUS,
+      searchTerms: Array.isArray(disc.linkedin_keywords) ? disc.linkedin_keywords : [],
+    };
+  }
+
+  // GET the true current lists (see readCurrentPortalsRaw above). setup.html
+  // seeds its chips from this on load.
+  app.get('/api/compass/setup/current', (_req, res) => {
+    try {
+      res.json({ ok: true, settings: readCurrentPortalsRaw() });
+    } catch (e) {
+      // No user-facing error copy — the client's fail-safe is to silently
+      // keep its previous (localStorage/starter-list) seed.
+      res.status(500).json({ ok: false, error: String((e && e.message) || e).slice(0, 300) });
+    }
+  });
+
+  // ── Setup Save fail-safe merge (used ONLY when the client didn't seed from
+  // live — see POST handler below) ──────────────────────────────────────────
+  // Same union-prefer-submitted behavior as before this fix: submitted items
+  // always kept, unioned with whatever existing entries the submitted list
+  // doesn't already cover. Add-only — can never wholesale-wipe an entry the
+  // form never showed.
   function unionPreferSubmitted(submitted, existing) {
     const out = [];
     const seen = new Set();
@@ -455,23 +507,9 @@ export function registerCompassRoutes(app) {
   }
   function readCurrentPortalsForMerge() {
     try {
-      const doc = yaml.load(readFileSync(REAL_PORTALS, 'utf8')) || {};
-      const tf = doc.title_filter || {};
-      const lf = doc.location_filter || {};
-      const disc = doc.discovery || {};
-      const allow = Array.isArray(lf.allow) ? lf.allow : [];
-      // location_filter.allow mixes real cities with the "Remote"/"United
-      // States" boilerplate that write_settings.py re-adds itself from the
-      // remoteUS flag — exclude those two so they aren't duplicated as "cities".
-      const cities = allow.filter((x) => !/^(remote|united states)$/i.test(String(x)));
-      return {
-        includeTitles: Array.isArray(tf.positive) ? tf.positive : [],
-        excludeTitles: Array.isArray(tf.negative) ? tf.negative : [],
-        cities,
-        searchTerms: Array.isArray(disc.linkedin_keywords) ? disc.linkedin_keywords : [],
-      };
+      return readCurrentPortalsRaw();
     } catch {
-      return { includeTitles: [], excludeTitles: [], cities: [], searchTerms: [] };
+      return { includeTitles: [], excludeTitles: [], cities: [], remoteUS: undefined, searchTerms: [] };
     }
   }
   function mergeSetupSettings(submitted) {
@@ -489,10 +527,19 @@ export function registerCompassRoutes(app) {
     if (!settings || typeof settings !== 'object') {
       return res.status(400).json({ error: 'settings object required' });
     }
-    const merged = mergeSetupSettings(settings);
+    // seededFromLive=true means the form was populated from GET
+    // /api/compass/setup/current (the TRUE current lists), so what's
+    // submitted already reflects everything the form doesn't manage —
+    // REPLACE semantics (write_settings.py's normal "present section replaced
+    // wholesale" behavior) are safe: removing a shown chip now actually
+    // removes it. Otherwise (seed fetch failed client-side, or an older
+    // client), fall back to the old union-merge so nothing unseen is ever
+    // silently wiped.
+    const seededFromLive = req.body && req.body.seededFromLive === true;
+    const toWrite = seededFromLive ? settings : mergeSetupSettings(settings);
     const args = [
       WRITE_SETTINGS,
-      '--json', JSON.stringify(merged),
+      '--json', JSON.stringify(toWrite),
       '--path', REAL_PORTALS,
       '--validator-dir', DATA_ROOT,
     ];
