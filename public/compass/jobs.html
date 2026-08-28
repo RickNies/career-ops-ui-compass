@@ -462,7 +462,7 @@
         <div class="status-row">
           <div class="seg" role="tablist" aria-label="Review status">
             <button data-rev="not" class="on" type="button" role="tab" aria-selected="true" tabindex="0" aria-controls="list">Not reviewed</button>
-            <button data-rev="reviewed" type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="list" title="This week only — older reviews move to the archive in My Jobs">Reviewed</button>
+            <button data-rev="reviewed" type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="list" data-tip="Shows what you've reviewed this week only — older reviews live in the archive under My Jobs.">Reviewed</button>
             <button data-rev="all" type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="list">All</button>
           </div>
           <div class="count" id="count"></div>
@@ -604,6 +604,17 @@ var REASONS = {
   bad:["Too junior","Too senior","Wrong location","Below pay","Not my industry","Not relevant background","Company"]
 };
 
+/* Tooltip copy (Batch B) — reused verbatim from the approved walkthrough voice
+   (mockups/multiuser/walkthrough.html) + docs/ux-confirmations-audit.md §3.
+   Rendered by the shared CompassTip component in js/wire.js off data-tip. */
+var TIP_FIT = "How closely this matches your résumé and preferences. Strong (85+) is a near-perfect match, Good (75–84) is worth a look, Fair is a stretch.";
+var TIP_SOURCE = "Where this listing came from, so you know where to apply.";
+var TIP_NEW = "Landed in your feed in the last day or two.";
+var TIP_FOUND = "This board doesn't publish a posting date, so this is the day we found it listed.";
+var TIP_VOTE = "Tap to teach Compass what you want — a few taps a day sharpens tomorrow's matches.";
+var TIP_SAVE = "Tuck this away in My Jobs for later — separate from ✓/✗, and it won't remove the role from your feed.";
+var TIP_UNREVIEW = "Clears your ✓/✗, reason, and note for this role — it goes back to your main feed.";
+
 /* ============ review state (localStorage, shared across pages by job id) ============ */
 var REVK="compass_reviews", OLDK="compass_reviewed";
 function getReviews(){ try{ return JSON.parse(localStorage.getItem(REVK)||"{}"); }catch(e){ return {}; } }
@@ -663,14 +674,14 @@ function cardHTML(j){
   var revCls = rev ? (" is-reviewed rev-"+rev.verdict) : "";
   var fitClass = j.fit>=86 ? "fit-strong" : (j.fit>=75 ? "fit-good" : "fit-fair");
   var fitLabel = j.fit>=86 ? "Strong fit" : (j.fit>=75 ? "Good fit" : "Fair fit");
-  var newDot = j.isNew ? ('<span class="new-dot">New'+(j.foundAge ? (' · '+j.foundAge+'d ago') : '')+'</span>') : '';
+  var newDot = j.isNew ? ('<span class="new-dot" data-tip="'+esc(TIP_NEW)+'" data-tip-tap="toggle">New'+(j.foundAge ? (' · '+j.foundAge+'d ago') : '')+'</span>') : '';
   // Honest per-row date chip: "posted Xd ago" when we have a REAL posted date,
   // else "found Xd ago" from the tracker's real found date — never both, never
   // a fabricated found-date guess when neither is known.
   var dateChip = j.postedKnown ? ('<span class="date-chip">posted '+j.postedAge+'d ago</span>')
-    : (j.foundAge!=null ? ('<span class="date-chip">found '+j.foundAge+'d ago</span>') : '');
+    : (j.foundAge!=null ? ('<span class="date-chip" data-tip="'+esc(TIP_FOUND)+'" data-tip-tap="toggle">found '+j.foundAge+'d ago</span>') : '');
   // Source chip: "via {board}" — host-derived from the job URL (display only, mapRow.source).
-  var srcChip = j.source ? ('<span class="src-chip">via '+esc(j.source)+'</span>') : '';
+  var srcChip = j.source ? ('<span class="src-chip" data-tip="'+esc(TIP_SOURCE)+'" data-tip-tap="toggle">via '+esc(j.source)+'</span>') : '';
   var liveBadge = j.open
     ? '<span class="badge badge--live" data-live="open"><span class="tk"></span>Open</span>'
     : '<span class="badge badge--closed" data-live="closed"><span class="tk"></span>Closed — no longer accepting</span>';
@@ -683,11 +694,11 @@ function cardHTML(j){
   return ''+
   '<div class="job-row">'+
     '<div class="verdict">'+
-      '<button class="vbtn good'+goodOn+'" type="button" data-v="good" title="Good — interested" aria-label="Mark as a good fit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></button>'+
-      '<button class="vbtn bad'+badOn+'" type="button" data-v="bad" title="Pass" aria-label="Pass on this role"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></button>'+
+      '<button class="vbtn good'+goodOn+'" type="button" data-v="good" data-tip="'+esc(TIP_VOTE)+'" aria-label="Mark as a good fit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></button>'+
+      '<button class="vbtn bad'+badOn+'" type="button" data-v="bad" data-tip="'+esc(TIP_VOTE)+'" aria-label="Pass on this role"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></button>'+
     '</div>'+
     '<article class="card'+revCls+'" data-id="'+j.id+'" role="link" tabindex="0" aria-label="View '+esc(j.title)+' at '+esc(j.company)+'">'+
-    '<div class="fit '+fitClass+'"><div class="ring">'+j.fit+'</div><div class="lbl">'+fitLabel+'</div></div>'+
+    '<div class="fit '+fitClass+'" data-tip="'+esc(TIP_FIT)+'" data-tip-tap="toggle"><div class="ring">'+j.fit+'</div><div class="lbl">'+fitLabel+'</div></div>'+
     '<div class="body">'+
       '<div class="body-head">'+
         '<span class="logo" style="--mc:'+j.color+'" data-mono="'+esc(j.mono)+'"><img src="/api/logo?domain='+encodeURIComponent(j.domain)+'" alt="'+esc(j.company)+' logo" onerror="this.parentNode.classList.add(\'failed\');this.remove()"></span>'+
@@ -704,7 +715,7 @@ function cardHTML(j){
       '<div class="tags">'+chips+'</div>'+
     '</div>'+
     '<div class="side">'+
-      '<button class="save'+(j.saved?' on':'')+'" type="button" aria-label="'+(j.saved?'Saved':'Save this job')+'" aria-pressed="'+j.saved+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.8 8.6a5 5 0 0 0-8.8-3.2A5 5 0 0 0 3.2 8.6c0 3.8 4.5 7 8.8 10.4 4.3-3.4 8.8-6.6 8.8-10.4Z"/></svg></button>'+
+      '<button class="save'+(j.saved?' on':'')+'" type="button" data-tip="'+esc(TIP_SAVE)+'" aria-label="'+(j.saved?'Saved':'Save this job')+'" aria-pressed="'+j.saved+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.8 8.6a5 5 0 0 0-8.8-3.2A5 5 0 0 0 3.2 8.6c0 3.8 4.5 7 8.8 10.4 4.3-3.4 8.8-6.6 8.8-10.4Z"/></svg></button>'+
       '<a class="btn btn--primary btn--sm view" href="job-detail.html">View<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>'+
     '</div>'+
     '</article>'+
@@ -782,7 +793,7 @@ function renderRail(){
       '</div>'+
       '<div class="ri-acts">'+
         '<button class="ri-edit" data-id="'+x.j.id+'" title="Edit reason" aria-label="Edit reason"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h4L18 10l-4-4L4 16v4Z"/><path d="M13.5 6.5 17.5 10.5"/></svg></button>'+
-        '<button class="ri-undo" data-id="'+x.j.id+'" title="Un-review (return to list)" aria-label="Un-review"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>'+
+        '<button class="ri-undo" data-id="'+x.j.id+'" data-tip="'+esc(TIP_UNREVIEW)+'" aria-label="Un-review"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>'+
       '</div>'+
     '</div>';
   }
@@ -924,7 +935,7 @@ function openPopover(anchor, id, verdict, justSaved){
     '<p class="rp-hint">Optional — one tap already saved it.</p>'+
     '<div class="rpop-chips">'+chips+'</div>'+
     '<input class="rpop-note" type="text" placeholder="Add a note — optional" value="'+esc(rv.note||"")+'" maxlength="120">'+
-    '<div class="rpop-actions"><button class="rpop-remove" type="button">Un-review</button><button class="btn btn--primary btn--sm rpop-done" type="button">Done</button></div>'+
+    '<div class="rpop-actions"><button class="rpop-remove" type="button" data-tip="'+esc(TIP_UNREVIEW)+'">Un-review</button><button class="btn btn--primary btn--sm rpop-done" type="button">Done</button></div>'+
     '<div class="rpop-saved" id="rpopSaved">Saved <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="12" height="12"><path d="M20 6L9 17l-5-5"/></svg></div>';
   document.body.appendChild(pop);
   if(justSaved) flashPopSaved();

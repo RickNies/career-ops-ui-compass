@@ -459,6 +459,130 @@
   }
   function toastMsg(msg, type) { if (window.toast) { try { window.toast(msg, type || 'info'); return; } catch (e) {} } }
 
+  // ===================== Tooltip (Batch B) ==================================
+  // ONE reusable hover/focus/tap tooltip, built from the app's existing ink/gold
+  // tokens — same visual family as the toast, just box-shaped so it can hold a
+  // sentence or two (docs/ux-confirmations-audit.md §3, "canonical patterns").
+  // Declarative: any element with a `data-tip="…"` attribute gets the full
+  // trigger contract below for free — nothing else to wire per control.
+  // Dismiss reuses the app's existing popover pattern (Escape + outside-tap),
+  // the same as jobs.html's `.rpop`/`Pop` onDocDown/onKey.
+  var CompassTip = (function () {
+    var bubble = null, activeEl = null, showTimer = null, hideTimer = null;
+    var SHOW_DELAY = 200, HIDE_DELAY = 120;
+    function injectStyles() {
+      if (document.getElementById('compassTipCss')) return;
+      var s = document.createElement('style'); s.id = 'compassTipCss';
+      s.textContent =
+        '.c-tip{position:fixed;z-index:200;max-width:250px;background:var(--ink,#16324F);color:#fff;' +
+        'font:500 12.5px/1.5 var(--sans,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif);' +
+        'padding:9px 12px;border-radius:var(--radius-sm,10px);box-shadow:0 10px 30px rgba(22,50,79,.28);' +
+        'pointer-events:none;opacity:0;transform:translateY(4px);transition:opacity .12s ease,transform .12s ease}' +
+        '.c-tip.show{opacity:1;transform:none}' +
+        '[data-tip].c-tip-target{cursor:help}' +
+        '@media(prefers-reduced-motion:reduce){.c-tip{transition:none}}';
+      document.head.appendChild(s);
+    }
+    function ensureBubble() {
+      if (bubble) return bubble;
+      injectStyles();
+      bubble = document.createElement('div');
+      bubble.id = 'compassTipBubble'; bubble.className = 'c-tip'; bubble.setAttribute('role', 'tooltip'); bubble.hidden = true;
+      document.body.appendChild(bubble);
+      return bubble;
+    }
+    function position(el) {
+      var r = el.getBoundingClientRect();
+      bubble.style.left = '-9999px'; bubble.style.top = '0px'; bubble.hidden = false;
+      var bw = bubble.offsetWidth, bh = bubble.offsetHeight;
+      var top = r.top - bh - 9, left = r.left + r.width / 2 - bw / 2;
+      if (top < 8) top = r.bottom + 9;                                    // flip below if it would clip the viewport top
+      if (top + bh > window.innerHeight - 8) top = Math.max(8, window.innerHeight - 8 - bh);
+      if (left < 8) left = 8;
+      if (left + bw > window.innerWidth - 8) left = window.innerWidth - 8 - bw;
+      bubble.style.left = left + 'px'; bubble.style.top = top + 'px';
+    }
+    function hideNow() {
+      // Deliberately does NOT clear showTimer: when the pointer moves quickly
+      // from one tooltip target straight onto another (e.g. a vote button
+      // into the un-review icon right next to it), the outgoing element's
+      // scheduleHide(HIDE_DELAY=120ms) can fire before the incoming element's
+      // scheduleShow(SHOW_DELAY=200ms) — clearing showTimer here would cancel
+      // that already-scheduled, unrelated show and silently swallow the next
+      // tooltip. scheduleShow()/scheduleHide() already clear showTimer
+      // themselves whenever a *new* show is requested, which is the only
+      // case that should ever cancel a pending show.
+      clearTimeout(hideTimer);
+      if (bubble) { bubble.classList.remove('show'); bubble.hidden = true; }
+      if (activeEl) activeEl.removeAttribute('aria-describedby');
+      activeEl = null;
+    }
+    function show(el) {
+      clearTimeout(hideTimer);
+      var txt = el.getAttribute('data-tip'); if (!txt) return;
+      ensureBubble();
+      if (activeEl && activeEl !== el) hideNow();
+      bubble.textContent = txt;
+      activeEl = el;
+      el.setAttribute('aria-describedby', 'compassTipBubble');
+      position(el);
+      requestAnimationFrame(function () { if (activeEl === el) bubble.classList.add('show'); });
+    }
+    function scheduleShow(el, delay) {
+      clearTimeout(showTimer);
+      showTimer = setTimeout(function () { show(el); }, delay == null ? SHOW_DELAY : delay);
+    }
+    function scheduleHide(el) {
+      clearTimeout(showTimer);
+      if (activeEl !== el) return;
+      hideTimer = setTimeout(hideNow, HIDE_DELAY);
+    }
+    function bind(el) {
+      if (el.__ctBound) return; el.__ctBound = true;
+      if (!el.hasAttribute('tabindex') && !/^(button|a|input|select|textarea)$/i.test(el.tagName)) {
+        el.setAttribute('tabindex', '0');
+        el.classList.add('c-tip-target');           // hover affordance (cursor:help) for non-native-focusable targets only
+      }
+      el.addEventListener('mouseenter', function () { scheduleShow(el); });
+      el.addEventListener('mouseleave', function () { scheduleHide(el); });
+      el.addEventListener('focus', function () { scheduleShow(el, 0); });
+      el.addEventListener('blur', function () { scheduleHide(el); });
+      // Non-actionable badges/chips (data-tip-tap="toggle") also open on tap,
+      // since they have no other click behavior and touch has no hover.
+      // Actionable controls (vote/save buttons, filters) deliberately skip
+      // this — tapping them should perform the real action, not swallow the
+      // first tap on a tooltip; focus (which a tap also triggers on iOS/
+      // Android) already covers the keyboard-parity requirement there.
+      if (el.getAttribute('data-tip-tap') === 'toggle') {
+        el.addEventListener('click', function (e) {
+          e.stopPropagation();
+          if (activeEl === el && bubble && !bubble.hidden) hideNow(); else show(el);
+        });
+      }
+    }
+    function scan(root) {
+      (root || document).querySelectorAll('[data-tip]').forEach(bind);
+    }
+    // App-wide dismiss contract — same as jobs.html's `.rpop` popover
+    // (onDocDown/onKey): Escape, or a tap/click outside the open tooltip.
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && activeEl) { var el = activeEl; hideNow(); el.blur(); } }, true);
+    document.addEventListener('mousedown', function (e) { if (activeEl && e.target !== activeEl && !activeEl.contains(e.target)) hideNow(); }, true);
+    document.addEventListener('touchstart', function (e) { if (activeEl && e.target !== activeEl && !activeEl.contains(e.target)) hideNow(); }, { passive: true, capture: true });
+    window.addEventListener('scroll', function () { if (activeEl) hideNow(); }, true);
+    window.addEventListener('resize', function () { if (activeEl) hideNow(); });
+    return { scan: scan };
+  })();
+  window.CompassTip = CompassTip;
+  function initTooltips() {
+    CompassTip.scan(document);
+    // Every re-render below (jobs feed cards, the reviewed rail, the review
+    // archive rows, filter pills…) works by replacing .innerHTML — one
+    // MutationObserver here covers all of them instead of hand-wiring a
+    // scan() call into each individual render function.
+    var mo = new MutationObserver(function () { CompassTip.scan(document); });
+    mo.observe(document.body, { childList: true, subtree: true });
+  }
+
   // Whole days between an ISO 'YYYY-MM-DD' date and today (UTC midnight), or
   // null if unparseable. Shared by the found/posted age computations below.
   function daysAgo(isoDate) {
@@ -947,7 +1071,7 @@
     if (!wrap) {
       wrap = document.createElement('label'); wrap.id = 'compassLowFit';
       wrap.style.cssText = 'display:inline-flex;align-items:center;gap:7px;margin-left:14px;font:13px system-ui;color:#6b6255;cursor:pointer;vertical-align:middle';
-      wrap.innerHTML = '<input type="checkbox"' + (window.__compassShowLowFit ? ' checked' : '') + ' style="accent-color:#ffb300;width:15px;height:15px"><span class="lff-lbl"></span>';
+      wrap.innerHTML = '<input type="checkbox" data-tip="Reveal roles Compass scored as a stretch, in case you want a second opinion."' + (window.__compassShowLowFit ? ' checked' : '') + ' style="accent-color:#ffb300;width:15px;height:15px"><span class="lff-lbl"></span>';
       (cnt.parentNode || cnt).insertBefore(wrap, cnt.nextSibling);
       wrap.querySelector('input').addEventListener('change', function () {
         window.__compassShowLowFit = this.checked;
@@ -1005,7 +1129,11 @@
       lowHidden = window.JOBS.filter(function (j) { return isLowFit(j) && window.matches(j); }).length;
       window.__compassShowLowFit = false;
     }
-    if (cnt) cnt.innerHTML = 'Showing <b>' + shown + '</b> of <b>' + all.length + '</b> matching · ' + window.JOBS.length + ' live jobs loaded';
+    // On the "Reviewed" tab (now week-scoped — see jobs.html matches()), say so
+    // in the same pagination-line style, so the count doesn't silently look
+    // smaller once older reviews move to the archive (My Jobs).
+    var revNote = (window.state && window.state.rev === 'reviewed') ? ' · your reviews from this week' : '';
+    if (cnt) cnt.innerHTML = 'Showing <b>' + shown + '</b> of <b>' + all.length + '</b> matching · ' + window.JOBS.length + ' live jobs loaded' + revNote;
     ensureLowFitToggle(lowHidden);
     ensureScoreBar();
     var mb = document.getElementById('compassMore');
@@ -1625,15 +1753,15 @@
       '<div class="arch-controls" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">' +
         '<label class="search" style="flex:1;min-width:220px">' +
           '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>' +
-          '<input id="archQ" type="text" placeholder="Search by job title or company…" />' +
+          '<input id="archQ" type="text" placeholder="Search by job title or company…" data-tip="Search your archived reviews by job title or company." />' +
         '</label>' +
-        '<select id="archVerdict" class="stage-select" aria-label="Show">' +
+        '<select id="archVerdict" class="stage-select" aria-label="Show" data-tip="Switch between roles you liked, passed, or both.">' +
           '<option value="good" selected>Liked</option>' +
           '<option value="bad">Passed</option>' +
           '<option value="all">Liked + Passed</option>' +
         '</select>' +
         '<div class="ms" id="archTfMs">' +
-          '<button class="ms-trigger" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="archTfPanel">' +
+          '<button class="ms-trigger" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="archTfPanel" data-tip="Narrow the archive to a time window — defaults to showing everything.">' +
             '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>' +
             '<span id="archTfLabel">All time</span>' +
             '<svg class="cv" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>' +
@@ -3302,6 +3430,7 @@
     injectMangoChrome();
     injectActivity();
     wireAvatarMenu();
+    initTooltips();
     watchJobs(); setInterval(watchJobs, 6000);   // global watcher on every page
     if (page === 'jobs.html') wireJobs();
     else if (page === 'library.html') wireLibrary();
