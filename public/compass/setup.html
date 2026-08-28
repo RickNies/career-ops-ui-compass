@@ -175,9 +175,6 @@
   /* footer save bar */
   .savebar{display:flex;align-items:center;gap:12px;margin-top:24px}
   .save-main{padding:12px 24px;font-size:14.5px}   /* .save-main = .btn .btn--primary */
-  .saved-note{color:var(--sage);font-size:13.5px;font-weight:600;display:none;align-items:center;gap:7px}
-  .saved-note.show{display:inline-flex}
-  .saved-note svg{width:16px;height:16px}
 
   /* ===== Iteration 6: search-filter chips (include / exclude / phrases) ===== */
   .rchip.inc{background:var(--sage-soft);color:var(--sage)}
@@ -579,7 +576,6 @@
 
     <div class="savebar">
       <button class="btn btn--primary save-main" id="saveBtn" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 6L9 17l-5-5"/></svg>Save preferences</button>
-      <span class="saved-note" id="savedNote"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>Saved — Compass will use these for your matches.</span>
     </div>
   </main>
 
@@ -927,9 +923,11 @@ document.getElementById("saveBtn").onclick=function(){
     cadence:document.getElementById("cadence").value,
     notify:notify
   });
-  var note=document.getElementById("savedNote"); note.classList.add("show");
-  setTimeout(function(){ note.classList.remove("show"); }, 2600);
-  toast("Search settings saved", "success");
+  /* Single real confirmation only: wire.js's own click listener on this same
+     button (wireSetup()) makes the actual POST /api/compass/setup write and
+     fires exactly one toast tied to that result (disables the button and
+     shows "Saving…" meanwhile). No optimistic pre-network message here —
+     collapses what used to be up to 3 messages per click into 1. */
 };
 </script>
   <script src="js/wire.js"></script>

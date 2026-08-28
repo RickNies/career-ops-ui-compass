@@ -1117,13 +1117,21 @@
           if (verdict !== 'good' && verdict !== 'bad') return;
           var job = (window.JOBS || []).find(function (x) { return x.id === id; });
           if (!job || !job.url) return;
+          // Only the FIRST tap (one-tap commit: saveReview(id, v) with no
+          // reason/note args) gets a bottom toast — that's the one meaningful
+          // state change (verdict recorded). Reason-chip toggles and note
+          // keystrokes already get the inline "Saved" fade in the popover
+          // (jobs.html's flashPopSaved()); stacking a second toast on every
+          // one of those would be redundant (audit P0 4.6).
+          var isFirstTap = (reason === undefined && note === undefined);
           jPost('/api/compass/feedback', { url: job.url, verdict: verdict, reason: reason || '' })
             .then(function (r) {
+              if (!isFirstTap) return;
               var ok = r.body && r.body.ok;
               var nice = verdict === 'good' ? 'Saved — we\'ll find you more like this' : 'Saved — you won\'t see this one again';
-              toastMsg(ok ? nice : 'Saved on this device — couldn\'t reach the server', ok ? 'success' : 'info');
+              toastMsg(ok ? nice : 'Saved on this device — couldn\'t reach the server', ok ? 'success' : 'error');
             })
-            .catch(function () { toastMsg('Saved on this device — server unreachable', 'info'); });
+            .catch(function () { if (isFirstTap) toastMsg('Saved on this device — server unreachable', 'error'); });
           // Server-backed review store (verdict+reason+note+ts) — the feed's
           // actual "reviewed" source of truth; distinct from feedback.jsonl above.
           var rv = (typeof window.getReview === 'function') ? window.getReview(id) : null;
@@ -2192,7 +2200,19 @@
     var btn = document.getElementById('saveBtn');
     if (btn) btn.addEventListener('click', function () {
       var settings = { includeTitles: (window.includeTitles || []).slice(), excludeTitles: (window.excludeTitles || []).slice(), searchTerms: (window.searchTerms || []).slice(), cities: (window.cities || []).map(function (c) { return c && c.name ? c.name : c; }), remoteUS: !!window.remoteUS };
-      jPost('/api/compass/setup', { settings: settings }).then(function (r) { toastMsg(r.body && r.body.ok ? 'Your search settings are live.' : 'Couldn\'t update your search settings — try again in a moment.', r.body && r.body.ok ? 'success' : 'info'); }).catch(function (e) { toastMsg('Couldn\'t update your search settings — try again in a moment.', 'info'); });
+      // Single real confirmation, tied to this actual network write (P0 4.3 —
+      // collapse the old triple-fire: optimistic inline note + optimistic
+      // toast + this real toast, down to just this one, on completion).
+      var origHtml = btn.innerHTML;
+      btn.disabled = true; btn.textContent = 'Saving…';
+      jPost('/api/compass/setup', { settings: settings }).then(function (r) {
+        var ok = r.body && r.body.ok;
+        toastMsg(ok ? 'Your search settings are saved.' : 'Couldn\'t update your search settings — try again in a moment.', ok ? 'success' : 'error');
+      }).catch(function () {
+        toastMsg('Couldn\'t update your search settings — try again in a moment.', 'error');
+      }).finally(function () {
+        btn.disabled = false; btn.innerHTML = origHtml;
+      });
     });
     banner('Setup MIGRATED — full config, portals (companies w/ source keys), profile, two-pager, CV, memory, health, usage, docs-assistant, orientation, help all native here via their real endpoints. Comp floor stays demo.');
   }
