@@ -491,6 +491,60 @@
   function jGet(u) { return fetch(u).then(function (r) { return r.json(); }); }
   function jPost(u, b) { return fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(function (r) { return r.json().then(function (j) { return { status: r.status, body: j }; }); }); }
 
+  // ── Inline "Removed — Undo" for My Jobs (saved.html) ──────────────────────
+  // Removing a saved job or an application does NOT hard-delete right away:
+  // the row collapses in place into an undo strip for UNDO_MS, and only the
+  // real server mutation (commit) fires once that window elapses with no
+  // Undo click. Keyed by an arbitrary caller-chosen string (e.g.
+  // "bm:<url>" / "app:<num>") so bookmark removals and application removals
+  // never collide. `commit` performs the actual delete; `rerender` repaints
+  // whatever list/section the row lives in (undo just re-renders from
+  // untouched source data — nothing was ever removed from it until commit).
+  var UNDO_MS = 5000;
+  var pendingRemovals = {};
+  function isRemovalPending(key) { return !!pendingRemovals[key]; }
+  function scheduleRemoval(key, commit, rerender) {
+    if (pendingRemovals[key]) return; // already pending — ignore a second click
+    pendingRemovals[key] = {
+      commit: commit,
+      rerender: rerender,
+      timer: setTimeout(function () { finalizeRemoval(key); }, UNDO_MS)
+    };
+    rerender();
+  }
+  function cancelRemoval(key) {
+    var entry = pendingRemovals[key];
+    if (!entry) return;
+    clearTimeout(entry.timer);
+    delete pendingRemovals[key];
+    entry.rerender();
+  }
+  function finalizeRemoval(key) {
+    var entry = pendingRemovals[key];
+    if (!entry) return;
+    clearTimeout(entry.timer);
+    delete pendingRemovals[key];
+    try { entry.commit(); } catch (e) { /* best-effort — nothing left to roll back to visually */ }
+  }
+  // A page navigation away during the undo window must still finalize the
+  // removal (never leave a "looks removed but wasn't" state on reload) —
+  // force-commit every still-pending removal on unload. Each commit fn uses
+  // fetch(...,{keepalive:true}) so the request can complete after unload.
+  window.addEventListener('pagehide', function () {
+    Object.keys(pendingRemovals).forEach(function (k) { finalizeRemoval(k); });
+  });
+  function undoStripHtml(key, msg) {
+    return '<div class="c-undo-row" data-key="' + esc(key) + '" style="display:flex;align-items:center;justify-content:space-between;gap:14px;background:#fff;border:1px solid #ece5d6;border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.04);padding:14px 16px;margin-bottom:10px">' +
+      '<span style="color:#8a8172;font:14px system-ui">' + esc(msg) + '</span>' +
+      '<button class="c-undo-btn btn btn--outline btn--sm" type="button" data-key="' + esc(key) + '">Undo</button>' +
+      '</div>';
+  }
+  function bindUndoButtons(root) {
+    root.querySelectorAll('.c-undo-btn').forEach(function (b) {
+      b.onclick = function (e) { e.stopPropagation(); cancelRemoval(b.getAttribute('data-key')); };
+    });
+  }
+
   // Dev-scaffolding narrator bar — retired. No-op so every existing banner(...) call
   // site is safe; also removes any stray element if one was ever created.
   function banner(msg) {
@@ -1800,6 +1854,8 @@
       savedWrap = document.createElement('section'); savedWrap.id = 'compassBookmarks'; savedWrap.style.cssText = 'margin-bottom:26px'; main.appendChild(savedWrap);
       wrap = document.createElement('section'); wrap.id = 'compassSavedList'; main.appendChild(wrap);
       function bookmarkRowHtml(r, i) {
+        var key = 'bm:' + normUrl(r.url);
+        if (isRemovalPending(key)) return undoStripHtml(key, 'Removed from My Jobs.');
         var f = fitFor(r.url);
         var fitHtml = (f && typeof f.score === 'number')
           ? '<span style="font-family:var(--serif,Georgia);font-weight:600;font-size:16px;color:#16324F">' + f.score + '<span style="font-size:10px;color:#8a8172">/100</span></span>' + (f.verdict ? ' ' + verdictPill(f.verdict) : '')
@@ -1819,11 +1875,25 @@
         var head = '<div style="display:flex;align-items:baseline;gap:10px;margin:6px 0 12px"><h2 style="font:600 20px var(--serif,\'Iowan Old Style\',Georgia,serif);color:#16324F;margin:0">Saved jobs</h2><span style="font:12px system-ui;color:#8a8172">' + savedRows.length + ' bookmarked</span></div>';
         if (!savedRows.length) { savedWrap.innerHTML = head + '<div style="' + CARD + ';padding:22px 24px;text-align:center;color:#8a8172;font:14px system-ui">No saved jobs yet — tap the ♥ on any job in the feed to bookmark it here.</div>'; return; }
         savedWrap.innerHTML = head + savedRows.map(bookmarkRowHtml).join('');
+        bindUndoButtons(savedWrap);
         savedWrap.querySelectorAll('.c-brow').forEach(function (el) {
           var i = +el.getAttribute('data-bi'); var r = savedRows[i];
           el.addEventListener('click', function (e) { if (e.target.closest && (e.target.closest('.compass-ext') || e.target.closest('.c-brow-remove'))) return; var mj = mapRow(r); setCurrentJob(mj); location.href = jobHref('job-detail.html', mj); });
           var rm = el.querySelector('.c-brow-remove');
-          if (rm) rm.onclick = function (e) { e.stopPropagation(); rm.disabled = true; setBookmark(r.url, false).then(function () { savedRows.splice(savedRows.indexOf(r), 1); renderBookmarks(); toastMsg('Removed bookmark', 'success'); }).catch(function () { rm.disabled = false; toastMsg('Could not remove bookmark', 'error'); }); };
+          if (rm) rm.onclick = function (e) {
+            e.stopPropagation();
+            var key = 'bm:' + normUrl(r.url);
+            // No server call yet — the row collapses into an undo strip; the
+            // real removal only fires from scheduleRemoval's commit, below,
+            // after UNDO_MS with no Undo click (or immediately on unload).
+            scheduleRemoval(key, function () {
+              if (window.__savedSet) delete window.__savedSet[normUrl(r.url)];
+              fetch('/api/compass/saved', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: r.url, saved: false }), keepalive: true }).catch(function () { });
+              var idx = savedRows.indexOf(r);
+              if (idx >= 0) savedRows.splice(idx, 1);
+              renderBookmarks();
+            }, renderBookmarks);
+          };
         });
       }
 
@@ -1833,7 +1903,10 @@
         if (set.indexOf('Scanned') < 0) set.push('Scanned');
         return set.map(function (s) { return '<option' + (cur === s ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('');
       }
+      function appKeyFor(r) { return 'app:' + (r && r.num != null ? r.num : normUrl(r && r.url)); }
       function rowHtml(r, i) {
+        var key = appKeyFor(r);
+        if (isRemovalPending(key)) return undoStripHtml(key, 'Removed from My Jobs.');
         var f = fitFor(r.url);
         var fitHtml = (f && typeof f.score === 'number')
           ? '<span style="font-family:var(--serif,Georgia);font-weight:600;font-size:16px;color:#16324F">' + f.score + '<span style="font-size:10px;color:#8a8172">/100</span></span>' + (f.verdict ? ' ' + verdictPill(f.verdict) : '')
@@ -1859,6 +1932,7 @@
           return;
         }
         wrap.innerHTML = '<div style="display:flex;align-items:baseline;gap:10px;margin:6px 0 12px"><h2 style="font:600 20px var(--serif,\'Iowan Old Style\',Georgia,serif);color:#16324F;margin:0">Applications</h2><span style="font:12px system-ui;color:#8a8172">' + mine.length + ' in progress</span></div>' + mine.map(rowHtml).join('');
+        bindUndoButtons(wrap);
         bindRows();
         banner('My Jobs LIVE — ' + savedRows.length + ' saved (bookmarked) + ' + mine.length + ' application(s). Bookmarks persist via /api/compass/saved; status/Remove via /api/compass/tracker/status.');
       }
@@ -1881,8 +1955,19 @@
           });
           var rm = el.querySelector('.c-srow-remove');
           if (rm) rm.addEventListener('click', function (e) {
-            e.stopPropagation(); rm.disabled = true;
-            persist(r, 'Scanned', 'Removed from My Jobs', function () { mine.splice(mine.indexOf(r), 1); render(); });
+            e.stopPropagation();
+            var key = appKeyFor(r);
+            // No server call yet — the row collapses into an undo strip; the
+            // real removal (reset to "Scanned", same as before) only fires
+            // from scheduleRemoval's commit, below, after UNDO_MS with no
+            // Undo click (or immediately on unload).
+            scheduleRemoval(key, function () {
+              fetch('/api/compass/tracker/status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ num: r.num, url: r.url, status: 'Scanned' }), keepalive: true }).catch(function () { });
+              r.status = 'Scanned';
+              var idx = mine.indexOf(r);
+              if (idx >= 0) mine.splice(idx, 1);
+              render();
+            }, render);
           });
         });
       }
@@ -2706,12 +2791,19 @@
     var btn = document.getElementById('saveBtn');
     if (btn) btn.addEventListener('click', function () {
       var settings = { includeTitles: (window.includeTitles || []).slice(), excludeTitles: (window.excludeTitles || []).slice(), searchTerms: (window.searchTerms || []).slice(), cities: (window.cities || []).map(function (c) { return c && c.name ? c.name : c; }), remoteUS: !!window.remoteUS };
+      // seededFromLive: true only if setup.html's live-config fetch (GET
+      // /api/compass/setup/current) succeeded, so the form's lists ARE the
+      // true current lists — server does a REPLACE. If that fetch failed,
+      // this stays false/undefined and the server falls back to its
+      // add-only union-merge (fail-safe: a failed load can never wipe
+      // entries the form never showed).
+      var seededFromLive = !!window.compassSeededFromLive;
       // Single real confirmation, tied to this actual network write (P0 4.3 —
       // collapse the old triple-fire: optimistic inline note + optimistic
       // toast + this real toast, down to just this one, on completion).
       var origHtml = btn.innerHTML;
       btn.disabled = true; btn.textContent = 'Saving…';
-      jPost('/api/compass/setup', { settings: settings }).then(function (r) {
+      jPost('/api/compass/setup', { settings: settings, seededFromLive: seededFromLive }).then(function (r) {
         var ok = r.body && r.body.ok;
         toastMsg(ok ? 'Your search settings are saved.' : 'Couldn\'t update your search settings — try again in a moment.', ok ? 'success' : 'error');
       }).catch(function () {
