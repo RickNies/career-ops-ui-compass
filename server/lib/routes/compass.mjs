@@ -81,6 +81,8 @@ import { randomUUID } from 'node:crypto';
 import { dirname } from 'node:path';
 import yaml from 'js-yaml';
 import { splitUnescaped } from '../parsers.mjs';
+import { PATHS } from '../paths.mjs';
+import { withFileLock } from '../file-lock.mjs';
 
 const VENV_PY = '/Users/nick/apps/career-ops-scrape/venv/bin/python';
 const WRITE_SETTINGS = '/Users/nick/apps/career-ops-scrape/write_settings.py';
@@ -786,14 +788,18 @@ export function registerCompassRoutes(app) {
   //    applications.md by num (preferred) or url and rewrites its Status cell
   //    in place: backup → atomic temp-write → rename. Table format preserved;
   //    Status/URL columns are before Notes so escaped pipes in Notes are safe. ──
-  app.post('/api/compass/tracker/status', (req, res) => {
+  app.post('/api/compass/tracker/status', async (req, res) => {
     const body = req.body || {};
     const status = String(body.status || '').replace(/[\r\n|]/g, ' ').trim();
     if (!status) return res.status(400).json({ error: 'status required' });
     const num = body.num != null && String(body.num).trim() !== '' ? String(body.num).trim() : null;
     const url = body.url != null && String(body.url).trim() !== '' ? String(body.url).trim() : null;
     if (!num && !url) return res.status(400).json({ error: 'num or url required' });
+    // A2 — wrap the read-modify-write in the SAME lock key tracker.mjs uses for
+    // this file (PATHS.applications === REAL_APPS_MD, both resolve off
+    // CAREER_OPS_ROOT), so the two writers can never interleave a read/write.
     try {
+      await withFileLock(PATHS.applications, async () => {
       const content = readFileSync(REAL_APPS_MD, 'utf8');
       const lines = content.split(/\r?\n/);
       let hi = -1, cols = null;
@@ -853,6 +859,7 @@ export function registerCompassRoutes(app) {
       writeFileSync(tmp, lines.join('\n'));
       renameSync(tmp, REAL_APPS_MD);
       res.json({ ok: true, num, url, status, before: (beforeLine || '').trim(), after: lines[target].trim() });
+      });
     } catch (e) {
       res.status(500).json({ error: 'status update failed', details: String((e && e.message) || e).slice(0, 300) });
     }
