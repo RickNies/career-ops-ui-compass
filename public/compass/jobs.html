@@ -122,7 +122,8 @@
   .rev-item{display:flex;gap:6px;align-items:flex-start;padding:8px;border-radius:10px;border:1px solid var(--line-soft);background:var(--surface-2);margin-bottom:6px}
   .rev-item:hover{border-color:var(--line);background:#fff}
   .ri-main{flex:1;min-width:0}
-  .ri-title{font-size:12.5px;font-weight:600;color:var(--ink);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ri-title{display:block;font-size:12.5px;font-weight:600;color:var(--ink);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+  .ri-title:hover{color:var(--gold-deep);text-decoration:underline}
   .ri-sub{font-size:11.5px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .ri-reason{color:var(--gold-deep);font-weight:600}
   .ri-acts{display:flex;gap:2px;flex:none}
@@ -785,9 +786,13 @@ function renderRail(){
   function itemHTML(x){
     var reason=x.r.reason ? '<span class="ri-reason">'+esc(x.r.reason)+'</span>' : '';
     var sep=x.r.reason ? ' · ' : '';
+    // Same slug derivation the card's own View/title link uses (window.jobHref,
+    // defined in wire.js) — reviewed jobs are filtered out of the main feed, so
+    // this is the only way back to a reviewed job's detail page.
+    var href = (window.jobHref ? window.jobHref("job-detail.html", x.j) : "job-detail.html");
     return '<div class="rev-item" data-id="'+x.j.id+'">'+
       '<div class="ri-main">'+
-        '<div class="ri-title">'+esc(x.j.title)+'</div>'+
+        '<a class="ri-title" href="'+esc(href)+'">'+esc(x.j.title)+'</a>'+
         '<div class="ri-sub">'+esc(x.j.company)+sep+reason+'</div>'+
       '</div>'+
       '<div class="ri-acts">'+

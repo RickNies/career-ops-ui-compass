@@ -805,6 +805,10 @@
   // Rewrite the address bar to the shareable slug URL for `page` (no reload).
   function setJobUrl(page, job) { try { if (job) history.replaceState(null, '', page + '?job=' + encodeURIComponent(jobSlug(job))); } catch (e) {} }
   function jobHref(page, job) { return page + '?job=' + encodeURIComponent(jobSlug(job)); }
+  // Exposed so jobs.html's inline renderRail() can build the exact same
+  // job-detail.html?job=<slug> link the card's own View/title link uses —
+  // one slug derivation, not a second copy of the scheme.
+  window.jobHref = jobHref;
 
   // Liveness store (annotate-only): url → live|dead|unknown. Dead rows are hidden;
   // for shown jobs the full state drives the "still open?" badge.
