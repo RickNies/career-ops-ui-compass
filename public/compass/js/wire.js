@@ -1323,6 +1323,26 @@
         var origDetailSave = window.saveReview;
         window.saveReview = function (verdict, reason, note) {
           origDetailSave(verdict, reason, note);
+          // Parity with the Jobs feed (wireJobs() above): a good/bad verdict
+          // cast from Job Detail must ALSO reach the shared AI-learning store
+          // (feedback.py → feedback.jsonl), not just this fork's own
+          // cross-device "reviewed" store below. This was previously missing
+          // here — voting inside a job detail page taught the AI nothing,
+          // despite the walkthrough's promise that it would (see the fixed
+          // note on /api/compass/reviews in compass.mjs). Same first-tap-only
+          // toast rule as the feed (P0 4.6): reason/note edits only get the
+          // inline "Saved" fade already shown by this page's own script.
+          if (verdict === 'good' || verdict === 'bad') {
+            var isFirstTap = (reason === undefined && note === undefined);
+            jPost('/api/compass/feedback', { url: job.url, verdict: verdict, reason: reason || '' })
+              .then(function (r) {
+                if (!isFirstTap) return;
+                var ok = r.body && r.body.ok;
+                var nice = verdict === 'good' ? 'Saved — we\'ll find you more like this' : 'Saved — you won\'t see this one again';
+                toastMsg(ok ? nice : 'Saved on this device — couldn\'t reach the server', ok ? 'success' : 'error');
+              })
+              .catch(function () { if (isFirstTap) toastMsg('Saved on this device — server unreachable', 'error'); });
+          }
           var rv = (typeof window.getReview === 'function') ? window.getReview() : null;
           postReviewDebounced(job.url, rv || { verdict: verdict, reason: reason || '', note: note || '', ts: Date.now() });
         };

@@ -14,9 +14,18 @@
  *   GET/POST /api/compass/reviews → this fork's OWN review store
  *       (data/compass-reviews.jsonl, one row per normalized url) — the feed's
  *       "reviewed" state (verdict+reason+note+ts), server-backed so it survives
- *       a cache-clear or a different device. Every good/bad/reason/note write
- *       here ALSO fires the feedback.py POST above (kept, unchanged) so both
- *       stores stay in sync.
+ *       a cache-clear or a different device. NOTE: this route does NOT itself
+ *       call feedback.py — it only writes REVIEWS_STORE below. Keeping this
+ *       store in sync with the AI-learning feedback.jsonl above is the
+ *       CLIENT's job: public/compass/js/wire.js's wireJobs() (feed) and
+ *       wireDetail() (job detail) each independently POST
+ *       /api/compass/feedback on every good/bad verdict before/alongside
+ *       posting here, so a vote reaches feedback.jsonl regardless of which
+ *       page it was cast from. (An earlier version of this comment claimed
+ *       this route relayed to feedback.py itself — it never did; fixed to
+ *       match the client-side wiring in wire.js, and job-detail.html's
+ *       wrapper — which used to skip the feedback.py POST entirely — was
+ *       brought in line with the feed's.)
  *
  *   POST /api/compass/setup     → shells out to the shared write_settings.py
  *       (comment-preserving ruamel writer + validate-portals.mjs) targeting the
