@@ -337,41 +337,12 @@
       </div>
     </section>
 
-    <!-- Iteration 6: Job titles to include / exclude (mirrors portals.yml title_filter) -->
-    <section class="card">
-      <h2><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>What your daily search looks for</h2>
-      <div class="hint">The words in a job&rsquo;s title decide whether it shows up. Keep the titles you want, and rule out the ones you never do.</div>
-
-      <div class="subhead"><span class="dt inc"></span>Titles to include</div>
-      <div class="chips" id="incChips">
-        <label class="chip-add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg><input id="incInput" type="text" placeholder="Add a title…"></label>
-      </div>
-
-      <div class="subhead"><span class="dt exc"></span>Titles to exclude</div>
-      <div class="chips" id="excChips">
-        <label class="chip-add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg><input id="excInput" type="text" placeholder="Add a word to skip…"></label>
-      </div>
-
-      <div class="caption"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg><span>These control what the daily searches look for. A role must match at least one &ldquo;include&rdquo; word and none of the &ldquo;exclude&rdquo; words.</span></div>
-    </section>
-
-    <!-- Location (Iteration 6: editable — NYC priority toggle + add cities + Remote/US) -->
-    <section class="card">
-      <h2><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg></span>Locations</h2>
-      <div class="hint">Where you want to search. Star one as your top priority, add more cities, or remove any.</div>
-      <div class="loc-list" id="locList"><!-- filled by JS --></div>
-      <div class="co-add" style="margin-top:10px">
-        <input id="cityInput" type="text" placeholder="Add a city, e.g. Atlanta, GA">
-        <button class="btn btn--outline btn--sm" id="cityAdd" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>Add</button>
-      </div>
-      <div class="remote-row">
-        <div>
-          <div class="tt">Include Remote / US roles</div>
-          <div class="tm">Show remote jobs based anywhere in the United States.</div>
-        </div>
-        <button class="sw on" type="button" id="swRemote" role="switch" aria-checked="true" aria-label="Include remote US roles"></button>
-      </div>
-    </section>
+    <!-- A4 — the editable titles-include/exclude + Locations panels used to live
+         here and POST to /api/compass/setup, competing with the native Portals
+         accordion below (which now owns this — see "Portals" in Full app
+         settings). Removed to avoid two writers of the same file; the "Preview:
+         what we actually search" section further down still shows the current
+         title/location/remote settings (read-only, refreshed on page load). -->
 
     <!-- Comp floor -->
     <section class="card">
@@ -397,27 +368,11 @@
       </div>
     </section>
 
-    <!-- Iteration 6: Companies to watch (mirrors portals.yml tracked_companies) -->
-    <section class="card">
-      <h2><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 9h.01M15 9h.01M9 13h.01M15 13h.01"/></svg></span>Companies to watch</h2>
-      <div class="hint">Compass checks these employers&rsquo; own career pages every day, on top of the general job boards. Add or remove any.</div>
-      <div class="co-list" id="coList"><!-- filled by JS --></div>
-      <div class="co-add">
-        <input id="coInput" type="text" placeholder="Add a company, e.g. Warner Bros. Discovery">
-        <button class="btn btn--outline btn--sm" id="coAdd" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>Add</button>
-      </div>
-      <div class="caption"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg><span>Compass watches 68 companies &amp; boards in total. These are the ones you&rsquo;ve pinned to follow closely.</span></div>
-    </section>
-
-    <!-- Iteration 6: Extra search phrases (mirrors the discovery/board query keywords) -->
-    <section class="card">
-      <h2><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 7h16M4 12h10M4 17h7"/></svg></span>Extra phrases to search for</h2>
-      <div class="hint">Beyond your job titles, these are phrases Compass types into the wider job boards to surface new roles and companies for you.</div>
-      <div class="chips" id="termChips">
-        <label class="chip-add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg><input id="termInput" type="text" placeholder="Add a phrase…"></label>
-      </div>
-      <div class="caption"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg><span>Simple phrases work best, e.g. &ldquo;Content Finance&rdquo; or &ldquo;Strategic Finance United States&rdquo;.</span></div>
-    </section>
+    <!-- A4 — the editable Companies-to-watch + Extra-phrases panels used to live
+         here (the companies one never actually saved server-side — entries
+         lacked a source key, see the write_settings.py comment below). The
+         native Portals accordion's "Tracked companies" editor (which DOES
+         require a source: careers_url/api/provider) replaces this properly. -->
 
     <!-- Iteration 6: Where your search runs -->
     <section class="card">
@@ -451,10 +406,10 @@
       </div>
     </section>
 
-    <!-- Preview: what we actually search (engineer / technical view — live-generated from the inputs above) -->
+    <!-- Preview: what we actually search (engineer / technical view — reads your current saved settings) -->
     <section class="card">
       <h2><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M9 18l6-6-6-6"/><path d="M3 21h18" opacity=".0"/><path d="M4 6h4M4 18h9"/></svg></span>Preview: what we actually search</h2>
-      <div class="hint">The technical view — the real mechanism behind each search area, the inputs it reads, and live example queries built from your settings above. Edit a title, phrase, city, or the Remote toggle and these regenerate instantly.</div>
+      <div class="hint">The technical view — the real mechanism behind each search area, the inputs it reads, and live example queries built from your current settings. To change titles, locations, companies, or search phrases, use the Portals section under Full app settings below, then reload this page to see it reflected here.</div>
       <details class="pv" id="pv" open>
         <summary>Search areas &amp; generated queries<span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></span></summary>
         <div class="pv-body">
@@ -619,9 +574,9 @@ var DEFAULT_CITIES=[
   {name:"Atlanta, GA", priority:false}
 ];
 // No demo companies ship in the page source — an empty list here is the
-// honest starting state until you add your own or Save pulls in the real
-// tracked_companies from portals.yml. wireSetup/renderCompanies both already
-// handle an empty `companies` array (renders nothing, no crash).
+// honest starting state. This var is display-only now (see A4 note above the
+// résumé-drop-zone comment): the native Portals accordion's own "Tracked
+// companies" editor is what actually manages tracked_companies.
 var DEFAULT_COMPANIES=[];
 var stored=load()||{};
 var roles = stored.roles || DEFAULT_ROLES.slice();
@@ -680,86 +635,15 @@ roleInput.addEventListener("keydown", function(e){
 });
 renderRoles();
 
-/* ---- Iteration 6: generic chip list (include / exclude titles, search phrases) ---- */
-function makeChipList(containerId, inputId, getArr, variant){
-  var container=document.getElementById(containerId);
-  var input=document.getElementById(inputId);
-  function render(){
-    container.querySelectorAll(".rchip").forEach(function(c){ c.remove(); });
-    var addLabel=container.querySelector(".chip-add");
-    getArr().forEach(function(v){
-      var el=document.createElement("span");
-      el.className="rchip "+variant;
-      el.innerHTML=esc(v)+'<button type="button" aria-label="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></button>';
-      el.querySelector("button").onclick=function(){ var a=getArr(); var i=a.indexOf(v); if(i>=0) a.splice(i,1); persist(); render(); };
-      container.insertBefore(el, addLabel);
-    });
-    if(window.pvRefresh) window.pvRefresh();
-  }
-  input.addEventListener("keydown", function(e){
-    if(e.key==="Enter" && input.value.trim()){ var a=getArr(); if(a.indexOf(input.value.trim())<0) a.push(input.value.trim()); input.value=""; persist(); render(); }
-  });
-  render();
-  return render;
-}
-var renderIncChips=makeChipList("incChips","incInput", function(){ return includeTitles; }, "inc");
-var renderExcChips=makeChipList("excChips","excInput", function(){ return excludeTitles; }, "exc");
-var renderTermChips=makeChipList("termChips","termInput", function(){ return searchTerms; }, "term");
-
-/* ---- Iteration 6: editable locations (star a priority, add/remove cities, Remote toggle) ---- */
-var locList=document.getElementById("locList");
-function renderCities(){
-  locList.innerHTML=cities.map(function(c,i){
-    var starOn = c.priority;
-    return '<div class="loc-item'+(starOn?' primary':'')+'" data-i="'+i+'">'+
-      (starOn ? '<span class="star"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2l2.9 6.3 6.9.6-5.2 4.6 1.6 6.8L12 17.3 5.8 20.9l1.6-6.8L2.2 8.9l6.9-.6z"/></svg></span>' : '') +
-      '<span class="ln">'+esc(c.name)+'</span>'+
-      (starOn ? '<span class="tagp">Top priority</span>' : '<button class="pin-toggle" type="button" data-i="'+i+'">Make top priority</button>') +
-      '<button class="rm-city" type="button" data-i="'+i+'" aria-label="Remove city"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></button>'+
-    '</div>';
-  }).join("");
-  locList.querySelectorAll(".pin-toggle").forEach(function(b){
-    b.onclick=function(){ var i=+b.getAttribute("data-i"); cities.forEach(function(c,j){ c.priority=(j===i); }); persist(); renderCities(); };
-  });
-  locList.querySelectorAll(".rm-city").forEach(function(b){
-    b.onclick=function(){ var i=+b.getAttribute("data-i"); var wasPri=cities[i].priority; cities.splice(i,1); if(wasPri && cities.length) cities[0].priority=true; persist(); renderCities(); };
-  });
-  if(window.pvRefresh) window.pvRefresh();
-}
-renderCities();
-var cityInput=document.getElementById("cityInput");
-function addCity(){ var v=cityInput.value.trim(); if(v){ cities.push({name:v, priority:cities.length===0}); cityInput.value=""; persist(); renderCities(); } }
-document.getElementById("cityAdd").onclick=addCity;
-cityInput.addEventListener("keydown", function(e){ if(e.key==="Enter") addCity(); });
-
-/* Remote/US toggle */
-var swRemote=document.getElementById("swRemote");
-function paintRemote(){ swRemote.classList.toggle("on", !!remoteUS); swRemote.setAttribute("aria-checked", remoteUS?"true":"false"); if(window.pvRefresh) window.pvRefresh(); }
-paintRemote();
-swRemote.onclick=function(){ remoteUS=!remoteUS; persist(); paintRemote(); };
-
-/* ---- Iteration 6: companies to watch (logos + add/remove) ---- */
-var coList=document.getElementById("coList"), coInput=document.getElementById("coInput");
-function domainFor(name){ return name.toLowerCase().replace(/[^a-z0-9]+/g,"")+".com"; }
-function monoFor(name){ return name.replace(/[^A-Za-z0-9 ]/g,"").split(/\s+/).map(function(w){return w[0];}).join("").slice(0,3).toUpperCase(); }
-function renderCompanies(){
-  coList.innerHTML=companies.map(function(c,i){
-    var dom=c.domain||domainFor(c.name), mono=c.mono||monoFor(c.name), col=c.color||"#16324F";
-    return '<div class="co-item" data-i="'+i+'">'+
-      '<span class="co-logo" style="--mc:'+col+'" data-mono="'+esc(mono)+'"><img src="https://logo.clearbit.com/'+esc(dom)+'" alt="'+esc(c.name)+' logo" onerror="this.parentNode.classList.add(\'failed\');this.remove()"></span>'+
-      '<div><div class="co-name">'+esc(c.name)+'</div><div class="co-note">Career page checked daily</div></div>'+
-      '<button class="rm" type="button" data-i="'+i+'" aria-label="Remove company"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></button>'+
-    '</div>';
-  }).join("");
-  coList.querySelectorAll(".rm").forEach(function(b){
-    b.onclick=function(){ companies.splice(+b.getAttribute("data-i"),1); persist(); renderCompanies(); };
-  });
-  if(window.pvRefresh) window.pvRefresh();
-}
-renderCompanies();
-function addCompany(){ var v=coInput.value.trim(); if(v){ companies.push({name:v, domain:domainFor(v), mono:monoFor(v), color:"#16324F"}); coInput.value=""; persist(); renderCompanies(); } }
-document.getElementById("coAdd").onclick=addCompany;
-coInput.addEventListener("keydown", function(e){ if(e.key==="Enter") addCompany(); });
+/* A4 — the editable chip/city/company add-remove UI that used to live here
+   (titles include/exclude, locations, companies-to-watch) is gone; the
+   native Portals accordion (Full app settings, further up this same page)
+   is now the only editor for these, and is the only thing that POSTs
+   /api/compass/setup. includeTitles/excludeTitles/searchTerms/cities/
+   remoteUS/companies below are kept as plain (read-only-on-this-page) data —
+   seeded from defaults, then overwritten by the live-portals fetch further
+   down — purely so the "Preview: what we actually search" section can still
+   show accurate example queries. */
 
 /* ---- résumé drop zone (mock) ---- */
 var drop=document.getElementById("drop"), fileInput=document.getElementById("fileInput");
@@ -909,18 +793,15 @@ window.pvRefresh=function(){
 };
 window.pvRefresh();
 
-/* ---- seed the list fields (include/exclude titles, cities, search phrases,
-   Remote/US) from the LIVE portals.yml, so what you see here IS what's
-   actually saved — not the simplified starter list above, which can be
-   narrower than your real settings (e.g. it won't show hand-added city
-   aliases). Save then uses REPLACE semantics for these fields (see wire.js),
-   which only actually removes what you remove HERE because this now shows
-   the true full list.
-   FAIL-SAFE: if this fails for any reason, silently keep the starter-list/
-   localStorage seed already rendered above — window.compassSeededFromLive
-   stays false, so Save falls back to add-only merge behavior instead of a
-   wholesale replace that could otherwise wipe entries this load never saw. */
-window.compassSeededFromLive = false;
+/* ---- seed the (now read-only-on-this-page) preview inputs — include/exclude
+   titles, cities, search phrases, Remote/US — from the LIVE portals.yml, so
+   the "Preview: what we actually search" section below shows your true
+   current settings, not just the starter defaults above. Editing happens in
+   the native Portals accordion (Full app settings) further up this page;
+   that panel does its own independent live-seed + save (see wire.js
+   sectionPortals) and is the only thing that writes to portals.yml.
+   FAIL-SAFE: if this fetch fails for any reason, the preview just falls
+   back to showing the starter-list defaults instead of throwing. */
 fetch("/api/compass/setup/current", {credentials:"same-origin"}).then(function(r){
   if(!r.ok) throw new Error("bad status");
   return r.json();
@@ -939,13 +820,11 @@ fetch("/api/compass/setup/current", {credentials:"same-origin"}).then(function(r
     cities=live.cities.map(function(name){ return {name:String(name), priority:!!prevPriority[String(name)]}; });
   }
   if(typeof live.remoteUS==="boolean") remoteUS=live.remoteUS;
-  window.compassSeededFromLive=true;
   persist();
-  renderIncChips(); renderExcChips(); renderTermChips(); renderCities(); paintRemote();
   if(window.pvRefresh) window.pvRefresh();
 }).catch(function(){
-  /* live-config load failed — keep the seed already on screen; Save will
-     fall back to the server's add-only merge (compassSeededFromLive=false). */
+  /* live-config load failed — the preview just keeps showing the starter-
+     list defaults already on screen. */
 });
 
 /* ---- save ---- */

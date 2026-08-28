@@ -2589,7 +2589,13 @@
           remoteUS: box.querySelector('#pRemote').checked,
           searchTerms: fromLines(box.querySelector('#pTerms').value)
         };
-        jPost('/api/compass/setup', { settings: settings }).then(function (r) {
+        // A4 — this is now the ONLY Setup writer (the old setup.html mockup
+        // panel + its wire.js click-handler are gone). Its fields are always
+        // seeded straight from the live portals.yml above (jGet('/api/portals')
+        // just before this box was built), so REPLACE semantics are safe here
+        // — removing a shown chip actually removes it, unlike the old panel's
+        // add-only fallback.
+        jPost('/api/compass/setup', { settings: settings, seededFromLive: true }).then(function (r) {
           if (r.body && r.body.ok) say(m, 'portals.yml saved (' + settings.companies.length + ' companies kept with source keys) ✓', true);
           else say(m, 'Save failed: ' + ((r.body && r.body.error) || r.status) + ' ' + ((r.body && r.body.details) || ''), false);
         });
@@ -2804,30 +2810,13 @@
   function wireSetup() {
     buildNativeSetup();
     wireRunsPanel();
-    var btn = document.getElementById('saveBtn');
-    if (btn) btn.addEventListener('click', function () {
-      var settings = { includeTitles: (window.includeTitles || []).slice(), excludeTitles: (window.excludeTitles || []).slice(), searchTerms: (window.searchTerms || []).slice(), cities: (window.cities || []).map(function (c) { return c && c.name ? c.name : c; }), remoteUS: !!window.remoteUS };
-      // seededFromLive: true only if setup.html's live-config fetch (GET
-      // /api/compass/setup/current) succeeded, so the form's lists ARE the
-      // true current lists — server does a REPLACE. If that fetch failed,
-      // this stays false/undefined and the server falls back to its
-      // add-only union-merge (fail-safe: a failed load can never wipe
-      // entries the form never showed).
-      var seededFromLive = !!window.compassSeededFromLive;
-      // Single real confirmation, tied to this actual network write (P0 4.3 —
-      // collapse the old triple-fire: optimistic inline note + optimistic
-      // toast + this real toast, down to just this one, on completion).
-      var origHtml = btn.innerHTML;
-      btn.disabled = true; btn.textContent = 'Saving…';
-      jPost('/api/compass/setup', { settings: settings, seededFromLive: seededFromLive }).then(function (r) {
-        var ok = r.body && r.body.ok;
-        toastMsg(ok ? 'Your search settings are saved.' : 'Couldn\'t update your search settings — try again in a moment.', ok ? 'success' : 'error');
-      }).catch(function () {
-        toastMsg('Couldn\'t update your search settings — try again in a moment.', 'error');
-      }).finally(function () {
-        btn.disabled = false; btn.innerHTML = origHtml;
-      });
-    });
+    // A4 — setup.html's own #saveBtn (still present) now only locally persists
+    // the fields that never had a real backend (target roles, comp floor,
+    // work type, name/phone/email display, AI quality/language/cadence,
+    // notification toggles) via its own inline onclick in setup.html. It used
+    // to ALSO fire a second, competing POST /api/compass/setup from here —
+    // removed: the native Portals accordion above (sectionPortals's own
+    // #pSave button) is now the only thing that writes portals.yml.
     banner('Setup MIGRATED — full config, portals (companies w/ source keys), profile, two-pager, CV, memory, health, usage, docs-assistant, orientation, help all native here via their real endpoints. Comp floor stays demo.');
   }
 
