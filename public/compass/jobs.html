@@ -462,7 +462,7 @@
         <div class="status-row">
           <div class="seg" role="tablist" aria-label="Review status">
             <button data-rev="not" class="on" type="button" role="tab" aria-selected="true" tabindex="0" aria-controls="list">Not reviewed</button>
-            <button data-rev="reviewed" type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="list">Reviewed</button>
+            <button data-rev="reviewed" type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="list" title="This week only — older reviews move to the archive in My Jobs">Reviewed</button>
             <button data-rev="all" type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="list">All</button>
           </div>
           <div class="count" id="count"></div>
@@ -610,6 +610,19 @@ function getReviews(){ try{ return JSON.parse(localStorage.getItem(REVK)||"{}");
 function setReviews(m){ localStorage.setItem(REVK, JSON.stringify(m)); }
 function getReview(id){ return getReviews()[id]||null; }
 function isReviewed(id){ return !!getReviews()[id]; }
+/* Monday 00:00:00.000 local → the "this week" boundary for the Reviewed tab
+   and rail below (and the review-archive endpoint's server-side mirror in
+   compass.mjs — byte-identical logic, ported). Sunday(0) counts as day 7 so
+   the subtraction always lands on THIS week's Monday, never last week's. */
+function startOfThisWeekLocal(d){
+  d = d ? new Date(d) : new Date();
+  var day = d.getDay();               // 0=Sun .. 6=Sat
+  var diffToMonday = (day === 0) ? 6 : day - 1;
+  var mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - diffToMonday);
+  mon.setHours(0, 0, 0, 0);
+  return mon.getTime();
+}
+function isReviewedThisWeek(id){ var rv=getReview(id); return !!rv && rv.ts>=startOfThisWeekLocal(); }
 function saveReview(id, verdict, reason, note){
   var m=getReviews(); var cur=m[id]||{};
   m[id]={verdict:verdict, reason:(reason!=null?reason:(cur.reason||"")), note:(note!=null?note:(cur.note||"")), ts:Date.now()};
@@ -717,7 +730,11 @@ function matches(j){
   if(state.newOnly && !j.isNew) return false;
   var r=isReviewed(j.id);
   if(state.rev==="not" && r) return false;
-  if(state.rev==="reviewed" && !r) return false;
+  /* "Reviewed" tab is week-scoped: reviews from PAST weeks move to the
+     archive (My Jobs → Review archive) instead of relitigating an old
+     pass/like back into this tab. "Not reviewed" stays all-time (unchanged
+     above) — a job passed 3 weeks ago must stay OUT of the main feed. */
+  if(state.rev==="reviewed" && !isReviewedThisWeek(j.id)) return false;
   return true;
 }
 
@@ -732,9 +749,11 @@ function render(){
   document.getElementById("empty").style.display = rows.length ? "none" : "block";
 
   var reviews=getReviews();
-  var revCount=Object.keys(reviews).length;
+  /* Week-scoped to match the "Reviewed" tab it's summarizing — "all-time"
+     now lives in the archive (My Jobs → Review archive) instead. */
+  var revCount=Object.keys(reviews).filter(isReviewedThisWeek).length;
   var label=state.rev==="not"?"not yet reviewed":(state.rev==="reviewed"?"reviewed":"in total");
-  document.getElementById("count").innerHTML="Showing <b>"+rows.length+"</b> "+(rows.length===1?"role":"roles")+" "+label+" · "+revCount+" reviewed so far";
+  document.getElementById("count").innerHTML="Showing <b>"+rows.length+"</b> "+(rows.length===1?"role":"roles")+" "+label+" · "+revCount+" reviewed this week";
 
   renderRail();
   renderActiveFilters();
@@ -746,8 +765,10 @@ function render(){
 function jobById(id){ for(var i=0;i<JOBS.length;i++){ if(JOBS[i].id===id) return JOBS[i]; } return null; }
 function renderRail(){
   var reviews=getReviews();
+  var hadAnyEver=Object.keys(reviews).length>0;
   var liked=[], passed=[];
   Object.keys(reviews).forEach(function(id){
+    if(!isReviewedThisWeek(id)) return; /* past-week reviews live in the archive (My Jobs), not here */
     var j=jobById(id); if(!j) return;
     (reviews[id].verdict==="bad"?passed:liked).push({j:j, r:reviews[id]});
   });
@@ -767,7 +788,9 @@ function renderRail(){
   }
   var html="";
   if(!liked.length && !passed.length){
-    html='<div class="rev-empty">Nothing reviewed yet. Use the <b style="color:var(--sage)">✓</b> or <b style="color:var(--terra)">✗</b> on any job to sort it here — and jot down why, if you like.</div>';
+    html = hadAnyEver
+      ? '<div class="rev-empty">Nothing reviewed yet this week. Your past reviews moved to the archive in My Jobs — nothing is deleted.</div>'
+      : '<div class="rev-empty">Nothing reviewed yet. Use the <b style="color:var(--sage)">✓</b> or <b style="color:var(--terra)">✗</b> on any job to sort it here — and jot down why, if you like.</div>';
   } else {
     html+='<div class="rev-group-t">👍 Liked<span class="rc">'+liked.length+'</span></div>';
     html+= liked.length ? liked.map(itemHTML).join("") : '<div class="rev-empty">None yet.</div>';
