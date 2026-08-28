@@ -1606,7 +1606,23 @@
       var by = d.byStatus || {};
       var applied = Object.keys(by).filter(function (k) { return /appl|interview|offer|hired|respond|screen|phone/i.test(k); }).reduce(function (s, k) { return s + by[k]; }, 0);
       var avgFit = (d.avgScore != null) ? Math.round((d.avgScore / 5) * 100) : null;
-      var reviewed = 0; try { reviewed = Object.keys(JSON.parse(localStorage.getItem('compass_reviews') || '{}')).length; } catch (e) {}
+      var reviewed = 0;
+      try {
+        var localReviews = JSON.parse(localStorage.getItem('compass_reviews') || '{}');
+        var reviewedIds = {};
+        Object.keys(localReviews).forEach(function (id) { reviewedIds[id] = true; });
+        // A3 — merge the server's review map (source of truth, survives a
+        // cache-clear/device switch) into the count, the same way wireJobs()/
+        // wireDetail() merge it into localStorage via mergeServerReview().
+        // loadReviews() has already resolved by the time wireDash() runs (see
+        // the dispatch Promise.all below). Without this merge, a fresh device
+        // has 0 local reviews and "not yet reviewed" over-reports.
+        var serverReviews = window.__reviewsMap || {};
+        live.forEach(function (r) {
+          if (serverReviews[normUrl(r.url)]) reviewedIds[mapRow(r).id] = true;
+        });
+        reviewed = Object.keys(reviewedIds).length;
+      } catch (e) {}
       var ns = document.querySelectorAll('.stat .n');
       if (ns[0]) ns[0].textContent = apps;
       if (ns[2]) ns[2].textContent = applied;
