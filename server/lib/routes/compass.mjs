@@ -194,7 +194,11 @@ function writeSavedMap(map) {
   try {
     mkdirSync(dirname(SAVED_STORE), { recursive: true });
     const lines = Object.keys(map).filter((u) => map[u]).map((u) => JSON.stringify({ url: u, saved: true, ts: new Date().toISOString() }));
-    writeFileSync(SAVED_STORE, lines.join('\n') + (lines.length ? '\n' : ''));
+    // A5 — atomic like writeReviewMap/writeTipsMap (.tmp + rename) so a crash
+    // mid-write can't truncate saved.jsonl.
+    const tmp = SAVED_STORE + '.tmp';
+    writeFileSync(tmp, lines.join('\n') + (lines.length ? '\n' : ''));
+    renameSync(tmp, SAVED_STORE);
   } catch { /* best-effort */ }
 }
 
