@@ -83,6 +83,7 @@ import yaml from 'js-yaml';
 import { splitUnescaped } from '../parsers.mjs';
 import { PATHS } from '../paths.mjs';
 import { withFileLock } from '../file-lock.mjs';
+import { normalizeUrl } from '../url-key.mjs';
 
 const VENV_PY = '/Users/nick/apps/career-ops-scrape/venv/bin/python';
 const WRITE_SETTINGS = '/Users/nick/apps/career-ops-scrape/write_settings.py';
@@ -102,7 +103,6 @@ const FIT_STORE = DATA_ROOT + '/data/fit-analysis.jsonl';
 // why, strengths[], gaps[]}. Cached by mtime; re-read when the file changes (more
 // batches are landing). Jobs without an entry are simply absent from the map.
 let _fitCache = null, _fitMtime = -1;
-function normFitUrl(u) { return String(u || '').split('#')[0].replace(/\/+$/, ''); }
 function readFitMap() {
   try {
     const st = statSync(FIT_STORE);
@@ -110,7 +110,7 @@ function readFitMap() {
     const map = {};
     readFileSync(FIT_STORE, 'utf8').trim().split(/\r?\n/).forEach((l) => {
       if (!l) return;
-      try { const j = JSON.parse(l); if (j && j.url) map[normFitUrl(j.url)] = { score: j.score, verdict: j.verdict, why: j.why || '', strengths: Array.isArray(j.strengths) ? j.strengths : [], gaps: Array.isArray(j.gaps) ? j.gaps : [] }; } catch { /* skip bad line */ }
+      try { const j = JSON.parse(l); if (j && j.url) map[normalizeUrl(j.url)] = { score: j.score, verdict: j.verdict, why: j.why || '', strengths: Array.isArray(j.strengths) ? j.strengths : [], gaps: Array.isArray(j.gaps) ? j.gaps : [] }; } catch { /* skip bad line */ }
     });
     _fitCache = map; _fitMtime = st.mtimeMs; return map;
   } catch { return _fitCache || {}; }
@@ -130,7 +130,7 @@ function readSalaryMap() {
       try {
         const j = JSON.parse(l);
         if (j && j.url && (j.salary_min != null || j.salary_max != null)) {
-          map[normFitUrl(j.url)] = { min: j.salary_min != null ? j.salary_min : null, max: j.salary_max != null ? j.salary_max : null, currency: j.currency || 'USD', source: j.source || '' };
+          map[normalizeUrl(j.url)] = { min: j.salary_min != null ? j.salary_min : null, max: j.salary_max != null ? j.salary_max : null, currency: j.currency || 'USD', source: j.source || '' };
         }
       } catch { /* skip bad line */ }
     });
@@ -156,7 +156,7 @@ function readPostedMap() {
       if (!l) return;
       try {
         const j = JSON.parse(l);
-        if (j && j.url && j.date_posted) map[normFitUrl(j.url)] = j.date_posted; // last (newest) wins
+        if (j && j.url && j.date_posted) map[normalizeUrl(j.url)] = j.date_posted; // last (newest) wins
       } catch { /* skip bad line */ }
     });
     _postedCache = map; _postedMtime = st.mtimeMs; return map;
@@ -174,7 +174,6 @@ const ARTIFACT_DIR = DATA_ROOT + '/data/compass-artifacts';
 // protected and the preview reads thin, the user pastes the real JD once; we cache
 // it so future tailor/evaluate on the same job reuse it and don't re-prompt.
 const JD_CACHE = DATA_ROOT + '/data/compass-jd-cache.json';
-function normUrlSrv(u) { return String(u || '').split('#')[0].replace(/\/+$/, ''); }
 function readJdCache() { try { return JSON.parse(readFileSync(JD_CACHE, 'utf8')); } catch { return {}; } }
 function writeJdCache(map) { try { mkdirSync(dirname(JD_CACHE), { recursive: true }); writeFileSync(JD_CACHE, JSON.stringify(map)); } catch { /* best-effort */ } }
 // Pre-application BOOKMARKS (distinct from the tracker application-status flow).
@@ -185,7 +184,7 @@ function readSavedMap() {
   try {
     readFileSync(SAVED_STORE, 'utf8').split('\n').forEach((ln) => {
       ln = ln.trim(); if (!ln) return;
-      try { const o = JSON.parse(ln); if (o && o.url) map[normUrlSrv(o.url)] = !!o.saved; } catch { /* skip */ }
+      try { const o = JSON.parse(ln); if (o && o.url) map[normalizeUrl(o.url)] = !!o.saved; } catch { /* skip */ }
     });
   } catch { /* none yet */ }
   return map;
@@ -224,7 +223,7 @@ function readReviewMap() {
       ln = ln.trim(); if (!ln) return;
       try {
         const o = JSON.parse(ln);
-        if (o && o.url) map[normUrlSrv(o.url)] = {
+        if (o && o.url) map[normalizeUrl(o.url)] = {
           verdict: o.verdict, reason: o.reason || '', note: o.note || '', ts: Number(o.ts) || 0,
           title: o.title || '', company: o.company || '', source: o.source || '',
         };
@@ -368,7 +367,7 @@ async function runJob(job) {
     // If the live preview read thin, fall back to a pasted-JD the user cached for
     // this url (guided-paste flow) — so evaluate/cover/tailor run on the REAL JD.
     if ((!job.jd || job.jd.length < 40) && job.url) {
-      const cached = readJdCache()[normUrlSrv(job.url)];
+      const cached = readJdCache()[normalizeUrl(job.url)];
       if (cached && cached.length >= 40) job.jd = cached;
     }
     // tailor/cover need a JD floor; synthesize from role/company if the board was JS-thin.
@@ -654,7 +653,7 @@ export function registerCompassRoutes(app) {
   });
   app.post('/api/compass/saved', (req, res) => {
     const b = req.body || {};
-    const u = normUrlSrv(b.url || '');
+    const u = normalizeUrl(b.url || '');
     if (!u) return res.status(400).json({ error: 'url required' });
     const map = readSavedMap();
     const saved = b.saved !== false && b.saved !== 'false';
@@ -678,7 +677,13 @@ export function registerCompassRoutes(app) {
     const body = req.body || {};
     const url = String(body.url || '').trim();
     if (!url) return res.status(400).json({ error: 'url required' });
-    const key = normUrlSrv(url);
+    const key = normalizeUrl(url);
+    // A1 — normalizeUrl() returns '' for anything that isn't a parseable
+    // absolute http(s) URL (unlike the old weak normalizer, which always
+    // returned a non-empty string). Without this guard, two different
+    // malformed submissions would both land on the SAME '' key and clobber
+    // each other in the map below.
+    if (!key) return res.status(400).json({ error: 'url could not be normalized' });
     const map = readReviewMap();
     if (body.clear) {
       delete map[key];
@@ -763,13 +768,13 @@ export function registerCompassRoutes(app) {
 
   // Pasted-JD cache: GET returns the cached JD for a url (or ''); POST stores one.
   app.get('/api/compass/jd-cache', (req, res) => {
-    const u = normUrlSrv(req.query.url || '');
+    const u = normalizeUrl(req.query.url || '');
     const m = readJdCache();
     res.json({ url: u, jd: (u && m[u]) || '' });
   });
   app.post('/api/compass/jd-cache', (req, res) => {
     const b = req.body || {};
-    const u = normUrlSrv(b.url || '');
+    const u = normalizeUrl(b.url || '');
     const jd = String(b.jd || '').slice(0, 20000).trim();
     if (!u || jd.length < 40) return res.status(400).json({ error: 'url and jd (40+ chars) required' });
     const m = readJdCache(); m[u] = jd; writeJdCache(m);
