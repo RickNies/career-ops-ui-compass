@@ -40,9 +40,16 @@
  *       as reviews above — a localStorage-only counter would reset on every
  *       new browser, defeating the point of "stop pestering me."
  *
- *   POST /api/compass/setup     → shells out to the shared write_settings.py
- *       (comment-preserving ruamel writer + validate-portals.mjs) targeting the
- *       REAL portals.yml. LLM/provider + Anthropic key are NOT here — the
+ *   POST /api/compass/setup     → merges the submitted lists (includeTitles/
+ *       excludeTitles/cities/searchTerms) with what's currently in portals.yml
+ *       (mergeSetupSettings — union, submitted items always kept) BEFORE
+ *       shelling out to the shared write_settings.py (comment-preserving
+ *       ruamel writer + validate-portals.mjs) targeting the REAL portals.yml.
+ *       Needed because setup.html's simplified form seeds its own state from
+ *       localStorage/a starter list, not the live file, so its "full list" can
+ *       be narrower than what's actually saved — without the merge, a save
+ *       would wholesale-replace those sections and silently drop whatever the
+ *       form doesn't display. LLM/provider + Anthropic key are NOT here — the
  *       Compass Setup page links to the full settings view (/spa#/config), which
  *       POSTs /api/config and writes this instance's .env.
  *
@@ -57,6 +64,7 @@ import { execFile } from 'node:child_process';
 import { readFileSync, writeFileSync, renameSync, mkdirSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { dirname } from 'node:path';
+import yaml from 'js-yaml';
 import { splitUnescaped } from '../parsers.mjs';
 
 const VENV_PY = '/Users/nick/apps/career-ops-scrape/venv/bin/python';
@@ -422,15 +430,69 @@ export function registerCompassRoutes(app) {
     });
   });
 
+  // ── Setup Save merge helpers ──────────────────────────────────────────────
+  // setup.html's simplified Setup form seeds its includeTitles/excludeTitles/
+  // cities/searchTerms state from localStorage (or a hardcoded starter list)
+  // on first load — NOT from the live portals.yml — so its own idea of "the
+  // full list" can be narrower than what's actually in the real file (e.g.
+  // location_filter.allow carries hand-added aliases like "NY"/"LA"/"USA"
+  // that the simplified UI never displays as editable chips). write_settings.py
+  // faithfully does "present list section replaced WHOLESALE" (documented,
+  // correct UI-save semantics for a form that shows its user the FULL list) —
+  // but for a form that only shows a PARTIAL view, wholesale-replace silently
+  // drops whatever it doesn't manage. So: read the current portals.yml here,
+  // and merge each submitted list with what's already on disk (submitted
+  // items always included — "submitted keys win" — union'd with whatever
+  // existing entries the submitted list doesn't already cover) before handing
+  // off to write_settings.py, so nothing the form never showed Nicole gets
+  // silently deleted out from under her.
+  function unionPreferSubmitted(submitted, existing) {
+    const out = [];
+    const seen = new Set();
+    for (const x of submitted || []) { const s = String(x); if (!seen.has(s)) { seen.add(s); out.push(s); } }
+    for (const x of existing || []) { const s = String(x); if (!seen.has(s)) { seen.add(s); out.push(s); } }
+    return out;
+  }
+  function readCurrentPortalsForMerge() {
+    try {
+      const doc = yaml.load(readFileSync(REAL_PORTALS, 'utf8')) || {};
+      const tf = doc.title_filter || {};
+      const lf = doc.location_filter || {};
+      const disc = doc.discovery || {};
+      const allow = Array.isArray(lf.allow) ? lf.allow : [];
+      // location_filter.allow mixes real cities with the "Remote"/"United
+      // States" boilerplate that write_settings.py re-adds itself from the
+      // remoteUS flag — exclude those two so they aren't duplicated as "cities".
+      const cities = allow.filter((x) => !/^(remote|united states)$/i.test(String(x)));
+      return {
+        includeTitles: Array.isArray(tf.positive) ? tf.positive : [],
+        excludeTitles: Array.isArray(tf.negative) ? tf.negative : [],
+        cities,
+        searchTerms: Array.isArray(disc.linkedin_keywords) ? disc.linkedin_keywords : [],
+      };
+    } catch {
+      return { includeTitles: [], excludeTitles: [], cities: [], searchTerms: [] };
+    }
+  }
+  function mergeSetupSettings(submitted) {
+    const current = readCurrentPortalsForMerge();
+    const merged = Object.assign({}, submitted);
+    for (const key of ['includeTitles', 'excludeTitles', 'cities', 'searchTerms']) {
+      if (Array.isArray(submitted[key])) merged[key] = unionPreferSubmitted(submitted[key], current[key]);
+    }
+    return merged;
+  }
+
   // ── Setup Save → portals.yml (this instance's copy) via write_settings.py ──
   app.post('/api/compass/setup', (req, res) => {
     const settings = req.body && req.body.settings;
     if (!settings || typeof settings !== 'object') {
       return res.status(400).json({ error: 'settings object required' });
     }
+    const merged = mergeSetupSettings(settings);
     const args = [
       WRITE_SETTINGS,
-      '--json', JSON.stringify(settings),
+      '--json', JSON.stringify(merged),
       '--path', REAL_PORTALS,
       '--validator-dir', DATA_ROOT,
     ];
