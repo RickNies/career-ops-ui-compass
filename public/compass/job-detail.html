@@ -282,7 +282,8 @@
             <div class="txt">Checking fit<small>for your background</small></div>
           </div>
           <a class="btn apply" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>Apply now</a>
-          <button class="btn save-btn" aria-pressed="false" data-tip="Tuck this away in My Jobs for later — separate from Good fit/Pass, and it won't remove the role from your feed."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.8 8.6a5 5 0 0 0-8.8-3.2A5 5 0 0 0 3.2 8.6c0 3.8 4.5 7 8.8 10.4 4.3-3.4 8.8-6.6 8.8-10.4Z"/></svg>Save</button>
+          <!-- data-tip is set by js/wire.js (wireDetail) from COMPASS_TIPS.saveDetail — the single source of truth for its copy. -->
+          <button class="btn save-btn" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.8 8.6a5 5 0 0 0-8.8-3.2A5 5 0 0 0 3.2 8.6c0 3.8 4.5 7 8.8 10.4 4.3-3.4 8.8-6.6 8.8-10.4Z"/></svg>Save</button>
           <div class="verdict-row">
             <button class="vbtn2 good" id="goodBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6L9 17l-5-5"/></svg>Good fit</button>
             <button class="vbtn2 bad" id="badBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M18 6 6 18M6 6l12 12"/></svg>Pass</button>

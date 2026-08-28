@@ -462,7 +462,8 @@
         <div class="status-row">
           <div class="seg" role="tablist" aria-label="Review status">
             <button data-rev="not" class="on" type="button" role="tab" aria-selected="true" tabindex="0" aria-controls="list">Not reviewed</button>
-            <button data-rev="reviewed" type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="list" data-tip="Shows what you've reviewed this week only — older reviews live in the archive under My Jobs.">Reviewed</button>
+            <!-- data-tip is set by js/wire.js (wireJobs) from COMPASS_TIPS.reviewedTab — the single source of truth for its copy. -->
+            <button data-rev="reviewed" type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="list">Reviewed</button>
             <button data-rev="all" type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="list">All</button>
           </div>
           <div class="count" id="count"></div>
@@ -604,16 +605,14 @@ var REASONS = {
   bad:["Too junior","Too senior","Wrong location","Below pay","Not my industry","Not relevant background","Company"]
 };
 
-/* Tooltip copy (Batch B) — reused verbatim from the approved walkthrough voice
-   (mockups/multiuser/walkthrough.html) + docs/ux-confirmations-audit.md §3.
+/* Tooltip copy (Batch B) — the single source of truth is now the COMPASS_TIPS
+   registry in js/wire.js (loaded below, after this script). These TIP_* names
+   are declared here (undefined until then) only so the card-render functions
+   further down can reference them by name; wireJobs() (in wire.js) populates
+   them from COMPASS_TIPS before the first card renders — see wire.js's
+   COMPASS_TIPS comment ("the one place to edit tooltip copy") to change text.
    Rendered by the shared CompassTip component in js/wire.js off data-tip. */
-var TIP_FIT = "How closely this matches your résumé and preferences. Strong (85+) is a near-perfect match, Good (75–84) is worth a look, Fair is a stretch.";
-var TIP_SOURCE = "Where this listing came from, so you know where to apply.";
-var TIP_NEW = "Landed in your feed in the last day or two.";
-var TIP_FOUND = "This board doesn't publish a posting date, so this is the day we found it listed.";
-var TIP_VOTE = "Tap to teach Compass what you want — a few taps a day sharpens tomorrow's matches.";
-var TIP_SAVE = "Tuck this away in My Jobs for later — separate from ✓/✗, and it won't remove the role from your feed.";
-var TIP_UNREVIEW = "Clears your ✓/✗, reason, and note for this role — it goes back to your main feed.";
+var TIP_FIT, TIP_SOURCE, TIP_NEW, TIP_FOUND, TIP_VOTE, TIP_SAVE, TIP_UNREVIEW;
 
 /* ============ review state (localStorage, shared across pages by job id) ============ */
 var REVK="compass_reviews", OLDK="compass_reviewed";
@@ -694,8 +693,8 @@ function cardHTML(j){
   return ''+
   '<div class="job-row">'+
     '<div class="verdict">'+
-      '<button class="vbtn good'+goodOn+'" type="button" data-v="good" data-tip="'+esc(TIP_VOTE)+'" aria-label="Mark as a good fit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></button>'+
-      '<button class="vbtn bad'+badOn+'" type="button" data-v="bad" data-tip="'+esc(TIP_VOTE)+'" aria-label="Pass on this role"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></button>'+
+      '<button class="vbtn good'+goodOn+'" type="button" data-v="good" data-tip="'+esc(TIP_VOTE)+'" data-tip-key="vote" aria-label="Mark as a good fit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></button>'+
+      '<button class="vbtn bad'+badOn+'" type="button" data-v="bad" data-tip="'+esc(TIP_VOTE)+'" data-tip-key="vote" aria-label="Pass on this role"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></button>'+
     '</div>'+
     '<article class="card'+revCls+'" data-id="'+j.id+'" role="link" tabindex="0" aria-label="View '+esc(j.title)+' at '+esc(j.company)+'">'+
     '<div class="fit '+fitClass+'" data-tip="'+esc(TIP_FIT)+'" data-tip-tap="toggle"><div class="ring">'+j.fit+'</div><div class="lbl">'+fitLabel+'</div></div>'+

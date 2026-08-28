@@ -7,6 +7,42 @@
 (function () {
   'use strict';
 
+  // ===================== COMPASS_TIPS =======================================
+  // THE ONE PLACE TO EDIT TOOLTIP COPY. Every tooltip in the app — the feed's
+  // TIP_* constants (jobs.html), the archive + low-fit tips below, and the
+  // Save tips (feed card + job-detail) — reads its text from here. Nothing
+  // else in the codebase should have a hardcoded tooltip sentence; if you're
+  // about to type one, add/edit an entry here instead and point the call
+  // site at it.
+  //
+  // Optional `retireAfter: N` opts a tip into CompassTip's "stop pestering"
+  // behavior: once it's been shown on HOVER N times (tracked globally in
+  // localStorage, not per-card), it stops auto-appearing on hover — but it
+  // still shows on tap and on keyboard focus, so it's never truly hidden,
+  // just no longer volunteered to someone who's already seen it a few times.
+  // Requires the trigger element to also carry `data-tip-key="<this key>"`.
+  var COMPASS_TIPS = {
+    fit: { text: "How closely this matches your résumé and preferences. Strong (85+) is a near-perfect match, Good (75–84) is worth a look, Fair is a stretch." },
+    source: { text: "Where this listing came from, so you know where to apply." },
+    new: { text: "Landed in your feed in the last day or two." },
+    found: { text: "This board doesn't publish a posting date, so this is the day we found it listed." },
+    vote: { text: "Tap to teach Compass what you want — a few taps a day sharpens tomorrow's matches.", retireAfter: 3 },
+    save: { text: "Tuck this away in My Jobs for later — separate from ✓/✗, and it won't remove the role from your feed." },
+    // Job-detail's Save button spells out the ✓/✗ icons as words ("Good fit/Pass") since
+    // that page shows labeled buttons rather than bare icons — different copy, same idea
+    // as `save` above, kept as its own entry so each surface's exact wording stays intact.
+    saveDetail: { text: "Tuck this away in My Jobs for later — separate from Good fit/Pass, and it won't remove the role from your feed." },
+    unreview: { text: "Clears your ✓/✗, reason, and note for this role — it goes back to your main feed." },
+    reviewedTab: { text: "Shows what you've reviewed this week only — older reviews live in the archive under My Jobs." },
+    lowfit: { text: "Reveal roles Compass scored as a stretch, in case you want a second opinion." },
+    archiveVerdict: { text: "Switch between roles you liked, passed, or both." },
+    archiveTimeframe: { text: "Narrow the archive to a time window — defaults to showing everything." }
+    // NOTE: the archive search box intentionally has NO tooltip — its
+    // placeholder ("Search by job title or company…") already says what it
+    // does; a tooltip there would just restate the visible label.
+  };
+  window.COMPASS_TIPS = COMPASS_TIPS;
+
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
   function hostFrom(url) { try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return ''; } }
   function normUrl(u) { return String(u || '').split('#')[0].replace(/\/+$/, ''); }
@@ -467,6 +503,26 @@
   // trigger contract below for free — nothing else to wire per control.
   // Dismiss reuses the app's existing popover pattern (Escape + outside-tap),
   // the same as jobs.html's `.rpop`/`Pop` onDocDown/onKey.
+  //
+  // "Retire after N hovers" (opt-in via COMPASS_TIPS[key].retireAfter): a tip
+  // whose trigger element carries `data-tip-key="<key>"` stops auto-showing
+  // on HOVER once it's been hover-shown N times — tracked globally (one
+  // counter per key, shared across every card) in localStorage. Tap and
+  // keyboard focus are a DIFFERENT trigger path (see bind()) and are never
+  // gated by this, so the tip stays reachable for anyone who explicitly asks.
+  function tipStorageKey(key) { return 'compassTipHovers:' + key; }
+  function tipHoverCount(key) {
+    try { return parseInt(localStorage.getItem(tipStorageKey(key)) || '0', 10) || 0; } catch (e) { return 0; }
+  }
+  function bumpTipHoverCount(key) {
+    try { localStorage.setItem(tipStorageKey(key), String(tipHoverCount(key) + 1)); } catch (e) {}
+  }
+  function tipRetiredForHover(key) {
+    if (!key) return false;
+    var entry = COMPASS_TIPS[key];
+    if (!entry || !entry.retireAfter) return false;
+    return tipHoverCount(key) >= entry.retireAfter;
+  }
   var CompassTip = (function () {
     var bubble = null, activeEl = null, showTimer = null, hideTimer = null;
     var SHOW_DELAY = 200, HIDE_DELAY = 120;
@@ -517,20 +573,31 @@
       if (activeEl) activeEl.removeAttribute('aria-describedby');
       activeEl = null;
     }
-    function show(el) {
+    function show(el, opts) {
       clearTimeout(hideTimer);
       var txt = el.getAttribute('data-tip'); if (!txt) return;
+      var hover = !!(opts && opts.hover);
+      var key = el.getAttribute('data-tip-key');
+      if (hover && tipRetiredForHover(key)) return;   // retired: stay silent on hover only — tap/focus (hover:false) bypass this
+      var wasAlreadyShowingThis = (activeEl === el && bubble && !bubble.hidden);
       ensureBubble();
       if (activeEl && activeEl !== el) hideNow();
       bubble.textContent = txt;
       activeEl = el;
       el.setAttribute('aria-describedby', 'compassTipBubble');
       position(el);
-      requestAnimationFrame(function () { if (activeEl === el) bubble.classList.add('show'); });
+      requestAnimationFrame(function () {
+        if (activeEl !== el) return;
+        bubble.classList.add('show');
+        // Count one impression per actual shown hover — not per mouseenter/
+        // rAF tick — so hovering the same still-visible tip again doesn't
+        // multi-count, and only hover-triggered shows count toward retiring.
+        if (hover && key && !wasAlreadyShowingThis) bumpTipHoverCount(key);
+      });
     }
-    function scheduleShow(el, delay) {
+    function scheduleShow(el, delay, hover) {
       clearTimeout(showTimer);
-      showTimer = setTimeout(function () { show(el); }, delay == null ? SHOW_DELAY : delay);
+      showTimer = setTimeout(function () { show(el, { hover: !!hover }); }, delay == null ? SHOW_DELAY : delay);
     }
     function scheduleHide(el) {
       clearTimeout(showTimer);
@@ -543,7 +610,7 @@
         el.setAttribute('tabindex', '0');
         el.classList.add('c-tip-target');           // hover affordance (cursor:help) for non-native-focusable targets only
       }
-      el.addEventListener('mouseenter', function () { scheduleShow(el); });
+      el.addEventListener('mouseenter', function () { scheduleShow(el, null, true); });
       el.addEventListener('mouseleave', function () { scheduleHide(el); });
       el.addEventListener('focus', function () { scheduleShow(el, 0); });
       el.addEventListener('blur', function () { scheduleHide(el); });
@@ -1071,7 +1138,7 @@
     if (!wrap) {
       wrap = document.createElement('label'); wrap.id = 'compassLowFit';
       wrap.style.cssText = 'display:inline-flex;align-items:center;gap:7px;margin-left:14px;font:13px system-ui;color:#6b6255;cursor:pointer;vertical-align:middle';
-      wrap.innerHTML = '<input type="checkbox" data-tip="Reveal roles Compass scored as a stretch, in case you want a second opinion."' + (window.__compassShowLowFit ? ' checked' : '') + ' style="accent-color:#ffb300;width:15px;height:15px"><span class="lff-lbl"></span>';
+      wrap.innerHTML = '<input type="checkbox" data-tip="' + esc(COMPASS_TIPS.lowfit.text) + '"' + (window.__compassShowLowFit ? ' checked' : '') + ' style="accent-color:#ffb300;width:15px;height:15px"><span class="lff-lbl"></span>';
       (cnt.parentNode || cnt).insertBefore(wrap, cnt.nextSibling);
       wrap.querySelector('input').addEventListener('change', function () {
         window.__compassShowLowFit = this.checked;
@@ -1213,6 +1280,19 @@
   }
 
   function wireJobs() {
+    // Populate this page's TIP_* constants (declared in jobs.html) from the
+    // single COMPASS_TIPS registry above, before any card renders — same for
+    // the static "Reviewed" tab, which gets its data-tip here (it's present
+    // in the HTML before COMPASS_TIPS exists, so it can't carry it inline).
+    window.TIP_FIT = COMPASS_TIPS.fit.text;
+    window.TIP_SOURCE = COMPASS_TIPS.source.text;
+    window.TIP_NEW = COMPASS_TIPS.new.text;
+    window.TIP_FOUND = COMPASS_TIPS.found.text;
+    window.TIP_VOTE = COMPASS_TIPS.vote.text;
+    window.TIP_SAVE = COMPASS_TIPS.save.text;
+    window.TIP_UNREVIEW = COMPASS_TIPS.unreview.text;
+    var reviewedTab = document.querySelector('[data-rev="reviewed"]');
+    if (reviewedTab) { reviewedTab.setAttribute('data-tip', COMPASS_TIPS.reviewedTab.text); CompassTip.scan(document); }
     // GET /api/tracker with NO paging params → { rows: <ALL rows> }
     jGet('/api/tracker').then(function (data) {
       var rows = (data && data.rows) || [];
@@ -1507,6 +1587,13 @@
       // Real Save bookmark: reflect current state + toggle via /api/compass/saved.
       (function () {
         var sb = document.querySelector('.save-btn'); if (!sb) return;
+        // Tooltip copy for this button lives in COMPASS_TIPS.saveDetail (see the
+        // registry up top) — set here, not as a static HTML attribute, since
+        // this button only exists statically before COMPASS_TIPS is defined.
+        // CompassTip.scan() re-runs its idempotent bind() so this newly-tipped
+        // element still gets the full hover/focus/tap contract.
+        sb.setAttribute('data-tip', COMPASS_TIPS.saveDetail.text);
+        CompassTip.scan(document);
         function paintSave() { var on = bookmarkFor(job.url); sb.classList.toggle('on', on); sb.setAttribute('aria-pressed', on ? 'true' : 'false'); var svg = sb.querySelector('svg'); sb.textContent = ''; if (svg) sb.appendChild(svg); sb.appendChild(document.createTextNode(on ? 'Saved' : 'Save')); }
         paintSave();
         sb.addEventListener('click', function () {
@@ -1753,15 +1840,15 @@
       '<div class="arch-controls" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">' +
         '<label class="search" style="flex:1;min-width:220px">' +
           '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>' +
-          '<input id="archQ" type="text" placeholder="Search by job title or company…" data-tip="Search your archived reviews by job title or company." />' +
+          '<input id="archQ" type="text" placeholder="Search by job title or company…" />' +
         '</label>' +
-        '<select id="archVerdict" class="stage-select" aria-label="Show" data-tip="Switch between roles you liked, passed, or both.">' +
+        '<select id="archVerdict" class="stage-select" aria-label="Show" data-tip="' + esc(COMPASS_TIPS.archiveVerdict.text) + '">' +
           '<option value="good" selected>Liked</option>' +
           '<option value="bad">Passed</option>' +
           '<option value="all">Liked + Passed</option>' +
         '</select>' +
         '<div class="ms" id="archTfMs">' +
-          '<button class="ms-trigger" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="archTfPanel" data-tip="Narrow the archive to a time window — defaults to showing everything.">' +
+          '<button class="ms-trigger" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="archTfPanel" data-tip="' + esc(COMPASS_TIPS.archiveTimeframe.text) + '">' +
             '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>' +
             '<span id="archTfLabel">All time</span>' +
             '<svg class="cv" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>' +
