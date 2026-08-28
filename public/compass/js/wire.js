@@ -27,10 +27,14 @@
     new: { text: "Landed in your feed in the last day or two." },
     found: { text: "This board doesn't publish a posting date, so this is the day we found it listed." },
     vote: { text: "Tap to teach Compass what you want — a few taps a day sharpens tomorrow's matches.", retireAfter: 3 },
-    save: { text: "Tuck this away in My Jobs for later — separate from ✓/✗, and it won't remove the role from your feed." },
+    save: { text: "Tuck this away in My Jobs for later — separate from ✓/✗, and it won't remove the role from your feed.", retireAfter: 3 },
     // Job-detail's Save button spells out the ✓/✗ icons as words ("Good fit/Pass") since
     // that page shows labeled buttons rather than bare icons — different copy, same idea
     // as `save` above, kept as its own entry so each surface's exact wording stays intact.
+    // It has NO retireAfter of its own: both Save buttons carry
+    // data-tip-key="save" so they share ONE retire counter under the `save`
+    // key above — "save" is one concept learned once, everywhere, even
+    // though the two surfaces word the tooltip differently.
     saveDetail: { text: "Tuck this away in My Jobs for later — separate from Good fit/Pass, and it won't remove the role from your feed." },
     unreview: { text: "Clears your ✓/✗, reason, and note for this role — it goes back to your main feed." },
     reviewedTab: { text: "Shows what you've reviewed this week only — older reviews live in the archive under My Jobs." },
@@ -506,16 +510,71 @@
   //
   // "Retire after N hovers" (opt-in via COMPASS_TIPS[key].retireAfter): a tip
   // whose trigger element carries `data-tip-key="<key>"` stops auto-showing
-  // on HOVER once it's been hover-shown N times — tracked globally (one
-  // counter per key, shared across every card) in localStorage. Tap and
-  // keyboard focus are a DIFFERENT trigger path (see bind()) and are never
-  // gated by this, so the tip stays reachable for anyone who explicitly asks.
-  function tipStorageKey(key) { return 'compassTipHovers:' + key; }
-  function tipHoverCount(key) {
+  // on HOVER once it's been hover-shown N times — tracked GLOBALLY (one
+  // counter per key, shared across every card AND every trigger element that
+  // carries that key — e.g. the feed's Save heart and job-detail's Save
+  // button both use key "save" and share one counter). Tap and keyboard
+  // focus are a DIFFERENT trigger path (see bind()) and are never gated by
+  // this, so the tip stays reachable for anyone who explicitly asks.
+  //
+  // Server-backed (GET/POST /api/compass/tips — same pattern as the reviews
+  // store) so "seen enough times" persists across devices/cache-clears,
+  // instead of resetting every time someone opens the app in a fresh
+  // browser. __tipsMap is seeded by loadTips() as part of the app's boot
+  // Promise.all (see the dispatch call near the bottom of this file) —
+  // BEFORE initTooltips()/CompassTip.scan() ever run, so by the time a hover
+  // is even possible, retire state already reflects the server. localStorage
+  // is kept only as a same-device fast cache for the (normally unreachable)
+  // window before that boot fetch settles; the server always wins once it
+  // responds. If the server is unreachable, this fails OPEN — never treat a
+  // failed fetch as "must be retired", since that would silently hide a tip
+  // forever for no good reason.
+  var __tipsMap = null;      // null until loadTips() settles; then the authoritative {key: count} map (possibly {} on fetch failure)
+  var __tipsPostTimers = {};
+  function tipStorageKey(key) { return 'compassTipHovers:' + key; }  // localStorage: same-device fast cache ONLY, not the source of truth
+  function localTipCount(key) {
     try { return parseInt(localStorage.getItem(tipStorageKey(key)) || '0', 10) || 0; } catch (e) { return 0; }
   }
+  function loadTips() {
+    return jGet('/api/compass/tips').then(function (j) {
+      __tipsMap = (j && j.map) || {};
+      // Server wins: refresh the local mirror to match it so a stale/absent
+      // local count never out-lives what the server actually has recorded.
+      try { Object.keys(__tipsMap).forEach(function (k) { localStorage.setItem(tipStorageKey(k), String(__tipsMap[k])); }); } catch (e) {}
+      return __tipsMap;
+    }).catch(function () {
+      // Fail-open: an unreachable server must never block or hide a
+      // tooltip. Leave the local mirror as-is (it may still be right next
+      // load) but treat THIS session as "nothing retired yet" rather than
+      // guessing from a cache we can't currently verify.
+      __tipsMap = {};
+      return __tipsMap;
+    });
+  }
+  function tipHoverCount(key) {
+    if (__tipsMap) return typeof __tipsMap[key] === 'number' ? __tipsMap[key] : 0;
+    return localTipCount(key);   // loadTips() hasn't settled yet (shouldn't normally be reachable — see comment above)
+  }
   function bumpTipHoverCount(key) {
-    try { localStorage.setItem(tipStorageKey(key), String(tipHoverCount(key) + 1)); } catch (e) {}
+    var next = tipHoverCount(key) + 1;
+    if (!__tipsMap) __tipsMap = {};
+    __tipsMap[key] = next;                                            // optimistic local update — instant, no round-trip needed to keep counting
+    try { localStorage.setItem(tipStorageKey(key), String(next)); } catch (e) {}
+    // Debounced write-through, same pattern/window as postReviewDebounced
+    // below. In practice a single key is never hover-shown twice inside
+    // 400ms (a fresh "shown" impression requires mouseleave + HIDE_DELAY +
+    // a new mouseenter + SHOW_DELAY first), so this coalesces to exactly
+    // one POST per real impression rather than risking a request burst.
+    clearTimeout(__tipsPostTimers[key]);
+    __tipsPostTimers[key] = setTimeout(function () {
+      delete __tipsPostTimers[key];
+      jPost('/api/compass/tips', { key: key }).then(function (r) {
+        if (r && r.body && r.body.ok && typeof r.body.count === 'number' && __tipsMap) {
+          __tipsMap[key] = r.body.count;
+          try { localStorage.setItem(tipStorageKey(key), String(r.body.count)); } catch (e) {}
+        }
+      }).catch(function () { /* local mirror already bumped optimistically; best-effort sync */ });
+    }, 400);
   }
   function tipRetiredForHover(key) {
     if (!key) return false;
@@ -1591,8 +1650,11 @@
         // registry up top) — set here, not as a static HTML attribute, since
         // this button only exists statically before COMPASS_TIPS is defined.
         // CompassTip.scan() re-runs its idempotent bind() so this newly-tipped
-        // element still gets the full hover/focus/tap contract.
+        // element still gets the full hover/focus/tap contract. data-tip-key
+        // is "save" (not "saveDetail") on purpose — it shares ONE retire
+        // counter with the feed's Save heart, see COMPASS_TIPS comment.
         sb.setAttribute('data-tip', COMPASS_TIPS.saveDetail.text);
+        sb.setAttribute('data-tip-key', 'save');
         CompassTip.scan(document);
         function paintSave() { var on = bookmarkFor(job.url); sb.classList.toggle('on', on); sb.setAttribute('aria-pressed', on ? 'true' : 'false'); var svg = sb.querySelector('svg'); sb.textContent = ''; if (svg) sb.appendChild(svg); sb.appendChild(document.createTextNode(on ? 'Saved' : 'Save')); }
         paintSave();
@@ -3512,7 +3574,7 @@
   }
 
   // ======================= dispatch ========================================
-  Promise.all([loadDead(), loadProvider(), loadFit(), loadSalary(), loadPosted(), loadBookmarks(), loadReviews()]).then(function () {
+  Promise.all([loadDead(), loadProvider(), loadFit(), loadSalary(), loadPosted(), loadBookmarks(), loadReviews(), loadTips()]).then(function () {
     renderNav();
     injectMangoChrome();
     injectActivity();

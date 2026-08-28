@@ -34,6 +34,12 @@
  *       time), so this never needs to join against the live tracker or
  *       feedback.jsonl. See docs/review-archive-design.md.
  *
+ *   GET/POST /api/compass/tips → server-side counters for CompassTip's
+ *       opt-in "retire after N hovers" (data/compass-tips.jsonl, one row per
+ *       tip key). Server-backed for the same cross-device/cache-clear reason
+ *       as reviews above — a localStorage-only counter would reset on every
+ *       new browser, defeating the point of "stop pestering me."
+ *
  *   POST /api/compass/setup     → shells out to the shared write_settings.py
  *       (comment-preserving ruamel writer + validate-portals.mjs) targeting the
  *       REAL portals.yml. LLM/provider + Anthropic key are NOT here — the
@@ -204,6 +210,32 @@ function writeReviewMap(map) {
   const tmp = REVIEWS_STORE + '.tmp';
   writeFileSync(tmp, lines.join('\n') + (lines.length ? '\n' : ''));
   renameSync(tmp, REVIEWS_STORE);
+}
+
+// Tooltip "retire after N hovers" counters — see COMPASS_TIPS[key].retireAfter
+// in wire.js. Server-side (not localStorage) so a tip that's been seen enough
+// times STAYS retired across devices/cache-clears instead of resetting per-
+// browser. JSONL, ONE row per tip key (not one row per hover impression),
+// rewritten in full on every increment — same shape/atomicity as
+// REVIEWS_STORE just above. { key, count }. Deliberately minimal: this only
+// counts impressions, not when/where they happened.
+const TIPS_STORE = DATA_ROOT + '/data/compass-tips.jsonl';
+function readTipsMap() {
+  const map = {};
+  try {
+    readFileSync(TIPS_STORE, 'utf8').split('\n').forEach((ln) => {
+      ln = ln.trim(); if (!ln) return;
+      try { const o = JSON.parse(ln); if (o && o.key) map[String(o.key)] = Number(o.count) || 0; } catch { /* skip bad line */ }
+    });
+  } catch { /* none yet */ }
+  return map;
+}
+function writeTipsMap(map) {
+  mkdirSync(dirname(TIPS_STORE), { recursive: true });
+  const lines = Object.keys(map).sort().map((k) => JSON.stringify({ key: k, count: map[k] }));
+  const tmp = TIPS_STORE + '.tmp';
+  writeFileSync(tmp, lines.join('\n') + (lines.length ? '\n' : ''));
+  renameSync(tmp, TIPS_STORE);
 }
 // Monday 00:00:00.000 local → the "this week" boundary used everywhere in the
 // app (feed's Reviewed tab/rail in jobs.html + the archive endpoint below).
@@ -559,6 +591,28 @@ export function registerCompassRoutes(app) {
     };
     writeReviewMap(map);
     res.json({ ok: true, url: key, review: map[key] });
+  });
+
+  // ── Tooltip retire counters (CompassTip's opt-in "retire after N hovers" —
+  // see COMPASS_TIPS[key].retireAfter in wire.js). Server-backed so a tip
+  // stays retired across devices/cache-clears instead of resetting per-
+  // browser localStorage. GET → { map: {<tipKey>: count}, count: <# keys
+  // tracked> }. wire.js's loadTips() seeds retire state from this on boot.
+  app.get('/api/compass/tips', (_req, res) => {
+    const map = readTipsMap();
+    res.json({ map, count: Object.keys(map).length });
+  });
+  // POST { key } → increment that tip key's hover-impression count by 1
+  // (creating it at 1 if new). Returns the NEW count for just that key —
+  // that's the number wire.js compares against COMPASS_TIPS[key].retireAfter.
+  app.post('/api/compass/tips', (req, res) => {
+    const body = req.body || {};
+    const key = String(body.key || '').trim().slice(0, 60);
+    if (!key) return res.status(400).json({ error: 'key required' });
+    const map = readTipsMap();
+    map[key] = (map[key] || 0) + 1;
+    writeTipsMap(map);
+    res.json({ ok: true, key, count: map[key] });
   });
 
   // ── Review archive: past-week ✓/✗ reviews, for the "Review archive" section
