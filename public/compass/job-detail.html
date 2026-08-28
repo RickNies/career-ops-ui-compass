@@ -170,6 +170,8 @@
   .rchip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
   .reason-note{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-family:inherit;font-size:13px;color:var(--ink);background:var(--surface);outline:none}
   .reason-note:focus{border-color:var(--gold)}
+  .reason-saved{display:flex;align-items:center;gap:4px;color:var(--sage);font-size:12px;font-weight:600;margin-top:9px;opacity:0;transition:opacity .25s ease;pointer-events:none}
+  .reason-saved.show{opacity:1}
   .rail-sep{height:1px;background:var(--line-soft);margin:6px 0 12px}
   .rail-note{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.45}
 
@@ -278,6 +280,7 @@
             <div class="rl" id="reasonLabel">Why? (optional)</div>
             <div class="reason-chips" id="reasonChips"></div>
             <input class="reason-note" id="reasonNote" type="text" placeholder="Add a note — optional" maxlength="120">
+            <div class="reason-saved" id="reasonSaved">Saved <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="12" height="12"><path d="M20 6L9 17l-5-5"/></svg></div>
           </div>
 
           <div class="rail-sep"></div>
@@ -302,7 +305,7 @@ var JOB_ID = "";
 var REVK = "compass_reviews";
 var REASONS = {
   good:["Great fit","Dream company","Right level","Great comp"],
-  bad:["Too junior","Wrong location","Below pay","Not my industry","Company"]
+  bad:["Too junior","Too senior","Wrong location","Below pay","Not my industry","Not relevant background","Company"]
 };
 function getReviews(){ try{ return JSON.parse(localStorage.getItem(REVK)||"{}"); }catch(e){ return {}; } }
 function setReviews(m){ localStorage.setItem(REVK, JSON.stringify(m)); }
@@ -317,6 +320,13 @@ function clearReview(){ var m=getReviews(); delete m[JOB_ID]; setReviews(m); }
 var goodBtn=document.getElementById("goodBtn"), badBtn=document.getElementById("badBtn");
 var box=document.getElementById("reasonBox"), chipsEl=document.getElementById("reasonChips");
 var noteEl=document.getElementById("reasonNote"), labelEl=document.getElementById("reasonLabel");
+var savedEl=document.getElementById("reasonSaved"), savedTimer=null;
+function flashSaved(){
+  if(!savedEl) return;
+  savedEl.classList.add("show");
+  clearTimeout(savedTimer);
+  savedTimer=setTimeout(function(){ savedEl.classList.remove("show"); }, 1500);
+}
 
 function paint(){
   var rv=getReview();
@@ -336,13 +346,14 @@ function paint(){
     c.onclick=function(){
       var val=c.getAttribute("data-r"), already=c.classList.contains("on");
       saveReview(rv.verdict, already?"":val);
+      flashSaved();
       paint();
     };
   });
 }
-goodBtn.addEventListener("click", function(){ var rv=getReview(); if(rv&&rv.verdict==="good"){ clearReview(); } else { saveReview("good"); } paint(); });
-badBtn.addEventListener("click", function(){ var rv=getReview(); if(rv&&rv.verdict==="bad"){ clearReview(); } else { saveReview("bad"); } paint(); });
-noteEl.addEventListener("input", function(){ var rv=getReview(); if(rv) saveReview(rv.verdict, null, noteEl.value); });
+goodBtn.addEventListener("click", function(){ var rv=getReview(); if(rv&&rv.verdict==="good"){ clearReview(); } else { saveReview("good"); flashSaved(); } paint(); });
+badBtn.addEventListener("click", function(){ var rv=getReview(); if(rv&&rv.verdict==="bad"){ clearReview(); } else { saveReview("bad"); flashSaved(); } paint(); });
+noteEl.addEventListener("input", function(){ var rv=getReview(); if(rv){ saveReview(rv.verdict, null, noteEl.value); flashSaved(); } });
 paint();
 </script>
   <script src="js/wire.js"></script>

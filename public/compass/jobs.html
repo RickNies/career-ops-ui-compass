@@ -275,6 +275,8 @@
   .rpop-actions{display:flex;justify-content:space-between;align-items:center;margin-top:11px}
   .rpop-done{padding:7px 17px;font-size:13px}   /* .rpop-done = .btn .btn--primary */
   .rpop-remove{background:transparent;border:0;color:var(--muted);font-size:12.5px;text-decoration:underline;cursor:pointer;padding:0}
+  .rpop-saved{display:flex;align-items:center;gap:4px;color:var(--sage);font-size:12px;font-weight:600;margin-top:9px;opacity:0;transition:opacity .25s ease;pointer-events:none}
+  .rpop-saved.show{opacity:1}
 
   /* ---- Quick Add modal ---- */
   .modal{position:fixed;inset:0;z-index:80;background:rgba(22,50,79,.42);backdrop-filter:blur(2px);display:none;align-items:center;justify-content:center;padding:22px}
@@ -853,7 +855,7 @@ function bindCards(){
       card.classList.remove("rev-good","rev-bad"); card.classList.add("is-reviewed","rev-"+v);
       btn.closest(".job-row").querySelectorAll(".vbtn").forEach(function(b){ b.classList.toggle("on", b.getAttribute("data-v")===v); });
       renderRail();
-      openPopover(btn, id, v);           /* slide in the optional-reason popover */
+      openPopover(btn, id, v, true);      /* slide in the optional-reason popover; flag the just-completed save */
     };
   });
   document.querySelectorAll(".tagchip").forEach(function(chip){
@@ -875,7 +877,15 @@ function closePopover(rerender){
 }
 function onDocDown(e){ if(pop && !pop.contains(e.target)){ closePopover(true); } }
 function onKey(e){ if(e.key==="Escape") closePopover(true); }
-function openPopover(anchor, id, verdict){
+function flashPopSaved(){
+  if(!pop) return;
+  var s=pop.querySelector(".rpop-saved");
+  if(!s) return;
+  s.classList.add("show");
+  clearTimeout(pop._savedTimer);
+  pop._savedTimer=setTimeout(function(){ s.classList.remove("show"); }, 1500);
+}
+function openPopover(anchor, id, verdict, justSaved){
   closePopover(false);
   var rv=getReview(id)||{verdict:verdict, reason:"", note:""};
   popCtx={id:id, verdict:verdict};
@@ -891,8 +901,10 @@ function openPopover(anchor, id, verdict){
     '<p class="rp-hint">Optional — one tap already saved it.</p>'+
     '<div class="rpop-chips">'+chips+'</div>'+
     '<input class="rpop-note" type="text" placeholder="Add a note — optional" value="'+esc(rv.note||"")+'" maxlength="120">'+
-    '<div class="rpop-actions"><button class="rpop-remove" type="button">Un-review</button><button class="btn btn--primary btn--sm rpop-done" type="button">Done</button></div>';
+    '<div class="rpop-actions"><button class="rpop-remove" type="button">Un-review</button><button class="btn btn--primary btn--sm rpop-done" type="button">Done</button></div>'+
+    '<div class="rpop-saved" id="rpopSaved">Saved <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" width="12" height="12"><path d="M20 6L9 17l-5-5"/></svg></div>';
   document.body.appendChild(pop);
+  if(justSaved) flashPopSaved();
 
   // position near anchor, kept inside the viewport
   var r=anchor.getBoundingClientRect();
@@ -909,11 +921,12 @@ function openPopover(anchor, id, verdict){
       pop.querySelectorAll(".rpop-chip").forEach(function(x){ x.classList.remove("on"); });
       if(!already){ c.classList.add("on"); saveReview(id, verdict, val); }
       else { saveReview(id, verdict, ""); }  // toggle off
+      flashPopSaved();
       renderRail();
     };
   });
   var note=pop.querySelector(".rpop-note");
-  note.oninput=function(){ saveReview(id, verdict, null, note.value); };
+  note.oninput=function(){ saveReview(id, verdict, null, note.value); flashPopSaved(); };
   pop.querySelector(".rpop-done").onclick=function(){ closePopover(true); };
   pop.querySelector(".rpop-remove").onclick=function(){ clearReview(id); closePopover(true); };
 
