@@ -1118,8 +1118,12 @@
           var job = (window.JOBS || []).find(function (x) { return x.id === id; });
           if (!job || !job.url) return;
           jPost('/api/compass/feedback', { url: job.url, verdict: verdict, reason: reason || '' })
-            .then(function (r) { toastMsg(r.body && r.body.ok ? 'Recorded to feedback.jsonl (' + verdict + ')' : 'Saved locally — server write failed', r.body && r.body.ok ? 'success' : 'info'); })
-            .catch(function () { toastMsg('Saved locally — server unreachable', 'info'); });
+            .then(function (r) {
+              var ok = r.body && r.body.ok;
+              var nice = verdict === 'good' ? 'Saved — we\'ll find you more like this' : 'Saved — you won\'t see this one again';
+              toastMsg(ok ? nice : 'Saved on this device — couldn\'t reach the server', ok ? 'success' : 'info');
+            })
+            .catch(function () { toastMsg('Saved on this device — server unreachable', 'info'); });
           // Server-backed review store (verdict+reason+note+ts) — the feed's
           // actual "reviewed" source of truth; distinct from feedback.jsonl above.
           var rv = (typeof window.getReview === 'function') ? window.getReview(id) : null;
