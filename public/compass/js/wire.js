@@ -545,9 +545,10 @@
     });
   }
 
-  // Dev-scaffolding narrator bar — retired. No-op so every existing banner(...) call
-  // site is safe; also removes any stray element if one was ever created.
-  function banner(msg) {
+  // Dev-scaffolding narrator bar — retired. No-op (C1 — every call site now
+  // passes nothing, since the string it used to build was always discarded)
+  // that also removes any stray element if one was ever created.
+  function banner() {
     var b = document.getElementById('compassWireBanner');
     if (b && b.parentNode) b.parentNode.removeChild(b);
   }
@@ -1002,7 +1003,6 @@
     return jGet('/api/status/providers').then(function (s) { PROV.activeProvider = (s && s.activeProvider) || null; PROV.activeModel = (s && s.activeModel) || null; PROV.loaded = true; }).catch(function () { PROV.loaded = false; });
   }
   var PROV_NAMES = { anthropic: 'Claude', gemini: 'Gemini', openai: 'OpenAI', qwen: 'Qwen', openrouter: 'OpenRouter', github: 'GitHub Models', hermes: 'the local model' };
-  function provIsLocal() { return PROV.activeProvider === 'hermes' || !PROV.activeProvider; }
   // Progress line for an in-flight LLM action, e.g. llmProgress('Tailoring').
   function llmProgress(verb) {
     if (!PROV.activeProvider) return verb + '…'; // honest neutral fallback (no provider claim)
@@ -1031,8 +1031,6 @@
       }, 3000);
     }).catch(function (e) { cbError(String(e)); });
   }
-  function libLink() { return '<a href="library.html" style="color:#2f6f5b;font-weight:600">Generated-content Library</a>'; }
-
   var page = (location.pathname.split('/').pop() || '').toLowerCase();
 
   // CANONICAL nav — rebuilt identically on EVERY Compass page so the item set,
@@ -1530,8 +1528,8 @@
       window.render = compassRender;   // paginated render over the full set
       compassRender();
       var knownSal = window.JOBS.filter(function (j) { return j.salMax != null; }).length;
-      banner('Jobs LIVE — ' + window.JOBS.length + ' shown of ' + loaded + ' (' + hidden + ' dead hidden). Salary is REAL where known (' + knownSal + ' with a band, filtered by the slider' + (COMP_FLOOR ? ' + $' + COMP_FLOOR + 'K comp floor' : '') + '); unknown-salary jobs pass through, flagged "not listed". "Open" = liveness-confirmed live, else "Unverified".');
-    }).catch(function (e) { banner('Could not load live jobs: ' + e); });
+      banner();
+    }).catch(function (e) { banner(); });
   }
 
   function compassRunQA() {
@@ -1635,8 +1633,8 @@
         m.querySelectorAll('.match').forEach(function (el, i) { el.addEventListener('click', function () { setCurrentJob(mapRow(top[i])); }, true); });
       }
       var lc = window.__liveCounts || {};
-      banner('Dashboard LIVE — ' + apps + ' live jobs (dead hidden). Liveness: ' + (lc.dead || 0) + ' dead / ' + (lc.total || 0) + ' checked. Applied count from real statuses. "Saved" tile + schedules are demo.');
-    }).catch(function (e) { banner('Could not load live dashboard: ' + e); });
+      banner();
+    }).catch(function (e) { banner(); });
   }
 
   // ======================= JOB DETAIL ======================================
@@ -1655,7 +1653,7 @@
     }
     boot.then(function (job) {
       if (!job) {
-        banner('No tracker row to show.');
+        banner();
         var h1x = document.querySelector('.head h1'); if (h1x) h1x.textContent = 'Role not found';
         var cox = document.querySelector('.head .company'); if (cox) cox.textContent = '';
         var jdx = document.querySelector('.jd'); if (jdx) jdx.innerHTML = '<p style="color:#8a8172">We couldn\'t find this role in your tracker. It may have been removed. <a href="jobs.html">Back to your jobs →</a></p>';
@@ -1846,7 +1844,7 @@
           }
         }).catch(function (e) { jd.innerHTML = '<p>' + esc(job.why) + '</p><p style="color:#8a8172">Could not fetch live posting: ' + esc(String(e)) + '</p>'; });
       }
-      banner('Job detail LIVE — fields from the tracker row; posting body via /api/pipeline/preview. For AI-scored jobs the fit score /100, verdict pill, why, and strengths/gaps are REAL (from fit-analysis); "Apply now" opens the real URL + marks the tracker row Applied.');
+      banner();
     });
   }
 
@@ -1944,13 +1942,13 @@
           wrap.innerHTML = '<div style="' + CARD + ';padding:36px 24px;text-align:center;margin-top:6px">' +
             '<div style="font-family:var(--serif,\'Iowan Old Style\',Georgia,serif);font-weight:600;font-size:20px;color:#16324F;margin-bottom:7px">No applications yet</div>' +
             '<div style="font:14px/1.6 system-ui;color:#8a8172;max-width:54ch;margin:0 auto">Mark a job as <b>Applied</b> from the Jobs page or the Apply flow, and it will show up here. My Jobs tracks only the roles you have applied to or are interviewing for.</div></div>';
-          banner('My Jobs — no application-stage jobs yet (empty state). Mark a job Applied from Jobs/Apply and it appears here.');
+          banner();
           return;
         }
         wrap.innerHTML = '<div style="display:flex;align-items:baseline;gap:10px;margin:6px 0 12px"><h2 style="font:600 20px var(--serif,\'Iowan Old Style\',Georgia,serif);color:#16324F;margin:0">Applications</h2><span style="font:12px system-ui;color:#8a8172">' + mine.length + ' in progress</span></div>' + mine.map(rowHtml).join('');
         bindUndoButtons(wrap);
         bindRows();
-        banner('My Jobs LIVE — ' + savedRows.length + ' saved (bookmarked) + ' + mine.length + ' application(s). Bookmarks persist via /api/compass/saved; status/Remove via /api/compass/tracker/status.');
+        banner();
       }
       function persist(r, status, okMsg, onDone) {
         jPost('/api/compass/tracker/status', { num: r.num, url: r.url, status: status }).then(function (rr) {
@@ -1993,7 +1991,7 @@
       // own failure domain) — wire it after the two sections above so it
       // lands third in DOM order, per docs/review-archive-design.md §2.
       wireReviewArchive(main);
-    }).catch(function (e) { banner('Could not load saved/tracker: ' + e); });
+    }).catch(function (e) { banner(); });
   }
 
   // ── Review archive: past-week ✓/✗ reviews (search + verdict + timeframe),
@@ -2480,7 +2478,7 @@
       setupDocPanel('#panelCover', 'cover', 'Generate cover letter');
       // Focused workspace: land on the Tailor tab (unless a specific hash targets another).
       if (!location.hash || location.hash === '#tailor') { var tt = document.getElementById('tabTailor'); if (tt) tt.click(); }
-      banner('Tailoring LIVE — search your tracker to pick a job, then tailor your résumé (+ cover letter, a separate real letter). Each run = a new version; output is rich-rendered with per-section Copy and downloads. Running on ' + llmDesc() + '.');
+      banner();
     });
   }
 
@@ -2817,7 +2815,7 @@
     // to ALSO fire a second, competing POST /api/compass/setup from here —
     // removed: the native Portals accordion above (sectionPortals's own
     // #pSave button) is now the only thing that writes portals.yml.
-    banner('Setup MIGRATED — full config, portals (companies w/ source keys), profile, two-pager, CV, memory, health, usage, docs-assistant, orientation, help all native here via their real endpoints. Comp floor stays demo.');
+    banner();
   }
 
   // ======================= OUTREACH (AI networking plan) ===================
@@ -2981,7 +2979,7 @@
       });
     }
     loadSaved();
-    banner('AI networking plan — who to contact + clickable LinkedIn people-search links + drafted messages, grounded in your CV/profile. It finds the RIGHT PEOPLE TO SEARCH FOR; it does NOT scrape names or emails. Running on ' + llmDesc() + '.');
+    banner();
   }
 
   // ======================= LIBRARY (generated-content workspace) ===========
@@ -3309,48 +3307,7 @@
     } else if (it.kind === 'net') { jGet('/api/networking/plans/' + encodeURIComponent(it.name)).then(function (j) { if (fresh()) renderWorkspace(container, j.markdown || '', 'networking'); }); }
     else if (it.kind === 'report') { jGet('/api/reports/' + encodeURIComponent(it.name)).then(function (j) { if (fresh()) renderWorkspace(container, j.markdown || j.content || '', 'evaluate'); }).catch(function () { if (fresh()) container.innerHTML = '<div style="padding:16px;color:#8a8172">(could not load report)</div>'; }); }
   }
-  // Every job's generations grouped together; evaluations are their own labeled sub-group.
-  var SUBGROUPS = [{ key: 'application', label: 'Application materials' }, { key: 'evaluation', label: 'Evaluation' }];
-  function subGroupOf(type) { return type === 'evaluate' ? 'evaluation' : 'application'; }
   function statusDot(st) { return st === 'done' ? '#2f6f5b' : (st === 'error' ? '#9c5231' : '#B08D57'); }
-  function libOpenRole(g, focusItem) {
-    var det = document.getElementById('libDetail'); if (!det) return;
-    ensureLibStyles();
-    var dates = g.items.map(function (i) { return i.created; }).filter(Boolean).sort();
-    var when = dates.length ? new Date(dates[dates.length - 1]).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
-    det.innerHTML =
-      '<div style="font:13px system-ui;color:#8a8172;margin:2px 0 12px"><a href="#" id="libCrumbHome" style="color:#2f6f5b;text-decoration:none;font-weight:600">Library</a> <span style="color:#c9bfa8;margin:0 6px">›</span> <span style="color:#16324F;font-weight:600">' + esc(g.company) + '</span>' + (g.role ? ' <span style="color:#8a8172">· ' + esc(g.role) + '</span>' : '') + '</div>' +
-      '<div style="' + CARD + ';padding:22px 26px">' +
-      '<h2 style="font-family:var(--serif,\'Iowan Old Style\',Georgia,serif);font-weight:600;font-size:24px;color:#16324F;margin:0 0 3px;line-height:1.15">' + esc(g.company) + (g.role ? ' <span style="color:#8a8172;font-weight:500">— ' + esc(g.role) + '</span>' : '') + '</h2>' +
-      '<div style="font:12.5px system-ui;color:#8a8172;margin-bottom:16px">' + (when ? esc(when) : '') + '</div>' +
-      '<div id="libTabs" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-bottom:1px solid #ece5d6;padding-bottom:14px;margin-bottom:16px"></div>' +
-      '<div id="libArt"></div></div>';
-    var home = det.querySelector('#libCrumbHome'); if (home) home.onclick = function (e) { e.preventDefault(); var root = document.getElementById('libRoot'); window.scrollTo({ top: root ? root.offsetTop - 20 : 0, behavior: 'smooth' }); };
-    var tabsEl = det.querySelector('#libTabs'), artEl = det.querySelector('#libArt');
-    var tabButtons = [];
-    function setActive(btn) { tabsEl.querySelectorAll('.lib-tab').forEach(function (x) { x.style.background = '#fff'; x.style.color = '#2a3b4d'; x.style.borderColor = '#e6ddc9'; }); btn.style.background = '#16324F'; btn.style.color = '#fff'; btn.style.borderColor = '#16324F'; }
-    // tabs grouped by sub-group, with a small label before each cluster (consistent with the list)
-    SUBGROUPS.forEach(function (sg) {
-      var arts = g.items.filter(function (it) { return subGroupOf(it.type) === sg.key; });
-      if (!arts.length) return;
-      var lbl = el('span', 'font:700 10px system-ui;letter-spacing:.05em;text-transform:uppercase;color:#b0a790;margin:0 4px 0 2px'); lbl.textContent = sg.label;
-      tabsEl.appendChild(lbl);
-      arts.forEach(function (it) {
-        var b = el('button'); b.type = 'button'; b.className = 'lib-tab';
-        b.innerHTML = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:' + statusDot(it.status) + ';margin-right:7px;vertical-align:middle"></span>' + esc(DOC_LABEL[it.type] || it.type);
-        b.style.cssText = 'border:1px solid #e6ddc9;background:#fff;color:#2a3b4d;border-radius:999px;padding:7px 14px;font:600 12.5px system-ui;cursor:pointer';
-        b.onclick = function () { setActive(b); renderItemInto(it, artEl); };
-        tabsEl.appendChild(b);
-        tabButtons.push({ item: it, btn: b });
-      });
-    });
-    var target = (focusItem && tabButtons.find(function (t) { return t.item === focusItem; }))
-      || tabButtons.find(function (t) { return t.item.status === 'done'; })
-      || tabButtons.find(function (t) { return t.item.status === 'running' || t.item.status === 'queued'; })
-      || tabButtons[0];
-    if (target) target.btn.click();
-    try { window.scrollTo({ top: det.offsetTop - 20, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, det.offsetTop - 20); }
-  }
   // Inline accordion content for one artifact TYPE: a version switcher (v1..vN)
   // + the selected version's rich workspace (renderItemInto handles done →
   // renderWorkspace incl. the evaluation summary box, running → spinner+cancel,
@@ -3540,7 +3497,7 @@
         });
       });
     });
-    banner('Library — organized into typed sections (Tailored content · Networking plans · Cover letters & more · Saved evaluations) with a jump-nav, collapsible headers, and a live search filter. Within each section, jobs list their artifacts as accordions (versions, per-section Copy/Edit/downloads); slug deep-links + View job detail still work.');
+    banner();
   }
 
   // ======================= AI-TASK ACTIVITY SYSTEM =========================
@@ -3700,6 +3657,6 @@
     else if (page === 'documents.html') wireDocs();
     else if (page === 'setup.html') wireSetup();
     else if (page === 'outreach.html') wireOutreach();
-    else banner('Static preview page (not wired).');
+    else banner();
   });
 })();
