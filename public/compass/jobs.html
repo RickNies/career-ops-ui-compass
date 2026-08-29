@@ -442,7 +442,8 @@
               <button class="ms-trigger" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="lvlMenu"><span class="tk" style="width:7px;height:7px;border-radius:999px;background:var(--sage)"></span><span id="lvlLabel">Level</span><svg class="cv" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg></button>
               <div class="ms-menu" id="lvlMenu" role="group" aria-label="Filter by level" hidden></div>
             </div>
-            <label class="new-only" style="margin-left:auto"><input type="checkbox" id="newOnly">New only</label>
+            <!-- data-tip is set by js/wire.js (wireJobs) from COMPASS_TIPS.newOnly — the single source of truth for its copy. -->
+            <label class="new-only" style="margin-left:auto"><input type="checkbox" id="newOnly">From last search</label>
           </div>
 
         </section>

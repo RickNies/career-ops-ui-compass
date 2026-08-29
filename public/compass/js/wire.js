@@ -38,6 +38,7 @@
     saveDetail: { text: "Save to My Jobs. Doesn't affect Good fit/Pass or remove it from your feed." },
     unreview: { text: "Clear your ✓/✗ and send this job back to the feed." },
     reviewedTab: { text: "Jobs you reviewed this week. Older ones live in My Jobs." },
+    newOnly: { text: "Only jobs found in your most recent search." },
     lowfit: { text: "Also show low-scoring (Fair) roles." },
     archiveVerdict: { text: "Filter by liked, passed, or both." },
     archiveTimeframe: { text: "Filter by when you reviewed the job." }
@@ -1397,8 +1398,9 @@
   function wireJobs() {
     // Populate this page's TIP_* constants (declared in jobs.html) from the
     // single COMPASS_TIPS registry above, before any card renders — same for
-    // the static "Reviewed" tab, which gets its data-tip here (it's present
-    // in the HTML before COMPASS_TIPS exists, so it can't carry it inline).
+    // the static "Reviewed" tab and "From last search" checkbox, which get
+    // their data-tip here (they're present in the HTML before COMPASS_TIPS
+    // exists, so they can't carry it inline).
     window.TIP_FIT = COMPASS_TIPS.fit.text;
     window.TIP_SOURCE = COMPASS_TIPS.source.text;
     window.TIP_NEW = COMPASS_TIPS.new.text;
@@ -1408,6 +1410,8 @@
     window.TIP_UNREVIEW = COMPASS_TIPS.unreview.text;
     var reviewedTab = document.querySelector('[data-rev="reviewed"]');
     if (reviewedTab) { reviewedTab.setAttribute('data-tip', COMPASS_TIPS.reviewedTab.text); CompassTip.scan(document); }
+    var newOnlyCb = document.getElementById('newOnly');
+    if (newOnlyCb) { newOnlyCb.setAttribute('data-tip', COMPASS_TIPS.newOnly.text); CompassTip.scan(document); }
     // GET /api/tracker with NO paging params → { rows: <ALL rows> }
     jGet('/api/tracker').then(function (data) {
       var rows = (data && data.rows) || [];
