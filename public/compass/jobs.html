@@ -688,7 +688,7 @@ function cardHTML(j){
       '<button class="vbtn bad'+badOn+'" type="button" data-v="bad" data-tip="'+esc(TIP_VOTE)+'" data-tip-key="vote" aria-label="Pass on this role"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></button>'+
     '</div>'+
     '<article class="card'+revCls+'" data-id="'+j.id+'" role="link" tabindex="0" aria-label="View '+esc(j.title)+' at '+esc(j.company)+'">'+
-    '<div class="fit '+fitClass+'" data-tip="'+esc(TIP_FIT)+'" data-tip-tap="toggle"><div class="ring">'+j.fit+'</div><div class="lbl">'+fitLabel+'</div></div>'+
+    '<div class="fit '+fitClass+'" data-tip="'+esc(TIP_FIT)+'" data-tip-tap="toggle" data-tip-key="fit"><div class="ring">'+j.fit+'</div><div class="lbl">'+fitLabel+'</div></div>'+
     '<div class="body">'+
       '<div class="body-head">'+
         '<span class="logo" style="--mc:'+j.color+'" data-mono="'+esc(j.mono)+'"><img src="/api/logo?domain='+encodeURIComponent(j.domain)+'" alt="'+esc(j.company)+' logo" onerror="this.parentNode.classList.add(\'failed\');this.remove()"></span>'+

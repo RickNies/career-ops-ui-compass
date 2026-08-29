@@ -22,12 +22,12 @@
   // just no longer volunteered to someone who's already seen it a few times.
   // Requires the trigger element to also carry `data-tip-key="<this key>"`.
   var COMPASS_TIPS = {
-    fit: { text: "How closely this matches your résumé and preferences. Strong (85+) is a near-perfect match, Good (75–84) is worth a look, Fair is a stretch." },
-    source: { text: "Where this listing came from, so you know where to apply." },
-    new: { text: "Landed in your feed in the last day or two." },
-    found: { text: "This board doesn't publish a posting date, so this is the day we found it listed." },
-    vote: { text: "Tap to teach Compass what you want — a few taps a day sharpens tomorrow's matches.", retireAfter: 3 },
-    save: { text: "Tuck this away in My Jobs for later — separate from ✓/✗, and it won't remove the role from your feed.", retireAfter: 3 },
+    fit: { text: "Match score against your résumé and preferences. Strong 85+, Good 75-84, Fair under 75.", retireAfter: 3 },
+    source: { text: "The job board this listing came from." },
+    new: { text: "From your most recent search run. The number is days since we found it." },
+    found: { text: "This board has no posting date, so this is when we found it." },
+    vote: { text: "Like or pass to tune your future matches.", retireAfter: 3 },
+    save: { text: "Save to My Jobs. Doesn't affect ✓/✗ or remove it from your feed.", retireAfter: 3 },
     // Job-detail's Save button spells out the ✓/✗ icons as words ("Good fit/Pass") since
     // that page shows labeled buttons rather than bare icons — different copy, same idea
     // as `save` above, kept as its own entry so each surface's exact wording stays intact.
@@ -35,12 +35,12 @@
     // data-tip-key="save" so they share ONE retire counter under the `save`
     // key above — "save" is one concept learned once, everywhere, even
     // though the two surfaces word the tooltip differently.
-    saveDetail: { text: "Tuck this away in My Jobs for later — separate from Good fit/Pass, and it won't remove the role from your feed." },
-    unreview: { text: "Clears your ✓/✗, reason, and note for this role — it goes back to your main feed." },
-    reviewedTab: { text: "Shows what you've reviewed this week only — older reviews live in the archive under My Jobs." },
-    lowfit: { text: "Reveal roles Compass scored as a stretch, in case you want a second opinion." },
-    archiveVerdict: { text: "Switch between roles you liked, passed, or both." },
-    archiveTimeframe: { text: "Narrow the archive to a time window — defaults to showing everything." }
+    saveDetail: { text: "Save to My Jobs. Doesn't affect Good fit/Pass or remove it from your feed." },
+    unreview: { text: "Clear your ✓/✗ and send this job back to the feed." },
+    reviewedTab: { text: "Jobs you reviewed this week. Older ones live in My Jobs." },
+    lowfit: { text: "Also show low-scoring (Fair) roles." },
+    archiveVerdict: { text: "Filter by liked, passed, or both." },
+    archiveTimeframe: { text: "Filter by when you reviewed the job." }
     // NOTE: the archive search box intentionally has NO tooltip — its
     // placeholder ("Search by job title or company…") already says what it
     // does; a tooltip there would just restate the visible label.
