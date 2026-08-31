@@ -306,15 +306,18 @@
 
   /* ---- Review Mode (focused, one-job-at-a-time overlay) ----
      Self-contained: reuses .fit/.ring/.lbl/.fit-strong/.fit-good/.fit-fair
-     (fit ring) and .vbtn/.vbtn.good/.vbtn.bad (like/pass buttons) and
-     .rpop-chip (reason chips) from the shared vocabulary above — only new
-     layout/chrome rules live here. */
+     (fit ring), .vbtn/.vbtn.good/.vbtn.bad (like/pass buttons), .rpop-chip
+     (reason chips) and .btn/.btn--outline/.btn--primary (buttons) from the
+     shared vocabulary above — only new layout/chrome rules live here.
+     Desktop (≥880px) widens the card and splits it into two columns — job
+     summary left, full JD right, each independently scrollable; narrower
+     widths stack to a single column (the original mobile layout). */
   .rv-overlay{position:fixed;inset:0;z-index:100;background:var(--bg);display:none;flex-direction:column}
   .rv-overlay.open{display:flex}
   .rv-top{padding:16px 22px 0}
   .rv-progress{height:5px;background:var(--line-soft);border-radius:999px;overflow:hidden}
   .rv-progress-fill{height:100%;width:0;background:var(--gold);border-radius:999px;transition:width .25s ease}
-  .rv-topbar{display:flex;align-items:center;justify-content:space-between;margin-top:10px;max-width:520px;margin-left:auto;margin-right:auto}
+  .rv-topbar{display:flex;align-items:center;justify-content:space-between;margin-top:10px;max-width:1100px;margin-left:auto;margin-right:auto}
   .rv-count{color:var(--muted);font-size:13.5px;font-weight:600}
   .rv-exit{width:36px;height:36px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);font-size:16px;line-height:1;display:grid;place-items:center;padding:0}
   .rv-exit:hover{border-color:var(--terra);color:var(--terra)}
@@ -326,6 +329,9 @@
   .rv-card.rv-enter{transform:translateX(26px);opacity:0}
   .rv-card.rv-slide-out{transform:translateX(-26px);opacity:0}
   @media(prefers-reduced-motion:reduce){ .rv-card{transition:none !important} .rv-progress-fill{transition:none} }
+  .rv-grid{display:grid;grid-template-columns:1fr;grid-template-areas:"left" "right";gap:24px}
+  .rv-left{grid-area:left;min-width:0}
+  .rv-right{grid-area:right;min-width:0}
   .rv-card-head{display:flex;gap:16px;align-items:flex-start}
   .rv-card-head .fit{width:74px}
   .rv-card-head .fit .ring{width:66px;height:66px;font-size:23px}
@@ -336,21 +342,26 @@
   .rv-badge{font-size:11px;font-weight:700;border-radius:999px;padding:3px 10px}
   .rv-badge-good{background:var(--sage-soft);color:var(--sage)}
   .rv-badge-bad{background:var(--terra-soft);color:var(--terra)}
-  .rv-highlights{margin:18px 0 0;padding:0 0 0 18px;color:var(--ink-soft);font-size:14px;line-height:1.6}
+  .rv-details{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:10px;font-size:12.5px;color:var(--muted)}
+  .rv-details b{color:var(--ink-soft);font-weight:600;margin-right:4px}
+  .rv-subhead{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;color:var(--muted);margin:18px 0 6px}
+  .rv-highlights{margin:0;padding:0 0 0 18px;color:var(--ink-soft);font-size:14px;line-height:1.6}
   .rv-highlights li{margin-bottom:4px}
-  .rv-jd{margin-top:16px;border-top:1px solid var(--line-soft);padding-top:12px}
-  .rv-jd summary{cursor:pointer;font-weight:600;font-size:13.5px;color:var(--gold-deep)}
-  .rv-jd-body{margin-top:10px;font-size:13.5px;line-height:1.6;color:var(--ink-soft);max-height:280px;overflow:auto}
+  .rv-jd-panel{border:1px solid var(--line-soft);border-radius:14px;background:var(--surface-2);padding:16px 18px;display:flex;flex-direction:column;min-height:160px}
+  .rv-jd-panel-head{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;color:var(--muted);margin-bottom:10px;flex:none}
+  .rv-jd-body{font-size:13.5px;line-height:1.6;color:var(--ink-soft);max-height:clamp(280px,55vh,620px);overflow:auto}
   .rv-jd-body h3{font-size:14px;margin:10px 0 4px}
   .rv-jd-body ul,.rv-jd-body ol{margin:4px 0 8px;padding-left:20px}
   .rv-jd-loading,.rv-jd-thin{color:var(--muted)}
   .rv-actions{display:flex;align-items:center;justify-content:center;gap:20px;margin-top:24px}
   .vbtn.rv-big{width:64px;height:64px}
   .vbtn.rv-big svg{width:27px;height:27px}
+  .vbtn.rv-big:disabled{opacity:.5;cursor:default}
   .rv-apply{padding:12px 20px}
   .rv-reasons{margin-top:16px;text-align:center}
   .rv-reasons-hint{color:var(--muted);font-size:12.5px;margin-bottom:8px}
-  .rv-reasons-chips{display:flex;flex-wrap:wrap;gap:7px;justify-content:center}
+  .rv-reasons-chips{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;align-items:center}
+  .rv-reason-skip{padding:5px 14px;font-size:12px}
   .rv-end{text-align:center;max-width:360px;margin:40px auto 0}
   .rv-end-check{width:64px;height:64px;border-radius:999px;background:var(--sage-soft);color:var(--sage);font-size:28px;font-weight:700;display:grid;place-items:center;margin:0 auto 16px}
   .rv-end h2{font-size:22px;margin-bottom:6px}
@@ -358,6 +369,11 @@
   @media(max-width:620px){
     .rv-card-head{flex-direction:column;align-items:flex-start}
     .rv-actions{gap:14px}
+  }
+  @media(min-width:880px){
+    .rv-card{max-width:1100px;padding:32px 36px}
+    .rv-grid{grid-template-columns:minmax(320px,420px) 1fr;grid-template-areas:"left right";gap:36px;align-items:start}
+    .rv-jd-body{max-height:clamp(360px,62vh,680px)}
   }
 
   @media(max-width:920px){
@@ -1292,8 +1308,6 @@ if(location.hash==="#add") openModal();
   var queue = [];      // locked snapshot for this session — set once, on open
   var cursor = 0;
   var isOpen = false;
-  var passTimer = null;
-  var PASS_REASON_MS = 2200; // optional reason window before auto-advance
 
   function rvEsc(s){ return String(s==null?'':s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
   function reduceMotion(){ return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
@@ -1305,21 +1319,40 @@ if(location.hash==="#add") openModal();
     return {fit:fit, cls:cls, lbl:lbl};
   }
 
-  // 3-4 key highlights: prefer the AI fit-analysis "strengths" already
-  // computed for the job (same data job cards show under "Strengths & gaps");
-  // fall back to sentence-splitting the "why it fits" note for rows that
-  // haven't been AI-scored yet, so every card has *something* honest to show.
+  // Up to 6 key highlights (was 4 — the wide desktop layout has room for
+  // more): prefer the AI fit-analysis "strengths" already computed for the
+  // job (same data job cards show under "Strengths & gaps"); fall back to
+  // sentence-splitting the "why it fits" note for rows that haven't been
+  // AI-scored yet, so every card has *something* honest to show.
   function highlightsFor(j){
     var out = [];
-    if (j.strengths && j.strengths.length) out = j.strengths.slice(0,4);
-    else if (j.why) out = String(j.why).split(/(?:\r?\n)+|(?<=[.!?])\s+(?=[A-Z(])/).map(function(s){ return s.trim(); }).filter(Boolean).slice(0,4);
-    if (!out.length) out = ['No summary yet — read the full JD below.'];
+    if (j.strengths && j.strengths.length) out = j.strengths.slice(0,6);
+    else if (j.why) out = String(j.why).split(/(?:\r?\n)+|(?<=[.!?])\s+(?=[A-Z(])/).map(function(s){ return s.trim(); }).filter(Boolean).slice(0,6);
+    if (!out.length) out = ['No summary yet — read the full JD alongside.'];
     return out;
+  }
+
+  // Optional "also worth noting" list, from the same AI fit-analysis (gaps)
+  // — only rendered when present; never fabricated.
+  function gapsFor(j){
+    return (j.gaps && j.gaps.length) ? j.gaps.slice(0,4) : [];
   }
 
   function salaryText(j){
     if (typeof window.fmtSal === 'function') return window.fmtSal(j);
     return j.salMax==null ? 'Salary not listed' : ('$'+j.salMin+'K–$'+j.salMax+'K');
+  }
+
+  // Compact "Source / Level / Posted-or-Found" row — the wide layout has
+  // room to show these without crowding the mobile card; each field only
+  // renders when known (never fabricated).
+  function detailsRow(j){
+    var parts = [];
+    if (j.source) parts.push('<span><b>Source</b> '+rvEsc(j.source)+'</span>');
+    if (j.level) parts.push('<span><b>Level</b> '+rvEsc(j.level)+'</span>');
+    if (j.postedKnown && j.postedAge!=null) parts.push('<span><b>Posted</b> '+j.postedAge+'d ago</span>');
+    else if (j.foundAge!=null) parts.push('<span><b>Found</b> '+j.foundAge+'d ago</span>');
+    return parts.length ? ('<div class="rv-details">'+parts.join('')+'</div>') : '';
   }
 
   function cardMarkup(j){
@@ -1331,24 +1364,41 @@ if(location.hash==="#add") openModal();
     var goodOn = rv && rv.verdict==='good' ? ' on' : '';
     var badOn  = rv && rv.verdict==='bad'  ? ' on' : '';
     var hi = highlightsFor(j);
+    var gaps = gapsFor(j);
+    var gapsHtml = gaps.length ? (
+      '<div class="rv-subhead">Also worth noting</div>'+
+      '<ul class="rv-highlights">'+gaps.map(function(s){ return '<li>'+rvEsc(s)+'</li>'; }).join('')+'</ul>'
+    ) : '';
     return ''+
     '<div class="rv-card" id="rvCard">'+
-      '<div class="rv-card-head">'+
-        '<div class="fit '+fi.cls+'"><div class="ring">'+fi.fit+'</div><div class="lbl">'+fi.lbl+'</div></div>'+
-        '<div class="rv-headtext">'+
-          '<h2 class="rv-title">'+rvEsc(j.title)+rvBadge+'</h2>'+
-          '<div class="rv-company">'+rvEsc(j.company)+'</div>'+
-          '<div class="rv-meta"><span>'+rvEsc(j.loc||'—')+'</span>'+(j.work?'<span>'+rvEsc(j.work)+'</span>':'')+'<span>'+rvEsc(salaryText(j))+'</span></div>'+
+      '<div class="rv-grid">'+
+        '<div class="rv-left">'+
+          '<div class="rv-card-head">'+
+            '<div class="fit '+fi.cls+'"><div class="ring">'+fi.fit+'</div><div class="lbl">'+fi.lbl+'</div></div>'+
+            '<div class="rv-headtext">'+
+              '<h2 class="rv-title">'+rvEsc(j.title)+rvBadge+'</h2>'+
+              '<div class="rv-company">'+rvEsc(j.company)+'</div>'+
+              '<div class="rv-meta"><span>'+rvEsc(j.loc||'—')+'</span>'+(j.work?'<span>'+rvEsc(j.work)+'</span>':'')+'<span>'+rvEsc(salaryText(j))+'</span></div>'+
+              detailsRow(j)+
+            '</div>'+
+          '</div>'+
+          '<div class="rv-subhead">Highlights</div>'+
+          '<ul class="rv-highlights">'+hi.map(function(s){ return '<li>'+rvEsc(s)+'</li>'; }).join('')+'</ul>'+
+          gapsHtml+
+          '<div class="rv-actions">'+
+            '<button class="vbtn bad rv-big'+badOn+'" id="rvPass" type="button" aria-label="Pass on this role"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></button>'+
+            '<button class="btn btn--outline rv-apply" id="rvApply" type="button">Apply<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>'+
+            '<button class="vbtn good rv-big'+goodOn+'" id="rvLike" type="button" aria-label="Mark as a good fit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></button>'+
+          '</div>'+
+          '<div class="rv-reasons" id="rvReasons" hidden></div>'+
+        '</div>'+
+        '<div class="rv-right">'+
+          '<div class="rv-jd-panel">'+
+            '<div class="rv-jd-panel-head">Full job description</div>'+
+            '<div class="rv-jd-body" id="rvJdBody"><p class="rv-jd-loading">Loading the full posting…</p></div>'+
+          '</div>'+
         '</div>'+
       '</div>'+
-      '<ul class="rv-highlights">'+hi.map(function(s){ return '<li>'+rvEsc(s)+'</li>'; }).join('')+'</ul>'+
-      '<details class="rv-jd" id="rvJd"><summary>Read full JD</summary><div class="rv-jd-body" id="rvJdBody"><p class="rv-jd-loading">Click to load the full posting…</p></div></details>'+
-      '<div class="rv-actions">'+
-        '<button class="vbtn bad rv-big'+badOn+'" id="rvPass" type="button" aria-label="Pass on this role"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></button>'+
-        '<button class="btn btn--outline rv-apply" id="rvApply" type="button">Apply<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>'+
-        '<button class="vbtn good rv-big'+goodOn+'" id="rvLike" type="button" aria-label="Mark as a good fit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></button>'+
-      '</div>'+
-      '<div class="rv-reasons" id="rvReasons" hidden></div>'+
     '</div>';
   }
 
@@ -1359,9 +1409,12 @@ if(location.hash==="#add") openModal();
     fillEl.style.width = total ? ((Math.min(cursor,total)/total*100) + '%') : '0%';
   }
 
+  // Full JD now loads automatically as soon as the card renders (right-hand
+  // panel) instead of behind a "Read full JD" expander — reuses the same
+  // jGet/jdToHtml wire.js exposes for the job-detail preview.
   function loadJd(j){
-    var det = document.getElementById('rvJd'), jdBody = document.getElementById('rvJdBody');
-    if (!det || !jdBody) return;
+    var jdBody = document.getElementById('rvJdBody');
+    if (!jdBody) return;
     if (j._jdHtml){ jdBody.innerHTML = j._jdHtml; return; }
     if (!j.url){ jdBody.innerHTML = '<p class="rv-jd-thin">No posting URL on this row.</p>'; return; }
     if (typeof window.jGet !== 'function' || typeof window.jdToHtml !== 'function'){
@@ -1380,49 +1433,53 @@ if(location.hash==="#add") openModal();
     });
   }
 
-  function showReasons(j){
+  // Brief "why?" prompt after EITHER Like or Pass — the verdict is already
+  // saved by the time this shows. A reason chip records the reason (via the
+  // same saveReview) and advances; Skip advances without one. This WAITS for
+  // the tap instead of auto-advancing, so there's a moment to answer — but
+  // one tap (chip or Skip) still moves straight to the next card.
+  function showReasons(j, verdict){
     var wrap = document.getElementById('rvReasons');
     if (!wrap) return;
-    var reasons = (typeof REASONS!=='undefined' && REASONS.bad) ? REASONS.bad : [];
-    wrap.innerHTML = '<div class="rv-reasons-hint">Passed — mind sharing why? (optional)</div>'+
+    var good = verdict === 'good';
+    var reasons = (typeof REASONS!=='undefined' && REASONS[good?'good':'bad']) ? REASONS[good?'good':'bad'] : [];
+    var hint = good ? 'Liked — mind sharing why?' : 'Passed — mind sharing why?';
+    wrap.innerHTML = '<div class="rv-reasons-hint">'+hint+'</div>'+
       '<div class="rv-reasons-chips">'+reasons.map(function(r){
         return '<button type="button" class="rpop-chip rv-reason-chip" data-r="'+rvEsc(r)+'">'+rvEsc(r)+'</button>';
-      }).join('')+'</div>';
+      }).join('')+
+      '<button type="button" class="btn btn--outline rv-reason-skip" id="rvReasonSkip">Skip →</button>'+
+      '</div>';
     wrap.hidden = false;
     wrap.querySelectorAll('.rv-reason-chip').forEach(function(c){
       c.addEventListener('click', function(){
         wrap.querySelectorAll('.rv-reason-chip').forEach(function(x){ x.classList.remove('on'); });
         c.classList.add('on');
-        window.saveReview(j.id, 'bad', c.getAttribute('data-r'));
-        clearTimeout(passTimer);
+        window.saveReview(j.id, verdict, c.getAttribute('data-r'));
         advance();
       });
     });
-    clearTimeout(passTimer);
-    passTimer = setTimeout(function(){ advance(); }, PASS_REASON_MS);
+    var skip = document.getElementById('rvReasonSkip');
+    if (skip) skip.addEventListener('click', function(){ advance(); });
   }
 
   function wireCard(j){
     var likeBtn = document.getElementById('rvLike');
     var passBtn = document.getElementById('rvPass');
     var applyBtn = document.getElementById('rvApply');
-    if (likeBtn) likeBtn.onclick = function(){
-      window.saveReview(j.id, 'good');
-      advance();
-    };
-    if (passBtn) passBtn.onclick = function(){
-      window.saveReview(j.id, 'bad');
-      passBtn.classList.add('on');
-      var likeB = document.getElementById('rvLike'); if(likeB) likeB.classList.remove('on');
-      showReasons(j);
-    };
+    function choose(verdict){
+      window.saveReview(j.id, verdict);
+      if (likeBtn){ likeBtn.classList.toggle('on', verdict==='good'); likeBtn.disabled = true; }
+      if (passBtn){ passBtn.classList.toggle('on', verdict==='bad'); passBtn.disabled = true; }
+      showReasons(j, verdict);
+    }
+    if (likeBtn) likeBtn.onclick = function(){ choose('good'); };
+    if (passBtn) passBtn.onclick = function(){ choose('bad'); };
     if (applyBtn) applyBtn.onclick = function(){
       if (!j.url){ if (typeof toast==='function') toast('No posting URL on this row', 'info'); return; }
       window.open(j.url, '_blank', 'noopener');
       // stays on the current card by design — no save, no advance
     };
-    var det = document.getElementById('rvJd');
-    if (det) det.addEventListener('toggle', function(){ if (det.open) loadJd(j); });
   }
 
   function renderEnd(){
@@ -1438,19 +1495,12 @@ if(location.hash==="#add") openModal();
     if (back) back.onclick = closeReviewMode;
   }
 
-  // Read-only introspection hook for automated verification (Playwright).
-  // Mirrors the closure state — never read by app logic, changes nothing.
-  function publishDebugState(){
-    window.__rvDebug = { cursor: cursor, queue: queue.map(function(j){ return {id:j.id, fit:j.fit, title:j.title, company:j.company, url:j.url}; }) };
-  }
-
   function renderCurrent(animate){
-    clearTimeout(passTimer);
-    publishDebugState();
     if (cursor >= queue.length){ renderEnd(); return; }
     var j = queue[cursor];
     bodyEl.innerHTML = cardMarkup(j);
     wireCard(j);
+    loadJd(j);
     updateProgress();
     if (animate && !reduceMotion()){
       var card = document.getElementById('rvCard');
@@ -1486,7 +1536,6 @@ if(location.hash==="#add") openModal();
   }
   function closeReviewMode(){
     isOpen = false;
-    clearTimeout(passTimer);
     overlay.classList.remove('open');
     overlay.setAttribute('aria-hidden','true');
     document.body.style.overflow = '';
