@@ -37,6 +37,7 @@ import { runAnthropic, hasAnthropicKey, hasGeminiKey } from '../anthropic.mjs';
 import { runOpenAI, runQwen, hasOpenAIKey, hasQwenKey } from '../openai.mjs';
 import { runNodeScript } from '../runner.mjs';
 import { bundleProjectContext, buildEvaluationPrompt } from '../prompts.mjs';
+import { getJdStructure } from '../jd-structure-cache.mjs';
 import { stripDangerousMarkdown } from '../security.mjs';
 import { parseApplications, today } from '../parsers.mjs';
 import { logActivity } from '../activity-log.mjs';
@@ -251,7 +252,12 @@ export function registerAutoPipelineRoutes(app) {
     let markdown = '';
     let evalMode = lockEvalMode;
     try {
-      const promptText = buildEvaluationPrompt(jdText, lang);
+      // TIER 2 — url is known here (this is the URL-driven on-demand path),
+      // so read-through the pipeline's one-time JD-structure cache; a miss
+      // (never structured yet, or file absent) returns null and
+      // buildEvaluationPrompt falls back to the TIER 1-only raw-JD prompt.
+      const structure = getJdStructure(url);
+      const promptText = buildEvaluationPrompt(jdText, lang, structure);
 
       if (!evalMode) {
         // v1.55.0 — "works via OR": first key set wins, Anthropic →

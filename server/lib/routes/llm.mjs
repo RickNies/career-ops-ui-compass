@@ -37,6 +37,7 @@ import {
   buildApplyChecklist,
   resolveLocale,
 } from '../prompts.mjs';
+import { getJdStructure } from '../jd-structure-cache.mjs';
 
 // v1.39.0 (WS8.2) — honor LLM_PROVIDER. auto → the full order; claude →
 // Anthropic only; gemini → Gemini only; etc.
@@ -122,6 +123,26 @@ function jdUnreadable(s) {
   return false;
 }
 
+// TIER 2 — best-effort url for the paste-JD path. /api/evaluate's request
+// body only ever carries `jd` text (see public/js/views/evaluate.js), never
+// a url field, so there is no reliable key into the pipeline's JD-structure
+// cache here. The one convention that DOES seed a url into the textarea is
+// evaluate.js's "prefill from ?url=" flow, which writes a leading
+// "URL: <url>\n\n[paste JD text here]" line — when a user runs that flow and
+// keeps the line, this recovers the same url the pipeline structured, with
+// no frontend change. No match (manual paste, or the line was deleted) →
+// null → buildEvaluationPrompt falls back to the TIER 1-only raw-JD prompt.
+function extractJdUrl(jd) {
+  const m = /^\s*URL:\s*(\S+)/i.exec(String(jd || ''));
+  if (!m) return null;
+  try {
+    const u = new URL(m[1]);
+    return (u.protocol === 'http:' || u.protocol === 'https:') ? m[1] : null;
+  } catch {
+    return null;
+  }
+}
+
 export function registerLlmRoutes(app) {
   // ─── /api/evaluate ──────────────────────────────────────────────────
   app.post('/api/evaluate', llmRateLimit, async (req, res) => {
@@ -149,7 +170,8 @@ export function registerLlmRoutes(app) {
       saved = name;
     }
 
-    const promptText = buildEvaluationPrompt(jd, lang);
+    const structure = getJdStructure(extractJdUrl(jd));
+    const promptText = buildEvaluationPrompt(jd, lang, structure);
 
     // F-009 — explicit manual mode mirrors /api/deep. Lets the user opt
     // out of the live LLM call (and the Anthropic credit burn) even when

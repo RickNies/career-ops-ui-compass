@@ -352,7 +352,39 @@ export function buildModePrompt(template, slug, context, lang) {
   return parts.join('\n');
 }
 
-export function buildEvaluationPrompt(jd, lang) {
+// TIER 2 — render a cached jd_structure.py result (career-ops/data/
+// jd-structure.jsonl, read via jd-structure-cache.mjs) as a compact
+// numbered brief. required/preferred keep their JD order (position =
+// priority), matching the SCORING PRIORITY rules below. Returns '' when
+// there is nothing usable (missing/empty structure) so the caller can fall
+// back to the raw-JD-only prompt untouched.
+function buildStructuredJdBlock(structure) {
+  if (!structure || typeof structure !== 'object') return '';
+  const numbered = (items) => (Array.isArray(items) ? items : [])
+    .filter((t) => typeof t === 'string' && t.trim())
+    .map((t, i) => `  ${i + 1}. ${t}`).join('\n');
+  const parts = [];
+  if (structure.level) parts.push(`Inferred level: ${structure.level}`);
+  const resp = numbered(structure.responsibilities);
+  if (resp) parts.push(`Responsibilities (JD order = priority):\n${resp}`);
+  const req = numbered(structure.required);
+  if (req) parts.push(`REQUIRED / must-have qualifications (JD order = priority; a missing item here is a strong negative):\n${req}`);
+  const pref = numbered(structure.preferred);
+  if (pref) parts.push(`PREFERRED / nice-to-have qualifications (JD order = priority; a missing item here is a minor negative):\n${pref}`);
+  if (!parts.length) return '';
+  return `STRUCTURED JOB DESCRIPTION (pre-segmented by the pipeline; use this as the primary basis for the fit judgment below — the raw JD is context only):
+${parts.join('\n\n')}
+
+`;
+}
+
+// `structure`, when passed a jd-structure-cache.mjs lookup result, makes the
+// prompt score against the pre-segmented/priority-ordered requirements
+// (TIER 2) instead of only the raw JD text below. Pass null/undefined
+// (default) — e.g. no cache entry for this url — to keep the TIER 1-only
+// raw-JD prompt.
+export function buildEvaluationPrompt(jd, lang, structure) {
+  const structuredBlock = buildStructuredJdBlock(structure);
   return `${buildLocaleDirective(lang)}${scaffold('evalRoleLine', lang)}
 
 ${scaffold('readFiles', lang)}
@@ -374,7 +406,7 @@ VOICE: Address the candidate (the person whose CV/profile is provided) DIRECTLY 
 
 GROUNDING (critical): Base your analysis STRICTLY on the job description provided below. Do NOT assume or invent the company's industry, business model, or type (e.g. do not call it an "agency", "studio", "startup", "media company", etc.) unless the JD explicitly states it. If the job description below is missing, thin, or unreadable (e.g. boilerplate, navigation, or CSS/markup rather than an actual posting), DO NOT fabricate an evaluation — instead say you could not read the posting and advise opening the original link to verify, and give a low-confidence verdict.
 
-JD:
+${structuredBlock}JD:
 """
 ${jd}
 """
