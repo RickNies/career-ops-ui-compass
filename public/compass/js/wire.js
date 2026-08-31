@@ -3513,7 +3513,10 @@
   }
   function compassToast(o) {
     var t = document.createElement('div');
-    t.style.cssText = 'background:#16324F;color:#fff;padding:11px 12px 11px 15px;border-radius:11px;font:13px/1.4 system-ui;box-shadow:0 8px 26px rgba(0,0,0,.24);display:flex;align-items:center;gap:10px';
+    // pointer-events:auto — several pages (documents/dashboard/job-detail/jobs/saved/setup)
+    // set pointer-events:none on .toast-wrap to let clicks pass through the empty region;
+    // without this the bubble itself (and its View link / ✕) inherits that and is click-dead.
+    t.style.cssText = 'background:#16324F;color:#fff;padding:11px 12px 11px 15px;border-radius:11px;font:13px/1.4 system-ui;box-shadow:0 8px 26px rgba(0,0,0,.24);display:flex;align-items:center;gap:10px;pointer-events:auto';
     if (o.tone === 'error') t.style.background = '#7a3423';
     if (o.tone === 'muted') t.style.background = '#4a4436';
     var msg = document.createElement('div'); msg.style.cssText = 'flex:1'; msg.innerHTML = (o.icon ? '<b style="margin-right:6px">' + o.icon + '</b>' : '') + esc(o.text);
