@@ -789,6 +789,19 @@
     jobs.forEach(function (j) { j.isNew = (minFoundAge != null && j.foundAge != null && j.foundAge === minFoundAge); });
   }
 
+  // Classify Remote / Hybrid / On-site from BOTH location and title — "Hybrid"
+  // almost never appears in the location field in our data (it shows up in job
+  // titles, e.g. "...(Hybrid)"), so location-only checks silently starved the
+  // Hybrid chip. Precedence: explicit "hybrid" wins first (it's the most
+  // specific signal); then remote/WFH; explicit on-site/in-office is checked
+  // for completeness but falls through to the same 'On-site' bucket as the
+  // unmatched default, since we have no third state on the UI today.
+  function workTypeFor(location, title) {
+    var hay = String(location || '') + ' ' + String(title || '');
+    if (/hybrid/i.test(hay)) return 'Hybrid';
+    if (/\bremote\b|work[\s-]?from[\s-]?home|\bwfh\b/i.test(hay)) return 'Remote';
+    return 'On-site'; // covers explicit on-site/in-office AND unmatched/unknown
+  }
   function mapRow(row) {
     var title = row.role || '';
     var j = {
@@ -796,7 +809,7 @@
       num: row.num, title: title, company: row.company || '', domain: logoDomainFor(row.company, row.url),
       source: sourceFromHost(hostFrom(row.url)),
       mono: initials(row.company || ''), color: colorFor(row.company || ''),
-      loc: row.location || '', locKey: locKeyFor(row.location), work: /remote/i.test(row.location || '') ? 'Remote' : 'On-site',
+      loc: row.location || '', locKey: locKeyFor(row.location), work: workTypeFor(row.location, title),
       salMin: null, salMax: null, fit: scoreToFit(row), age: 0, isNew: false, saved: bookmarkFor(row.url),
       cat: row.status || 'Evaluated', func: funcFor(title), level: levelFor(title),
       why: row.notes || (row.status ? ('Status: ' + row.status) : 'Imported from tracker.'),
