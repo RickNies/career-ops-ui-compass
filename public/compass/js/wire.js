@@ -905,6 +905,27 @@
     return jGet('/api/compass/fit').then(function (j) { window.__fitMap = (j && j.map) || {}; return window.__fitMap; }).catch(function () { window.__fitMap = {}; return {}; });
   }
   function fitFor(url) { return (window.__fitMap && window.__fitMap[normUrl(url)]) || null; }
+  // Friendly display name for a fit-analysis `model` id ("Scored by …" on job-detail).
+  // Older fit-analysis.jsonl entries have no `model` field — callers must treat
+  // a null/unmapped return as "don't show the line" (degrade gracefully).
+  var MODEL_LABELS = {
+    'gemma-4-31b-it': 'Gemma 4 31B',
+    'gemma-4-26b-a4b-it': 'Gemma 4 26B',
+    'gemini-3.6-flash': 'Gemini 3.6 Flash',
+    'gemini-3.5-flash-lite': 'Flash-Lite',
+    'claude-sonnet-5': 'Claude Sonnet 5',
+    'claude-sonnet-4-6': 'Claude Sonnet 4.6',
+    'claude-opus-4-7': 'Claude Opus 4.7',
+    'claude-haiku-4-5': 'Claude Haiku 4.5',
+    'gpt-5-codex': 'GPT-5 Codex',
+    'gpt-5': 'GPT-5'
+  };
+  function modelLabel(id) {
+    if (!id || typeof id !== 'string') return null;
+    if (MODEL_LABELS[id]) return MODEL_LABELS[id];
+    if (/^qwen/i.test(id)) return 'Local model (qwen)';
+    return id; // unmapped-but-real id — show as-is rather than hide real info
+  }
   // Salary bands (thousands), partial + growing.
   function loadSalary() {
     return jGet('/api/compass/salary').then(function (j) { window.__salaryMap = (j && j.map) || {}; return window.__salaryMap; }).catch(function () { window.__salaryMap = {}; return {}; });
@@ -1815,6 +1836,14 @@
       if (fit && typeof fit.score === 'number') {
         var mh = document.querySelector('.match-head .t');
         if (mh) mh.innerHTML = (fit.verdict ? verdictPill(fit.verdict) + ' ' : '') + esc(fit.why || mh.textContent);
+        // "· Scored by <model>" — subtle, appended to the existing description
+        // line. Degrades gracefully: no `model` field (older fit-analysis
+        // entries) → the line is left exactly as it ships in the HTML.
+        var mhd = document.querySelector('.match-head .d');
+        if (mhd) {
+          var scoredByLbl = modelLabel(fit.model);
+          mhd.textContent = 'Based on your résumé, profile, and what you\'ve told us you\'re looking for.' + (scoredByLbl ? ' · Scored by ' + scoredByLbl : '');
+        }
         var mlists = document.querySelectorAll('.mlist');
         if (mlists.length && ((fit.strengths && fit.strengths.length) || (fit.gaps && fit.gaps.length))) {
           if (mlists[0]) mlists[0].innerHTML = (fit.strengths || []).map(function (s) { return '<li><span class="ic ic-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span><span>' + esc(s) + '</span></li>'; }).join('') || '<li><span>—</span></li>';
@@ -2282,8 +2311,22 @@
     panel.querySelector('.doc-gen').onclick = function () {
       out.innerHTML = docSpinner(llmProgress(type === 'cover' ? 'Writing the cover letter' : 'Tailoring'));
       startJob({ type: type, company: company, role: role, url: url }, null,
-        function (j) { toastMsg((type === 'cover' ? 'Cover letter' : 'Résumé') + ' ready', 'success'); loadVersions(j.id); },
-        function (err) { out.innerHTML = '<div style="padding:16px;background:#f7ece7;border:1px solid #e6c9bb;border-radius:10px;color:#9c5231;font:13.5px system-ui">Generation failed: ' + esc(err) + '</div>'; });
+        function (j) {
+          toastMsg((type === 'cover' ? 'Cover letter' : 'Résumé') + ' ready', 'success');
+          // A rate limit didn't block this doc (it fell back to the local Qwen
+          // model automatically) — say so; never a silent provider swap.
+          if (j.rateLimited) toastMsg(j.rateLimitMessage || 'A provider rate limit was hit — this ran on the local model instead.', 'info');
+          loadVersions(j.id);
+        },
+        function (err) {
+          // No silent failures on a rate limit: job.error already carries the
+          // "You've hit <provider>'s rate limit… switch models or providers
+          // in Settings" copy (see compass.mjs::runJob) — add a real pointer.
+          var isRL = /rate limit/i.test(String(err || ''));
+          out.innerHTML = '<div style="padding:16px;background:#f7ece7;border:1px solid #e6c9bb;border-radius:10px;color:#9c5231;font:13.5px system-ui">' +
+            (isRL ? esc(err) + ' <a href="setup.html" style="color:#9c5231;font-weight:600;text-decoration:underline">Open Settings</a>' : 'Generation failed: ' + esc(err)) +
+            '</div>';
+        });
     };
     loadVersions();
   }
@@ -2535,6 +2578,47 @@
   // hitting the same endpoints: #/config, #/portals, #/profile, #/cv, #/memory,
   // #/health, #/usage, #/docs-assistant, #/orientation, #/help, #/cv-studio.
   var PROVIDERS = ['auto', 'hermes', 'anthropic', 'gemini', 'openai', 'qwen', 'openrouter', 'github'];
+  // ---- Curated per-provider model catalog for the Settings "AI model" dropdowns ----
+  // Each entry: [modelId, short note shown inline below the select]. `default`
+  // is preselected when the .env has no value set for that key yet.
+  // Gemini free-tier ids/caps verified against this deployment's own bulk
+  // fit-scorer (career-ops-scrape/run-fitscore.sh + fit_score.py --model, which
+  // already runs gemma-4-31b-it live) — see the read-only note rendered below
+  // the Gemini select. Anthropic/OpenAI ids mirror the original app's curated
+  // list (public/js/views/config/field-specs.js) with a quality/cost note added.
+  var MODEL_CATALOG = {
+    ANTHROPIC_MODEL: {
+      'default': 'claude-sonnet-4-6',
+      options: [
+        ['claude-sonnet-5', 'Newest Sonnet — balanced reasoning and speed.'],
+        ['claude-sonnet-4-6', 'Balanced reasoning and speed — recommended default.'],
+        ['claude-opus-4-7', 'Highest quality, slower and pricier — best for hard reasoning.'],
+        ['claude-haiku-4-5', 'Fastest and cheapest — good for high-volume, simpler tasks.'],
+        ['claude-3-7-sonnet-latest', 'Previous-gen Sonnet — solid fallback.'],
+        ['claude-3-5-haiku-latest', 'Previous-gen Haiku — solid fallback, cheap.']
+      ]
+    },
+    GEMINI_MODEL: {
+      'default': 'gemini-3.6-flash',
+      options: [
+        ['gemma-4-31b-it', 'Gemma 4 31B — Free · ~14,400/day · best for high-volume scoring'],
+        ['gemma-4-26b-a4b-it', 'Gemma 4 26B — Free · ~14,400/day'],
+        ['gemini-3.5-flash-lite', 'Flash-Lite — Free · 500/day · strong quality'],
+        ['gemini-3.6-flash', 'Gemini 3.6 Flash — Free · 20/day · top quality, tiny cap']
+      ]
+    },
+    OPENAI_MODEL: {
+      'default': 'gpt-5-codex',
+      options: [
+        ['gpt-5-codex', 'Balanced, code-aware default.'],
+        ['gpt-5', 'Highest quality general reasoning.'],
+        ['gpt-5-mini', 'Faster and cheaper, solid quality.'],
+        ['gpt-4.1', 'Previous-gen, broad compatibility.'],
+        ['o4-mini', 'Reasoning-focused, cost-efficient.'],
+        ['o3', 'Deep reasoning, slower and pricier.']
+      ]
+    }
+  };
   function el(tag, css, html) { var e = document.createElement(tag); if (css) e.style.cssText = css; if (html != null) e.innerHTML = html; return e; }
   var CARD = 'background:#fff;border:1px solid #ece5d6;border-radius:16px;box-shadow:0 1px 3px rgba(0,0,0,.05);padding:0;margin-bottom:14px;overflow:hidden';
   var SUM = 'cursor:pointer;list-style:none;padding:16px 20px;font:600 16px system-ui;color:#16324F;display:flex;justify-content:space-between;align-items:center';
@@ -2546,6 +2630,47 @@
   function say(node, t, ok) { node.textContent = t; node.style.color = ok === false ? '#9c5231' : (ok ? '#2f6f5b' : '#6b6255'); }
   function chips(val) { return (Array.isArray(val) ? val : []).join('\n'); }
   function fromLines(s) { return String(s || '').split('\n').map(function (x) { return x.trim(); }).filter(Boolean); }
+
+  // A dropdown (not free-text) for a curated *_MODEL key, plus a note element
+  // (filled/updated by wireModelNote below) showing the selected model's
+  // limits/quality. The value currently in .env is ALWAYS kept selected, even
+  // when it isn't one of the curated options (appended as an extra option),
+  // so saving never silently swaps a working custom model out from under you.
+  function renderModelField(k, currentVal) {
+    var cat = MODEL_CATALOG[k];
+    var cur = (currentVal || '').trim();
+    var opts = cat.options.slice();
+    var known = opts.some(function (o) { return o[0] === cur; });
+    if (cur && !known) opts = opts.concat([[cur, 'Currently set — not in the curated list below.']]);
+    var selHtml = '<select data-k="' + k + '" data-model-key="' + k + '" style="' + INP + '">' + opts.map(function (o) {
+      var isSel = cur ? (o[0] === cur) : (o[0] === cat['default']);
+      return '<option value="' + esc(o[0]) + '"' + (isSel ? ' selected' : '') + '>' + esc(o[0]) + '</option>';
+    }).join('') + '</select>';
+    var noteHtml = '<div class="model-note" data-note-for="' + k + '" style="font:11.5px system-ui;color:#8a8172;margin-top:3px"></div>';
+    // Gemini gets a read-only pointer to the SEPARATE bulk fit-scorer model
+    // (FITSCORE_MODEL in run-fitscore.sh) — this select only ever writes
+    // GEMINI_MODEL (the Node/generative side); the daily batch scorer is
+    // intentionally independent and not editable from this UI.
+    var fitscoreHtml = k === 'GEMINI_MODEL'
+      ? '<div style="font:11px system-ui;color:#b0a790;margin-top:2px">Bulk job-scoring (the daily batch that scores your saved jobs) uses its own <code>FITSCORE_MODEL</code> — defaults to Gemma 4 31B, set in <code>run-fitscore.sh</code>, not edited here.</div>'
+      : '';
+    return '<label style="' + LBL + '">' + k + selHtml + noteHtml + fitscoreHtml + '</label>';
+  }
+  // After the model <select>s are in the DOM: paint each note from the
+  // currently-selected option, and keep it live on change.
+  function wireModelNotes(form) {
+    Object.keys(MODEL_CATALOG).forEach(function (k) {
+      var sel = form.querySelector('select[data-model-key="' + k + '"]');
+      var note = form.querySelector('[data-note-for="' + k + '"]');
+      if (!sel || !note) return;
+      function paint() {
+        var hit = MODEL_CATALOG[k].options.filter(function (o) { return o[0] === sel.value; })[0];
+        note.textContent = hit ? hit[1] : 'Currently set — not in the curated list above.';
+      }
+      paint();
+      sel.addEventListener('change', paint);
+    });
+  }
 
   // ---- FULL CONFIG (all KNOWN_KEYS, grouped) ----
   function sectionConfig(host) {
@@ -2564,12 +2689,14 @@
         html += '<div style="font:700 11px system-ui;letter-spacing:.05em;text-transform:uppercase;color:#b0a790;margin:14px 0 2px">' + esc(g) + '</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
         byGroup[g].forEach(function (k) {
           if (k === 'LLM_PROVIDER') { html += '<label style="' + LBL + '">' + k + '<select data-k="' + k + '" style="' + INP + '">' + PROVIDERS.map(function (x) { return '<option' + (vals[k] === x ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select></label>'; }
+          else if (MODEL_CATALOG[k]) { html += renderModelField(k, vals[k]); }
           else if (secret.has(k)) { html += '<label style="' + LBL + '">' + k + ' <span style="color:#b0a790;font-weight:400">' + (vals[k] ? '(' + esc(vals[k]) + ')' : '(not set)') + '</span><input data-k="' + k + '" data-secret="1" type="password" placeholder="' + (vals[k] ? 'leave blank to keep' : 'not set') + '" style="' + INP + '"><label style="font:400 11px system-ui;color:#b0a790"><input type="checkbox" data-clear="' + k + '"> remove</label></label>'; }
           else { html += '<label style="' + LBL + '">' + k + '<input data-k="' + k + '" type="text" value="' + esc(vals[k] || '') + '" style="' + INP + '"></label>'; }
         });
         html += '</div>';
       });
       form.innerHTML = html;
+      wireModelNotes(form);
     });
     function refreshProv() { jGet('/api/status/providers').then(function (st) { prov.textContent = 'Active provider: ' + (st.activeProvider || 'none') + (st.activeModel ? ' · ' + st.activeModel : ''); }); }
     refreshProv();
@@ -2758,8 +2885,18 @@
     actions.querySelector('#tpDraft').onclick = function () {
       say(m, llmProgress('Drafting'));
       jPost('/api/two-pager/draft', { run: true }).then(function (r) {
-        if (r.body && r.body.fields) { render(r.body.fields); say(m, 'Drafted from your résumé — review, then Save ✓', true); }
-        else if (r.body && r.body.error) { say(m, 'Draft failed: ' + r.body.error, false); }
+        var b = r.body || {};
+        if (b.fields) {
+          render(b.fields);
+          // No silent provider swap: when a rate limit was hit and this ran
+          // on the local Qwen fallback instead, say so right in the status line.
+          say(m, b.rateLimited ? (b.message || 'A provider rate limit was hit — drafted with the local model instead.') : 'Drafted from your résumé — review, then Save ✓', true);
+        }
+        // No silent failures on a rate limit — surface the "You've hit
+        // <provider>'s rate limit… switch models or providers in Settings"
+        // copy (you're already on the Settings page, so no extra link needed).
+        else if (b.rateLimited) { say(m, b.message || 'Rate limit hit — try again shortly.', false); }
+        else if (b.error) { say(m, 'Draft failed: ' + b.error, false); }
         else { say(m, 'Could not draft — no fields returned.', false); }
       }).catch(function (e) { say(m, 'Draft error: ' + e, false); });
     };

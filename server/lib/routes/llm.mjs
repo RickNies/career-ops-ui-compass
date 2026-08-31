@@ -26,6 +26,7 @@ import { validateEvaluationReport } from '../eval-validate.mjs';
 import { runOpenAI, runQwen, runOpenRouter, runGitHubModels, runHermes, hasOpenAIKey, hasQwenKey, hasOpenRouterKey, hasGitHubModelsKey, hasHermesKey } from '../openai.mjs';
 import { providerOrder } from '../env-config.mjs';
 import { recordUsage } from '../llm-usage.mjs';
+import { isRateLimitError, rateLimitMessage, tryRateLimitFallback } from '../llm-dispatch.mjs';
 import { sanitizeJobDescription, sanitizePathName } from '../security.mjs';
 import { cleanLlmMarkdown } from '../llm-output.mjs';
 import { llmRateLimit } from '../rate-limit.mjs';
@@ -110,6 +111,40 @@ const SMOKE_JD = 'Smoke test: Senior Backend Engineer with PHP and Go responsibi
 // stack up. 200 KB ≈ ~50K tokens, comfortably below any current ceiling
 // while flagging clearly when something is off.
 const PROMPT_SIZE_SOFT_CAP = 200 * 1024;
+
+// v1.158.0 — shared rate-limit handling for every branch below (Anthropic /
+// Gemini / OpenAI-compat tail) in BOTH /api/evaluate and /api/mode/:slug
+// (which serves the cover-letter mode). A provider rate-limit/quota error is
+// never a silent failure: this tries Qwen once as a local fallback, and
+// either way returns the exact "You've hit <provider>'s rate limit…" copy so
+// the caller always knows what happened and what to do (switch models/
+// providers in Settings). Mirrors llm-dispatch.mjs::runActiveProvider's
+// rate-limit handling for the routes that still keep their own cascade copy
+// (see the module doc comment at the top of this file).
+async function llmErrorResponse(mode, error, fullPrompt, extra = {}) {
+  const fb = await tryRateLimitFallback(mode, error, fullPrompt, extra.runOpts || {});
+  if (fb && !fb.error) {
+    recordUsage('qwen', fb.usage);
+    const warnings = extra.validate ? validateEvaluationReport(fb.markdown) : [];
+    return {
+      status: 200,
+      body: {
+        mode: 'qwen', ...(extra.slug ? { slug: extra.slug } : {}), prompt: extra.prompt,
+        markdown: fb.markdown, usage: fb.usage, ...(extra.saved !== undefined ? { saved: extra.saved } : {}),
+        rateLimited: true, fellBackTo: 'qwen', rateLimitProvider: mode, message: fb.message,
+        ...(warnings.length ? { warnings } : {}),
+      },
+    };
+  }
+  return {
+    status: 502,
+    body: {
+      mode, ...(extra.slug ? { slug: extra.slug } : {}), prompt: extra.prompt, error,
+      ...(extra.saved !== undefined ? { saved: extra.saved } : {}),
+      ...(isRateLimitError(error) ? { rateLimited: true, message: fb ? fb.message : rateLimitMessage(mode, false) } : {}),
+    },
+  };
+}
 
 // Junk/thin JD detector — true when the text is a CSS/JS shell or too sparse to
 // be a real posting (so we don't feed the LLM garbage it would hallucinate on).
@@ -202,7 +237,10 @@ export function registerLlmRoutes(app) {
         });
       }
       const r = await runAnthropic(fullPrompt, { maxTokens: 8192 });
-      if (r.error) return res.status(502).json({ mode: 'anthropic', prompt: promptText, error: r.error, saved });
+      if (r.error) {
+        const { status, body } = await llmErrorResponse('anthropic', r.error, fullPrompt, { prompt: promptText, saved, validate: true, runOpts: { maxTokens: 8192 } });
+        return res.status(status).json(body);
+      }
       // v1.75.0 (#819) — flag malformed A–G / SCORE_SUMMARY shape as a non-fatal
       // warning so the user knows the report may be truncated/off-format.
       const warnings = validateEvaluationReport(r.markdown);
@@ -218,6 +256,17 @@ export function registerLlmRoutes(app) {
       mkdirSync(PATHS.outputDir, { recursive: true });
       writeFileSync(tmpFile, jd);
       const result = await runNodeScript('gemini-eval.mjs', ['--file', tmpFile], { timeoutMs: 120_000 });
+      // v1.158.0 — gemini-eval.mjs is a subprocess (not the runGemini HTTP
+      // client used elsewhere), so a rate-limit surfaces in its stderr rather
+      // than a structured { error }. No inlined `fullPrompt` string exists
+      // here to retry via Qwen (the CLI script builds its own oferta prompt
+      // internally) — this is detect-and-message only, not a fallback.
+      if (result.code !== 0 && isRateLimitError(result.stderr)) {
+        return res.status(502).json({
+          mode: 'gemini', saved, rateLimited: true, message: rateLimitMessage('gemini', false),
+          error: String(result.stderr || '').slice(0, 500),
+        });
+      }
       return res.json({ mode: 'gemini', saved, ...result });
     }
 
@@ -233,7 +282,10 @@ export function registerLlmRoutes(app) {
         });
       }
       const r = await tp.run(fullPrompt, { maxTokens: 8192 });
-      if (r.error) return res.status(502).json({ mode: tp.mode, prompt: promptText, error: r.error, saved });
+      if (r.error) {
+        const { status, body } = await llmErrorResponse(tp.mode, r.error, fullPrompt, { prompt: promptText, saved, validate: true, runOpts: { maxTokens: 8192 } });
+        return res.status(status).json(body);
+      }
       // v1.75.0 (#819) — same shape guard for the OpenAI/Qwen/OpenRouter/GitHub tail.
       const warnings = validateEvaluationReport(r.markdown);
       recordUsage(tp.mode, r.usage);
@@ -439,7 +491,10 @@ export function registerLlmRoutes(app) {
           });
         }
         const r = await runAnthropic(fullPrompt);
-        if (r.error) return res.status(502).json({ mode: 'anthropic', slug, prompt, error: r.error });
+        if (r.error) {
+          const { status, body } = await llmErrorResponse('anthropic', r.error, fullPrompt, { prompt, slug });
+          return res.status(status).json(body);
+        }
         recordUsage('anthropic', r.usage);
         return res.json({ mode: 'anthropic', slug, prompt, markdown: r.markdown, usage: r.usage });
       }
@@ -457,7 +512,10 @@ export function registerLlmRoutes(app) {
           });
         }
         const r = await runGemini(fullPrompt);
-        if (r.error) return res.status(502).json({ mode: 'gemini', slug, prompt, error: r.error });
+        if (r.error) {
+          const { status, body } = await llmErrorResponse('gemini', r.error, fullPrompt, { prompt, slug });
+          return res.status(status).json(body);
+        }
         recordUsage('gemini', r.usage);
         return res.json({ mode: 'gemini', slug, prompt, markdown: r.markdown, usage: r.usage });
       }
@@ -473,7 +531,10 @@ export function registerLlmRoutes(app) {
           });
         }
         const r = await tp.run(fullPrompt);
-        if (r.error) return res.status(502).json({ mode: tp.mode, slug, prompt, error: r.error });
+        if (r.error) {
+          const { status, body } = await llmErrorResponse(tp.mode, r.error, fullPrompt, { prompt, slug });
+          return res.status(status).json(body);
+        }
         recordUsage(tp.mode, r.usage);
         return res.json({ mode: tp.mode, slug, prompt, markdown: r.markdown, usage: r.usage });
       }

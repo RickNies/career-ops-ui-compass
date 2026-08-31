@@ -125,8 +125,11 @@ const REAL_APPS_MD = DATA_ROOT + '/data/applications.md';
 const FIT_STORE = DATA_ROOT + '/data/fit-analysis.jsonl';
 
 // AI fit-analysis (data/fit-analysis.jsonl), keyed by url → {score 0-100, verdict,
-// why, strengths[], gaps[]}. Cached by mtime; re-read when the file changes (more
-// batches are landing). Jobs without an entry are simply absent from the map.
+// why, strengths[], gaps[], model}. Cached by mtime; re-read when the file changes
+// (more batches are landing). Jobs without an entry are simply absent from the map.
+// `model` (v1.90.0+ entries) is the LLM id that scored this row (e.g. gemma-4-31b-it,
+// gemini-3.6-flash, qwen3.6:latest) — null on older entries written before the
+// fit-scorer started recording it; the UI degrades gracefully when it's absent.
 let _fitCache = null, _fitMtime = -1;
 function readFitMap() {
   try {
@@ -135,7 +138,7 @@ function readFitMap() {
     const map = {};
     readFileSync(FIT_STORE, 'utf8').trim().split(/\r?\n/).forEach((l) => {
       if (!l) return;
-      try { const j = JSON.parse(l); if (j && j.url) map[normalizeUrl(j.url)] = { score: j.score, verdict: j.verdict, why: j.why || '', strengths: Array.isArray(j.strengths) ? j.strengths : [], gaps: Array.isArray(j.gaps) ? j.gaps : [] }; } catch { /* skip bad line */ }
+      try { const j = JSON.parse(l); if (j && j.url) map[normalizeUrl(j.url)] = { score: j.score, verdict: j.verdict, why: j.why || '', strengths: Array.isArray(j.strengths) ? j.strengths : [], gaps: Array.isArray(j.gaps) ? j.gaps : [], model: (typeof j.model === 'string' && j.model.trim()) ? j.model.trim() : null }; } catch { /* skip bad line */ }
     });
     _fitCache = map; _fitMtime = st.mtimeMs; return map;
   } catch { return _fitCache || {}; }
@@ -457,11 +460,19 @@ async function runJob(job) {
     const r = await fetch(SELF + JOB_ENDPOINT[job.type], { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bodyForJob(job)), signal: ctrl.signal });
     const j = await r.json();
     const md = j.markdown || j.report || '';
-    if (!md) throw new Error(j.error || j.message || ('no result (mode ' + (j.mode || '?') + ')'));
+    // v1.158.0 — on a rate limit, `j.message` is the honest "You've hit
+    // <provider>'s rate limit… switch models or providers in Settings" copy;
+    // prefer it over the raw `j.error` so a background job's error text is
+    // never a silent/opaque provider string.
+    if (!md) throw new Error((j.rateLimited && j.message) || j.error || j.message || ('no result (mode ' + (j.mode || '?') + ')'));
     mkdirSync(ARTIFACT_DIR, { recursive: true });
     const art = ARTIFACT_DIR + '/' + job.id + '.md';
     writeFileSync(art, md);
     job.artifactPath = art; job.bytes = md.length; job.status = 'done'; job.finished = new Date().toISOString();
+    // The endpoint fell back to Qwen after a rate limit but still produced a
+    // usable doc — carry that through so the UI can tell the user (not a
+    // silent provider swap).
+    if (j.rateLimited) { job.rateLimited = true; job.rateLimitMessage = j.message || null; job.rateLimitFellBackTo = j.fellBackTo || j.mode || null; }
     // Resolve company/role from the JD + AI output if they came in empty.
     if (!job.company || !job.role) { const e = extractMeta(job.jd, md); if (!job.company && e.company) job.company = e.company; if (!job.role && e.role) job.role = e.role; }
   } catch (e) {

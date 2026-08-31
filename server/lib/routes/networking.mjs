@@ -105,8 +105,11 @@ export function registerNetworkingRoutes(app) {
       return res.status(413).json({ error: 'prompt too large', details: [`assembled prompt is ${r.size} bytes; soft cap is ${r.cap}.`] });
     }
     if (r.mode === 'manual') return res.json({ mode: 'manual', prompt, message: 'No provider available — copy this prompt into any LLM.' });
-    if (r.error) return res.status(502).json({ mode: r.mode, prompt, error: r.error });
-    return res.json({ mode: r.mode, prompt, markdown: cleanLlmMarkdown(r.markdown), usage: r.usage });
+    // A rate limit is never a silent failure — `message` (and, when Qwen picked
+    // up the plan automatically, `rateLimited`/`fellBackTo`) always ride along
+    // so the UI can tell the user what happened, even on a 200.
+    if (r.error) return res.status(502).json({ mode: r.mode, prompt, error: r.error, ...(r.rateLimited ? { rateLimited: true, message: r.message } : {}) });
+    return res.json({ mode: r.mode, prompt, markdown: cleanLlmMarkdown(r.markdown), usage: r.usage, ...(r.rateLimited ? { rateLimited: true, message: r.message, fellBackTo: r.fellBackTo } : {}) });
   });
 
   app.post('/api/networking/save', llmRateLimit, async (req, res) => {

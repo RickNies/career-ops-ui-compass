@@ -161,8 +161,11 @@ export function registerInterviewRoutes(app) {
     if (r.mode === 'manual') {
       return res.json({ mode: 'manual', prompt, message: 'No provider available — copy this prompt into any LLM.' });
     }
-    if (r.error) return res.status(502).json({ mode: r.mode, prompt, error: r.error });
-    return res.json({ mode: r.mode, prompt, markdown: cleanLlmMarkdown(r.markdown), usage: r.usage });
+    // A rate limit is never a silent failure — `message` (and, when Qwen picked
+    // up the turn automatically, `rateLimited`/`fellBackTo`) always ride along
+    // so the UI can tell the user what happened, even on a 200.
+    if (r.error) return res.status(502).json({ mode: r.mode, prompt, error: r.error, ...(r.rateLimited ? { rateLimited: true, message: r.message } : {}) });
+    return res.json({ mode: r.mode, prompt, markdown: cleanLlmMarkdown(r.markdown), usage: r.usage, ...(r.rateLimited ? { rateLimited: true, message: r.message, fellBackTo: r.fellBackTo } : {}) });
   });
 
   // Persist a finished transcript to the user layer. Explicit user action.

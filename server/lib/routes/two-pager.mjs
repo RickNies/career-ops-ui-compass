@@ -130,10 +130,13 @@ export function registerTwoPagerRoutes(app) {
       return res.status(413).json({ error: 'prompt too large', details: [`assembled prompt is ${r.size} bytes; soft cap is ${r.cap}.`] });
     }
     if (r.mode === 'manual') return res.json({ mode: 'manual', prompt, message: 'No provider available — copy this prompt into any LLM.' });
-    if (r.error) return res.status(502).json({ mode: r.mode, prompt, error: r.error });
+    // A rate limit is never a silent failure — `message` (and, when Qwen picked
+    // up the draft automatically, `rateLimited`/`fellBackTo`) always ride along
+    // so the UI can tell the user what happened, even on a 200.
+    if (r.error) return res.status(502).json({ mode: r.mode, prompt, error: r.error, ...(r.rateLimited ? { rateLimited: true, message: r.message } : {}) });
     const fields = parseYamlFields(r.markdown);
     if (!fields) return res.status(502).json({ mode: r.mode, prompt, error: 'could not parse the two-pager YAML the model returned' });
-    return res.json({ mode: r.mode, prompt, fields, usage: r.usage });
+    return res.json({ mode: r.mode, prompt, fields, usage: r.usage, ...(r.rateLimited ? { rateLimited: true, message: r.message, fellBackTo: r.fellBackTo } : {}) });
   });
 }
 
