@@ -367,49 +367,55 @@
   }
 
   .rv-grid{display:grid;grid-template-columns:1fr;grid-template-areas:"left" "right";gap:24px}
-  /* ---- fit-to-viewport stage: .rv-left is capped to the space left below
-     the top chrome (progress/topbar/filters) down to the viewport edge —
-     --rv-avail is computed+kept in sync by syncStageHeight() in the review
-     script (measures #rvCard's top + the live top-chrome height on every
-     render/resize/filter-toggle, since expanding the filter bar changes it
-     too). Revealing the reason-prompt row just grows content INSIDE this
-     already-bounded box; if it ever doesn't fit, .rv-left scrolls itself —
-     contained, never the page/document — instead of pushing the actions
-     off the bottom of the viewport. The JD panel gets the same treatment
-     (was already independently scrollable) so neither column can ever push
-     the card taller than the viewport. */
-  .rv-left{grid-area:left;min-width:0;max-height:var(--rv-avail, calc(100vh - 260px));overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding-right:2px}
+  /* ---- fit-to-viewport stage: .rv-left NEVER scrolls — the fit ring, meta,
+     both match sections and the vote/Apply actions must all be visible with
+     no internal scrollbar. --rv-avail is computed+kept in sync by
+     syncStageHeight() in the review script (measures #rvCard's top + the
+     live top-chrome height on every render/resize/filter-toggle, since
+     expanding the filter bar changes it too) and used as a hard max-height
+     backstop with overflow:hidden (clip, never scroll) — but the real fit
+     comes from the content itself: cardMarkup() caps "what lines up well"/
+     "worth a closer look" to a few lines each, and the CSS below keeps
+     spacing tight, so in practice the content sits comfortably under
+     --rv-avail and nothing is ever clipped. The JD panel (right column)
+     keeps the ONLY scroll — it shares the same --rv-avail bound at ≥880px
+     so both columns align to one row height. */
+  .rv-left{grid-area:left;min-width:0;max-height:var(--rv-avail, calc(100vh - 260px));overflow:hidden;padding-right:2px}
   .rv-right{grid-area:right;min-width:0}
-  .rv-card-head{display:flex;gap:16px;align-items:flex-start}
-  .rv-card-head .fit{width:74px}
-  .rv-card-head .fit .ring{width:66px;height:66px;font-size:23px}
+  .rv-card-head{display:flex;gap:14px;align-items:flex-start}
+  .rv-card-head .fit{width:70px}
+  .rv-card-head .fit .ring{width:60px;height:60px;font-size:21px}
   .rv-headtext{flex:1;min-width:0}
-  .rv-title{font-size:21px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
-  .rv-company{color:var(--ink-soft);font-weight:600;font-size:15px;margin-top:3px}
-  .rv-meta{color:var(--muted);font-size:13.5px;margin-top:8px;display:flex;gap:12px;flex-wrap:wrap}
+  .rv-title{font-size:20px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .rv-company{color:var(--ink-soft);font-weight:600;font-size:14.5px;margin-top:2px}
+  .rv-meta{color:var(--muted);font-size:13px;margin-top:5px;display:flex;gap:12px;flex-wrap:wrap}
   .rv-badge{font-size:11px;font-weight:700;border-radius:999px;padding:3px 10px}
   .rv-badge-good{background:var(--sage-soft);color:var(--sage)}
   .rv-badge-bad{background:var(--terra-soft);color:var(--terra)}
-  .rv-details{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:10px;font-size:12.5px;color:var(--muted)}
+  .rv-details{display:flex;flex-wrap:wrap;gap:5px 16px;margin-top:5px;font-size:12px;color:var(--muted)}
   .rv-details b{color:var(--ink-soft);font-weight:600;margin-right:4px}
-  .rv-subhead{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;color:var(--muted);margin:18px 0 6px}
-  .rv-highlights{margin:0;padding:0 0 0 18px;color:var(--ink-soft);font-size:14px;line-height:1.6}
-  .rv-highlights li{margin-bottom:4px}
+  .rv-subhead{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;color:var(--muted);margin:10px 0 4px}
+  .rv-highlights{margin:0;padding:0 0 0 18px;color:var(--ink-soft);font-size:13.5px;line-height:1.45}
+  .rv-highlights li{margin-bottom:3px}
+  .rv-highlights li:last-child{margin-bottom:0}
   /* fit sections restyle — sage for "what lines up well", terra/amber for
      "worth a closer look"; key terms get bold+underline emphasis (see
-     emphasize() in the review script) so both lists stay scannable */
+     emphasize() in the review script) so both lists stay scannable.
+     cardMarkup() caps each list to a handful of lines (see the review
+     script) so — combined with this tighter spacing — both sections plus
+     the actions below always fit in .rv-left with no scroll. */
   .rv-subhead-good{color:var(--sage)}
   .rv-subhead-bad{color:var(--terra)}
-  .rv-lines-up{list-style:none;background:var(--sage-soft);border-radius:12px;padding:10px 14px 10px 34px}
-  .rv-lines-up li{position:relative;margin-bottom:6px}
+  .rv-lines-up{list-style:none;background:var(--sage-soft);border-radius:12px;padding:8px 12px 8px 30px}
+  .rv-lines-up li{position:relative;margin-bottom:4px}
   .rv-lines-up li:last-child{margin-bottom:0}
-  .rv-lines-up li::before{content:"";position:absolute;left:-20px;top:7px;width:9px;height:9px;border-radius:999px;background:var(--sage)}
+  .rv-lines-up li::before{content:"";position:absolute;left:-18px;top:6px;width:8px;height:8px;border-radius:999px;background:var(--sage)}
   .rv-lines-up strong{color:#1D4F40}
   .rv-lines-up u{text-decoration-color:var(--sage)}
-  .rv-closer-look{list-style:none;background:var(--terra-soft);border-radius:12px;padding:10px 14px 10px 34px}
-  .rv-closer-look li{position:relative;margin-bottom:6px}
+  .rv-closer-look{list-style:none;background:var(--terra-soft);border-radius:12px;padding:8px 12px 8px 30px}
+  .rv-closer-look li{position:relative;margin-bottom:4px}
   .rv-closer-look li:last-child{margin-bottom:0}
-  .rv-closer-look li::before{content:"";position:absolute;left:-20px;top:7px;width:9px;height:9px;border-radius:2px;background:var(--terra);transform:rotate(45deg)}
+  .rv-closer-look li::before{content:"";position:absolute;left:-18px;top:6px;width:8px;height:8px;border-radius:2px;background:var(--terra);transform:rotate(45deg)}
   .rv-closer-look strong{color:#7A3A22}
   .rv-closer-look u{text-decoration-color:var(--terra)}
   /* Below 880px, left/right STACK (single column) — capping the JD panel to
@@ -424,7 +430,7 @@
   .rv-jd-body h3{font-size:14px;margin:10px 0 4px}
   .rv-jd-body ul,.rv-jd-body ol{margin:4px 0 8px;padding-left:20px}
   .rv-jd-loading,.rv-jd-thin{color:var(--muted)}
-  .rv-actions{display:flex;align-items:center;justify-content:center;gap:20px;margin-top:24px}
+  .rv-actions{display:flex;align-items:center;justify-content:center;gap:18px;margin-top:14px}
   .vbtn.rv-big{width:64px;height:64px;position:relative}
   .vbtn.rv-big svg{width:27px;height:27px}
   .vbtn.rv-big:disabled{opacity:.5;cursor:default}
@@ -440,25 +446,39 @@
   .vbtn.rv-voted.bad .rv-undo-icon{border-color:var(--terra);color:var(--terra)}
   .vbtn.rv-voted:hover .rv-undo-icon{transform:scale(1.1)}
   .rv-apply{padding:12px 20px}
-  .rv-reasons{margin-top:16px;text-align:center}
-  .rv-reasons-hint{color:var(--muted);font-size:12.5px;margin-bottom:8px}
+  .rv-reasons{margin-top:10px;text-align:center}
+  .rv-reasons-hint{color:var(--muted);font-size:12.5px;margin-bottom:5px}
   .rv-reasons-chips{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;align-items:center}
   .rv-reason-skip{padding:5px 14px;font-size:12px}
   .rv-end{text-align:center;max-width:360px;margin:40px auto 0}
   .rv-end-check{width:64px;height:64px;border-radius:999px;background:var(--sage-soft);color:var(--sage);font-size:28px;font-weight:700;display:grid;place-items:center;margin:0 auto 16px}
   .rv-end h2{font-size:22px;margin-bottom:6px}
   .rv-end p{color:var(--muted);font-size:14px;margin-bottom:20px}
+  /* "adjust your filters to see more" prompt under the end-of-queue CTA —
+     opens the SAME filter panel now nested in the top row (see renderEnd()
+     in the review script) rather than sending them back to the feed. */
+  .rv-end-adjust{margin-top:20px;padding-top:18px;border-top:1px solid var(--line-soft)}
+  .rv-end-adjust p{color:var(--muted);font-size:13px;margin:0 0 10px}
 
   /* ---- Review Mode: live filter bar (compact, collapsible; reads/writes the
      SAME shared window.state as the feed's own filter bar above — see the
-     review-mode script at the bottom of this file). ---- */
-  .rv-filters{max-width:1100px;margin:14px auto 0;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm);box-shadow:var(--shadow-sm)}
-  .rv-filters-toggle{width:100%;display:flex;align-items:center;gap:9px;padding:10px 16px;border:0;background:transparent;color:var(--ink-soft);font-size:13px;font-weight:600;cursor:pointer;text-align:left;border-radius:inherit}
+     review-mode script at the bottom of this file). The toggle sits IN the
+     top row (.rv-topbar, between #rvCount and .rv-exit — see the HTML
+     below); #rvFilters is its positioning anchor and #rvFiltersBody drops
+     down as a floating panel underneath so opening it never changes the
+     top row's height (and never pushes the card down). Collapsed by
+     default (see wireFilterBar() in the review script). ---- */
+  .rv-filters{position:relative;flex:none}
+  .rv-filters-toggle{display:flex;align-items:center;gap:7px;padding:9px 13px;border:1.5px solid var(--line);border-radius:999px;background:var(--surface);color:var(--ink-soft);font-size:12.5px;font-weight:600;cursor:pointer;box-shadow:var(--shadow-sm);transition:border-color .12s ease,color .12s ease,background .12s ease}
+  .rv-filters-toggle:hover{border-color:var(--gold);color:var(--gold-deep)}
+  .rv-filters.open .rv-filters-toggle{background:var(--ink);color:#fff;border-color:var(--ink)}
   .rv-filters-toggle .rv-fic{width:14px;height:14px;color:var(--muted);flex:none}
+  .rv-filters.open .rv-filters-toggle .rv-fic{color:#fff}
   .rv-filters-summary{color:var(--muted);font-weight:500;font-size:12px}
-  .rv-filters-toggle .cv{width:12px;height:12px;color:var(--muted);transition:transform .15s ease;margin-left:auto;flex:none}
-  .rv-filters.open .rv-filters-toggle .cv{transform:rotate(180deg)}
-  .rv-filters-body{display:none;padding:2px 16px 14px;border-top:1px solid var(--line-soft)}
+  .rv-filters.open .rv-filters-summary{color:rgba(255,255,255,.8)}
+  .rv-filters-toggle .cv{width:12px;height:12px;color:var(--muted);transition:transform .15s ease;flex:none}
+  .rv-filters.open .rv-filters-toggle .cv{transform:rotate(180deg);color:#fff}
+  .rv-filters-body{display:none;position:absolute;z-index:15;top:calc(100% + 10px);left:50%;transform:translateX(-50%);width:min(640px,88vw);max-height:min(66vh,540px);overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 12px 38px rgba(22,50,79,.20);padding:4px 16px 14px;text-align:left}
   .rv-filters.open .rv-filters-body{display:block}
   .rv-f-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px}
   .rv-f-label{font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-right:2px;flex:none}
@@ -478,9 +498,14 @@
     .rv-apply{padding:10px 12px}
     .vbtn.rv-big{width:58px;height:58px}
     .vbtn.rv-big svg{width:24px;height:24px}
+    /* keep the top row ([count] · [Filters] · [✕]) from crowding on narrow
+       screens — drop the "N filters active" summary, tighten the toggle */
+    .rv-filters-summary{display:none}
+    .rv-filters-toggle{padding:8px 10px;font-size:12px;gap:5px}
+    .rv-filters-body{width:88vw}
   }
   @media(min-width:880px){
-    .rv-card{max-width:1100px;padding:32px 36px}
+    .rv-card{max-width:1100px;padding:24px 36px}
     .rv-grid{grid-template-columns:minmax(320px,420px) 1fr;grid-template-areas:"left right";gap:36px;align-items:start}
     .rv-carousel{max-width:1440px;gap:20px}
     .rv-peek{width:140px;padding:22px 16px}
@@ -680,25 +705,25 @@
       <div class="rv-progress"><div class="rv-progress-fill" id="rvProgressFill"></div></div>
       <div class="rv-topbar">
         <span class="rv-count" id="rvCount">0 of 0</span>
-        <button class="rv-exit" id="rvExit" type="button" aria-label="Exit review mode">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6 6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
 
-      <!-- Live filter bar: the SAME filters as the feed (search, sort, work
-           type, location, category, function, level, salary, "From last
-           search"), bound to the shared window.state. Changing a control
-           here updates window.state, persists via the feed's own
-           saveFilters(), and recomputes the review queue immediately (see
-           the review-mode script at the bottom of the file). -->
-      <div class="rv-filters" id="rvFilters">
-        <button type="button" class="rv-filters-toggle" id="rvFiltersToggle" aria-expanded="false" aria-controls="rvFiltersBody">
-          <svg class="rv-fic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
-          Filters
-          <span class="rv-filters-summary" id="rvFiltersSummary">No filters active</span>
-          <svg class="cv" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
-        </button>
-        <div class="rv-filters-body" id="rvFiltersBody">
+        <!-- Live filter bar toggle: nested in the top row, between the
+             progress counter and Exit. The panel below is the SAME filters
+             as the feed (search, sort, work type, location, category,
+             function, level, salary, "From last search"), bound to the
+             shared window.state — collapsed by default, drops down as a
+             floating panel anchored under this toggle when opened (see
+             .rv-filters-body's CSS). Changing a control in it updates
+             window.state, persists via the feed's own saveFilters(), and
+             recomputes the review queue immediately (see the review-mode
+             script at the bottom of the file). -->
+        <div class="rv-filters" id="rvFilters">
+          <button type="button" class="rv-filters-toggle" id="rvFiltersToggle" aria-expanded="false" aria-controls="rvFiltersBody">
+            <svg class="rv-fic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+            Filters
+            <span class="rv-filters-summary" id="rvFiltersSummary">No filters active</span>
+            <svg class="cv" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div class="rv-filters-body" id="rvFiltersBody">
           <div class="rv-f-row">
             <label class="rv-f-search">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
@@ -744,7 +769,12 @@
           <div class="rv-f-row">
             <label class="new-only"><input type="checkbox" id="rvNewOnly">From last search</label>
           </div>
+          </div>
         </div>
+
+        <button class="rv-exit" id="rvExit" type="button" aria-label="Exit review mode">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
       </div>
     </div>
     <div class="rv-body" id="rvBody">
@@ -1520,6 +1550,18 @@ if(location.hash==="#add") openModal();
   var WORK_TYPES = ['Remote', 'Hybrid', 'On-site'];
   var filtersWired = false;
 
+  // .rv-left has no internal scroll (see CSS) — cap "what lines up well" /
+  // "worth a closer look" to a handful of lines each so, combined with the
+  // tighter spacing in the CSS, the fit ring + both sections + the vote/
+  // Apply actions always fit above the fold with no scrollbar.
+  var RV_LINES_UP_MAX = 3;
+  var RV_CLOSER_LOOK_MAX = 2;
+
+  // Set by wireFilterBar() below — lets the "You're all caught up" end
+  // screen (renderEnd()) open the SAME filter panel now nested in the top
+  // row, without duplicating its open/close logic.
+  var openFiltersPanel = null;
+
   function rvState(){ return window.state; }
 
   function clampSal(v){
@@ -1640,18 +1682,26 @@ if(location.hash==="#add") openModal();
     var filtersWrap = document.getElementById('rvFilters');
     var toggleBtn = document.getElementById('rvFiltersToggle');
     if (toggleBtn && filtersWrap){
+      // Now nested in the top row (see HTML) with the panel as a floating
+      // overlay anchored under the toggle — opening/closing it no longer
+      // changes the top-chrome height, but syncStageHeight() is still cheap
+      // and safe to call on every toggle in case that ever changes.
+      var setFiltersOpen = function(open){
+        filtersWrap.classList.toggle('open', open);
+        toggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        try { localStorage.setItem('compass_rvfilters_open', open ? '1' : '0'); } catch(e){}
+        syncStageHeight();
+      };
       var openPref = false;
       try { openPref = localStorage.getItem('compass_rvfilters_open') === '1'; } catch(e){}
       filtersWrap.classList.toggle('open', openPref);
       toggleBtn.setAttribute('aria-expanded', openPref ? 'true' : 'false');
       toggleBtn.addEventListener('click', function(){
-        var open = filtersWrap.classList.toggle('open');
-        toggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
-        try { localStorage.setItem('compass_rvfilters_open', open ? '1' : '0'); } catch(e){}
-        // filters-open/closed changes the top-chrome height, which shifts
-        // how much room is left for the card — resync the fit-to-viewport cap.
-        syncStageHeight();
+        setFiltersOpen(!filtersWrap.classList.contains('open'));
       });
+      // Exposed so renderEnd()'s "adjust your filters" prompt can open the
+      // SAME panel in place, without leaving the end screen.
+      openFiltersPanel = function(){ setFiltersOpen(true); };
     }
   }
 
@@ -1779,8 +1829,12 @@ if(location.hash==="#add") openModal();
     var badOn  = rv && rv.verdict==='bad'  ? ' on rv-voted' : '';
     var UNDO_ICON = '<span class="rv-undo-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></span>';
     var reqm = normalizeReqMatches(j);
-    var linesUp = reqm ? reqm.met : highlightsFor(j);
-    var closerLook = reqm ? reqm.gap : gapsFor(j);
+    // .rv-left never scrolls (see CSS), so both match sections are capped to
+    // only as many lines as comfortably fit alongside the fit ring/meta and
+    // the vote/Apply actions below — RV_LINES_UP_MAX/RV_CLOSER_LOOK_MAX,
+    // defined above.
+    var linesUp = (reqm ? reqm.met : highlightsFor(j)).slice(0, RV_LINES_UP_MAX);
+    var closerLook = (reqm ? reqm.gap : gapsFor(j)).slice(0, RV_CLOSER_LOOK_MAX);
     var closerLookHtml = closerLook.length ? (
       '<div class="rv-subhead rv-subhead-bad">Worth a closer look</div>'+
       '<ul class="rv-highlights rv-closer-look">'+closerLook.map(function(s){ return '<li>'+emphasize(s)+'</li>'; }).join('')+'</ul>'
@@ -2029,11 +2083,24 @@ if(location.hash==="#add") openModal();
       '<h2>You’re all caught up</h2>'+
       '<p>You’ve reviewed every job in this queue.</p>'+
       '<button class="btn btn--primary" id="rvBackToFeed" type="button">Back to feed</button>'+
+      '<div class="rv-end-adjust">'+
+        '<p>That’s everything matching your current filters — adjust your filters to see more jobs.</p>'+
+        '<button class="btn btn--outline btn--sm" id="rvEndAdjustFilters" type="button">Adjust filters</button>'+
+      '</div>'+
     '</div>';
     fillEl.style.width = '100%';
     countEl.textContent = queue.length + ' of ' + queue.length;
     var back = document.getElementById('rvBackToFeed');
     if (back) back.onclick = closeReviewMode;
+    // Opens the SAME filter panel now nested in the top row (see
+    // wireFilterBar()) right here, so filters can be loosened without
+    // leaving this end screen.
+    var adjust = document.getElementById('rvEndAdjustFilters');
+    if (adjust) adjust.onclick = function(){
+      if (typeof openFiltersPanel === 'function') openFiltersPanel();
+      var toggleBtn = document.getElementById('rvFiltersToggle');
+      if (toggleBtn && toggleBtn.focus) toggleBtn.focus();
+    };
   }
 
   // Distinct from renderEnd() ("you finished the queue") — this is "the live
