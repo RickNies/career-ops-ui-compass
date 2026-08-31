@@ -304,6 +304,62 @@
   .qa-ok{display:flex;align-items:center;gap:8px;color:var(--sage);font-size:13.5px;font-weight:600;margin-bottom:13px}
   .qa-ok svg{width:16px;height:16px}
 
+  /* ---- Review Mode (focused, one-job-at-a-time overlay) ----
+     Self-contained: reuses .fit/.ring/.lbl/.fit-strong/.fit-good/.fit-fair
+     (fit ring) and .vbtn/.vbtn.good/.vbtn.bad (like/pass buttons) and
+     .rpop-chip (reason chips) from the shared vocabulary above — only new
+     layout/chrome rules live here. */
+  .rv-overlay{position:fixed;inset:0;z-index:100;background:var(--bg);display:none;flex-direction:column}
+  .rv-overlay.open{display:flex}
+  .rv-top{padding:16px 22px 0}
+  .rv-progress{height:5px;background:var(--line-soft);border-radius:999px;overflow:hidden}
+  .rv-progress-fill{height:100%;width:0;background:var(--gold);border-radius:999px;transition:width .25s ease}
+  .rv-topbar{display:flex;align-items:center;justify-content:space-between;margin-top:10px;max-width:520px;margin-left:auto;margin-right:auto}
+  .rv-count{color:var(--muted);font-size:13.5px;font-weight:600}
+  .rv-exit{width:36px;height:36px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);font-size:16px;line-height:1;display:grid;place-items:center;padding:0}
+  .rv-exit:hover{border-color:var(--terra);color:var(--terra)}
+  .rv-body{flex:1;display:flex;align-items:flex-start;justify-content:center;padding:26px 22px 40px;overflow:auto}
+  .rv-card{position:relative;z-index:2;width:100%;max-width:520px;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:0 4px 10px rgba(22,50,79,.08),0 24px 48px rgba(22,50,79,.16);padding:26px;transition:transform .22s ease,opacity .22s ease}
+  .rv-card::before,.rv-card::after{content:"";position:absolute;left:0;right:0;margin:0 auto;background:var(--surface-2);border:1px solid var(--line-soft);border-radius:20px;z-index:-1}
+  .rv-card::before{top:9px;width:96%;height:100%;opacity:.7}
+  .rv-card::after{top:18px;width:92%;height:100%;opacity:.4}
+  .rv-card.rv-enter{transform:translateX(26px);opacity:0}
+  .rv-card.rv-slide-out{transform:translateX(-26px);opacity:0}
+  @media(prefers-reduced-motion:reduce){ .rv-card{transition:none !important} .rv-progress-fill{transition:none} }
+  .rv-card-head{display:flex;gap:16px;align-items:flex-start}
+  .rv-card-head .fit{width:74px}
+  .rv-card-head .fit .ring{width:66px;height:66px;font-size:23px}
+  .rv-headtext{flex:1;min-width:0}
+  .rv-title{font-size:21px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .rv-company{color:var(--ink-soft);font-weight:600;font-size:15px;margin-top:3px}
+  .rv-meta{color:var(--muted);font-size:13.5px;margin-top:8px;display:flex;gap:12px;flex-wrap:wrap}
+  .rv-badge{font-size:11px;font-weight:700;border-radius:999px;padding:3px 10px}
+  .rv-badge-good{background:var(--sage-soft);color:var(--sage)}
+  .rv-badge-bad{background:var(--terra-soft);color:var(--terra)}
+  .rv-highlights{margin:18px 0 0;padding:0 0 0 18px;color:var(--ink-soft);font-size:14px;line-height:1.6}
+  .rv-highlights li{margin-bottom:4px}
+  .rv-jd{margin-top:16px;border-top:1px solid var(--line-soft);padding-top:12px}
+  .rv-jd summary{cursor:pointer;font-weight:600;font-size:13.5px;color:var(--gold-deep)}
+  .rv-jd-body{margin-top:10px;font-size:13.5px;line-height:1.6;color:var(--ink-soft);max-height:280px;overflow:auto}
+  .rv-jd-body h3{font-size:14px;margin:10px 0 4px}
+  .rv-jd-body ul,.rv-jd-body ol{margin:4px 0 8px;padding-left:20px}
+  .rv-jd-loading,.rv-jd-thin{color:var(--muted)}
+  .rv-actions{display:flex;align-items:center;justify-content:center;gap:20px;margin-top:24px}
+  .vbtn.rv-big{width:64px;height:64px}
+  .vbtn.rv-big svg{width:27px;height:27px}
+  .rv-apply{padding:12px 20px}
+  .rv-reasons{margin-top:16px;text-align:center}
+  .rv-reasons-hint{color:var(--muted);font-size:12.5px;margin-bottom:8px}
+  .rv-reasons-chips{display:flex;flex-wrap:wrap;gap:7px;justify-content:center}
+  .rv-end{text-align:center;max-width:360px;margin:40px auto 0}
+  .rv-end-check{width:64px;height:64px;border-radius:999px;background:var(--sage-soft);color:var(--sage);font-size:28px;font-weight:700;display:grid;place-items:center;margin:0 auto 16px}
+  .rv-end h2{font-size:22px;margin-bottom:6px}
+  .rv-end p{color:var(--muted);font-size:14px;margin-bottom:20px}
+  @media(max-width:620px){
+    .rv-card-head{flex-direction:column;align-items:flex-start}
+    .rv-actions{gap:14px}
+  }
+
   @media(max-width:920px){
     .jobs-layout{flex-direction:column}
     .rev-rail{position:static;width:100%;max-height:none;order:-1}
@@ -352,6 +408,10 @@
         <button class="btn btn--primary" id="addJobBtn" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>
           Add a job
+        </button>
+        <button class="btn btn--outline" id="reviewModeBtn" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="14" height="14" rx="2.5"/><path d="M4 8v10a2 2 0 0 0 2 2h10"/></svg>
+          Review mode
         </button>
         <button class="btn btn--outline" id="refreshBtn" type="button">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v5h-5"/></svg>
@@ -479,6 +539,20 @@
     <div class="modal-card" id="qaCard" role="dialog" aria-modal="true" aria-labelledby="qaTitle" aria-describedby="qaSub">
       <div id="qaBody"></div>
     </div>
+  </div>
+
+  <!-- ====== Review Mode overlay (self-contained; reads JOBS/matches, reuses saveReview) ====== -->
+  <div class="rv-overlay" id="rvOverlay" aria-hidden="true" role="dialog" aria-modal="true" aria-label="Review mode">
+    <div class="rv-top">
+      <div class="rv-progress"><div class="rv-progress-fill" id="rvProgressFill"></div></div>
+      <div class="rv-topbar">
+        <span class="rv-count" id="rvCount">0 of 0</span>
+        <button class="rv-exit" id="rvExit" type="button" aria-label="Exit review mode">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="rv-body" id="rvBody"><!-- filled by review-mode script below --></div>
   </div>
 
   <!-- shared toast: screen-reader announced, non-blocking -->
@@ -1192,5 +1266,244 @@ render();
 if(location.hash==="#add") openModal();
 </script>
   <script src="js/wire.js"></script>
+  <script>
+/* ============================================================================
+ * Review Mode — focused, one-job-at-a-time overlay. SELF-CONTAINED: reads
+ * existing state and reuses existing functions rather than reimplementing
+ * them. Does NOT modify matches()/render()/renderRail()/cardHTML() above —
+ * the only touch on the pre-existing feed code is the "Review mode" button
+ * markup added to the toolbar. All reused hooks are read off `window` at
+ * call time (button click / card actions), by which point js/wire.js has
+ * already swapped in its live-data versions of matches/saveReview/getReview/
+ * render/fmtSal (and exposed jGet/jdToHtml — see wire.js) — so reviews made
+ * here are the SAME server-backed saveReview the feed's ✓/✗ buttons use, and
+ * sync everywhere.
+ * ========================================================================== */
+(function(){
+  'use strict';
+  var overlay = document.getElementById('rvOverlay');
+  var bodyEl  = document.getElementById('rvBody');
+  var countEl = document.getElementById('rvCount');
+  var fillEl  = document.getElementById('rvProgressFill');
+  var launchBtn = document.getElementById('reviewModeBtn');
+  var exitBtn   = document.getElementById('rvExit');
+  if(!overlay || !bodyEl || !launchBtn) return;
+
+  var queue = [];      // locked snapshot for this session — set once, on open
+  var cursor = 0;
+  var isOpen = false;
+  var passTimer = null;
+  var PASS_REASON_MS = 2200; // optional reason window before auto-advance
+
+  function rvEsc(s){ return String(s==null?'':s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  function reduceMotion(){ return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+
+  function fitInfo(j){
+    var fit = (typeof j.fit === 'number') ? j.fit : 0;
+    var cls = fit>=86?'fit-strong':(fit>=75?'fit-good':'fit-fair');
+    var lbl = fit>=86?'Strong fit':(fit>=75?'Good fit':'Fair fit');
+    return {fit:fit, cls:cls, lbl:lbl};
+  }
+
+  // 3-4 key highlights: prefer the AI fit-analysis "strengths" already
+  // computed for the job (same data job cards show under "Strengths & gaps");
+  // fall back to sentence-splitting the "why it fits" note for rows that
+  // haven't been AI-scored yet, so every card has *something* honest to show.
+  function highlightsFor(j){
+    var out = [];
+    if (j.strengths && j.strengths.length) out = j.strengths.slice(0,4);
+    else if (j.why) out = String(j.why).split(/(?:\r?\n)+|(?<=[.!?])\s+(?=[A-Z(])/).map(function(s){ return s.trim(); }).filter(Boolean).slice(0,4);
+    if (!out.length) out = ['No summary yet — read the full JD below.'];
+    return out;
+  }
+
+  function salaryText(j){
+    if (typeof window.fmtSal === 'function') return window.fmtSal(j);
+    return j.salMax==null ? 'Salary not listed' : ('$'+j.salMin+'K–$'+j.salMax+'K');
+  }
+
+  function cardMarkup(j){
+    var fi = fitInfo(j);
+    var rv = (typeof window.getReview === 'function') ? window.getReview(j.id) : null;
+    var rvBadge = '';
+    if (rv && rv.verdict === 'good') rvBadge = '<span class="rv-badge rv-badge-good">Liked</span>';
+    else if (rv && rv.verdict === 'bad') rvBadge = '<span class="rv-badge rv-badge-bad">Passed</span>';
+    var goodOn = rv && rv.verdict==='good' ? ' on' : '';
+    var badOn  = rv && rv.verdict==='bad'  ? ' on' : '';
+    var hi = highlightsFor(j);
+    return ''+
+    '<div class="rv-card" id="rvCard">'+
+      '<div class="rv-card-head">'+
+        '<div class="fit '+fi.cls+'"><div class="ring">'+fi.fit+'</div><div class="lbl">'+fi.lbl+'</div></div>'+
+        '<div class="rv-headtext">'+
+          '<h2 class="rv-title">'+rvEsc(j.title)+rvBadge+'</h2>'+
+          '<div class="rv-company">'+rvEsc(j.company)+'</div>'+
+          '<div class="rv-meta"><span>'+rvEsc(j.loc||'—')+'</span>'+(j.work?'<span>'+rvEsc(j.work)+'</span>':'')+'<span>'+rvEsc(salaryText(j))+'</span></div>'+
+        '</div>'+
+      '</div>'+
+      '<ul class="rv-highlights">'+hi.map(function(s){ return '<li>'+rvEsc(s)+'</li>'; }).join('')+'</ul>'+
+      '<details class="rv-jd" id="rvJd"><summary>Read full JD</summary><div class="rv-jd-body" id="rvJdBody"><p class="rv-jd-loading">Click to load the full posting…</p></div></details>'+
+      '<div class="rv-actions">'+
+        '<button class="vbtn bad rv-big'+badOn+'" id="rvPass" type="button" aria-label="Pass on this role"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></button>'+
+        '<button class="btn btn--outline rv-apply" id="rvApply" type="button">Apply<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>'+
+        '<button class="vbtn good rv-big'+goodOn+'" id="rvLike" type="button" aria-label="Mark as a good fit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></button>'+
+      '</div>'+
+      '<div class="rv-reasons" id="rvReasons" hidden></div>'+
+    '</div>';
+  }
+
+  function updateProgress(){
+    var total = queue.length;
+    var shown = total ? Math.min(cursor+1, total) : 0;
+    countEl.textContent = shown + ' of ' + total;
+    fillEl.style.width = total ? ((Math.min(cursor,total)/total*100) + '%') : '0%';
+  }
+
+  function loadJd(j){
+    var det = document.getElementById('rvJd'), jdBody = document.getElementById('rvJdBody');
+    if (!det || !jdBody) return;
+    if (j._jdHtml){ jdBody.innerHTML = j._jdHtml; return; }
+    if (!j.url){ jdBody.innerHTML = '<p class="rv-jd-thin">No posting URL on this row.</p>'; return; }
+    if (typeof window.jGet !== 'function' || typeof window.jdToHtml !== 'function'){
+      jdBody.innerHTML = '<p class="rv-jd-thin">Full JD unavailable in this view.</p>'; return;
+    }
+    jdBody.innerHTML = '<p class="rv-jd-loading">Fetching the live posting…</p>';
+    window.jGet('/api/pipeline/preview?url='+encodeURIComponent(j.url)).then(function(prev){
+      var txt = (prev && prev.text) || '';
+      var html;
+      if (txt && txt.length > 20 && !/^\(/.test(txt)) html = window.jdToHtml(txt.slice(0,8000));
+      else html = '<p>'+rvEsc(j.why||'')+'</p><p class="rv-jd-thin">Live preview was thin (JS-rendered board).</p>';
+      j._jdHtml = html;
+      jdBody.innerHTML = html + '<p style="margin-top:10px"><a class="btn btn--outline btn--sm" href="'+rvEsc(j.url)+'" target="_blank" rel="noopener">Open original posting ↗</a></p>';
+    }).catch(function(){
+      jdBody.innerHTML = '<p class="rv-jd-thin">Could not fetch the live posting.</p>';
+    });
+  }
+
+  function showReasons(j){
+    var wrap = document.getElementById('rvReasons');
+    if (!wrap) return;
+    var reasons = (typeof REASONS!=='undefined' && REASONS.bad) ? REASONS.bad : [];
+    wrap.innerHTML = '<div class="rv-reasons-hint">Passed — mind sharing why? (optional)</div>'+
+      '<div class="rv-reasons-chips">'+reasons.map(function(r){
+        return '<button type="button" class="rpop-chip rv-reason-chip" data-r="'+rvEsc(r)+'">'+rvEsc(r)+'</button>';
+      }).join('')+'</div>';
+    wrap.hidden = false;
+    wrap.querySelectorAll('.rv-reason-chip').forEach(function(c){
+      c.addEventListener('click', function(){
+        wrap.querySelectorAll('.rv-reason-chip').forEach(function(x){ x.classList.remove('on'); });
+        c.classList.add('on');
+        window.saveReview(j.id, 'bad', c.getAttribute('data-r'));
+        clearTimeout(passTimer);
+        advance();
+      });
+    });
+    clearTimeout(passTimer);
+    passTimer = setTimeout(function(){ advance(); }, PASS_REASON_MS);
+  }
+
+  function wireCard(j){
+    var likeBtn = document.getElementById('rvLike');
+    var passBtn = document.getElementById('rvPass');
+    var applyBtn = document.getElementById('rvApply');
+    if (likeBtn) likeBtn.onclick = function(){
+      window.saveReview(j.id, 'good');
+      advance();
+    };
+    if (passBtn) passBtn.onclick = function(){
+      window.saveReview(j.id, 'bad');
+      passBtn.classList.add('on');
+      var likeB = document.getElementById('rvLike'); if(likeB) likeB.classList.remove('on');
+      showReasons(j);
+    };
+    if (applyBtn) applyBtn.onclick = function(){
+      if (!j.url){ if (typeof toast==='function') toast('No posting URL on this row', 'info'); return; }
+      window.open(j.url, '_blank', 'noopener');
+      // stays on the current card by design — no save, no advance
+    };
+    var det = document.getElementById('rvJd');
+    if (det) det.addEventListener('toggle', function(){ if (det.open) loadJd(j); });
+  }
+
+  function renderEnd(){
+    bodyEl.innerHTML = '<div class="rv-end">'+
+      '<div class="rv-end-check">✓</div>'+
+      '<h2>You’re all caught up</h2>'+
+      '<p>You’ve reviewed every job in this queue.</p>'+
+      '<button class="btn btn--primary" id="rvBackToFeed" type="button">Back to feed</button>'+
+    '</div>';
+    fillEl.style.width = '100%';
+    countEl.textContent = queue.length + ' of ' + queue.length;
+    var back = document.getElementById('rvBackToFeed');
+    if (back) back.onclick = closeReviewMode;
+  }
+
+  // Read-only introspection hook for automated verification (Playwright).
+  // Mirrors the closure state — never read by app logic, changes nothing.
+  function publishDebugState(){
+    window.__rvDebug = { cursor: cursor, queue: queue.map(function(j){ return {id:j.id, fit:j.fit, title:j.title, company:j.company, url:j.url}; }) };
+  }
+
+  function renderCurrent(animate){
+    clearTimeout(passTimer);
+    publishDebugState();
+    if (cursor >= queue.length){ renderEnd(); return; }
+    var j = queue[cursor];
+    bodyEl.innerHTML = cardMarkup(j);
+    wireCard(j);
+    updateProgress();
+    if (animate && !reduceMotion()){
+      var card = document.getElementById('rvCard');
+      if (card){
+        card.classList.add('rv-enter');
+        requestAnimationFrame(function(){ requestAnimationFrame(function(){ card.classList.remove('rv-enter'); }); });
+      }
+    }
+  }
+
+  function advance(){
+    cursor++;
+    var card = document.getElementById('rvCard');
+    if (card && !reduceMotion()){
+      card.classList.add('rv-slide-out');
+      setTimeout(function(){ renderCurrent(true); }, 180);
+    } else {
+      renderCurrent(true);
+    }
+  }
+
+  function openReviewMode(){
+    if (!window.JOBS || typeof window.matches !== 'function'){ return; }
+    // Snapshot the CURRENT filtered list, best-fit first — LOCKED for the
+    // session (changing filters requires exiting and re-entering).
+    queue = window.JOBS.filter(window.matches).slice().sort(function(a,b){ return (b.fit||0) - (a.fit||0); });
+    cursor = 0;
+    isOpen = true;
+    overlay.classList.add('open');
+    overlay.setAttribute('aria-hidden','false');
+    document.body.style.overflow = 'hidden';
+    renderCurrent(false);
+  }
+  function closeReviewMode(){
+    isOpen = false;
+    clearTimeout(passTimer);
+    overlay.classList.remove('open');
+    overlay.setAttribute('aria-hidden','true');
+    document.body.style.overflow = '';
+    // Refresh the underlying feed so any reviews made in this session (via
+    // the same saveReview the ✓/✗ buttons use) are reflected in the list/
+    // rail/counts — reuses the existing render(), does not alter it.
+    if (typeof window.render === 'function') window.render();
+    if (launchBtn) launchBtn.focus();
+  }
+
+  launchBtn.addEventListener('click', openReviewMode);
+  if (exitBtn) exitBtn.addEventListener('click', closeReviewMode);
+  document.addEventListener('keydown', function(e){
+    if (!isOpen) return;
+    if (e.key === 'Escape'){ e.preventDefault(); closeReviewMode(); }
+  });
+})();
+  </script>
 </body>
 </html>

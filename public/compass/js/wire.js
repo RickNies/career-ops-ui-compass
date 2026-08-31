@@ -47,6 +47,12 @@
     // does; a tooltip there would just restate the visible label.
   };
   window.COMPASS_TIPS = COMPASS_TIPS;
+  // Exposed (additive only — jGet/jdToHtml are otherwise module-private) so
+  // jobs.html's Review Mode overlay can reuse the EXACT SAME JD-fetch call
+  // (GET /api/pipeline/preview) and markdown/plain-text formatter that
+  // job-detail.html's wireDetail() uses, instead of duplicating that logic.
+  window.jGet = function () { return jGet.apply(null, arguments); };
+  window.jdToHtml = function () { return jdToHtml.apply(null, arguments); };
 
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
   function hostFrom(url) { try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return ''; } }
