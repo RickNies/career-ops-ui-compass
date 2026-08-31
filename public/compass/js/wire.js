@@ -3176,7 +3176,33 @@
       return __cvBaseline;
     }).catch(function () { __cvBaseline = { set: {}, lineTokens: [] }; return __cvBaseline; });
   }
-  function diffNormLine(s) { return String(s || '').toLowerCase().replace(/^[\s>*+\-•–—\d.)]+/, '').replace(/[*_`#]/g, '').replace(/\s+/g, ' ').trim(); }
+  // Normalize curly quotes / en-/em-dashes to their plain-ASCII equivalents
+  // BEFORE anything else, so a punctuation-style-only difference (curly vs
+  // straight quotes, em-dash vs hyphen) can't make an otherwise-identical
+  // line miss the baseline set.
+  function diffNormPunct(s) {
+    return String(s || '')
+      .replace(/[‘’‚‛′‵]/g, "'")
+      .replace(/[“”„‟″‶]/g, '"')
+      // en-/em-/figure/horizontal-bar dashes AND the non-breaking hyphen all
+      // collapse to a plain hyphen. An em/en dash used as a clause separator
+      // (usually surrounded by spaces in prose) keeps its spacing, so it still
+      // tokenizes the same as "word - word" written with a plain hyphen.
+      .replace(/[‒–—―‑]/g, '-');
+  }
+  function diffNormLine(s) {
+    return diffNormPunct(String(s || ''))
+      .toLowerCase()
+      .replace(/^[\s>*+\-•\d.)]+/, '')
+      .replace(/[*_`#]/g, '')
+      // collapse light sentence punctuation (but not a decimal point between
+      // digits, e.g. "$3.5M") so rewraps / merges with trivial punctuation
+      // churn still normalize to the same string.
+      .replace(/\.(?=\s|$)/g, '')
+      .replace(/[,;:!?"'()]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
   function diffTokens(s) { return diffNormLine(s).split(' ').filter(Boolean); }
   function diffNormWord(w) { return String(w || '').toLowerCase().replace(/[^a-z0-9%$.]/g, ''); }
   // Apply / remove highlights on the rendered blocks inside `root` (a container).
@@ -3194,15 +3220,31 @@
       if (!on) return;
       var n = diffNormLine(el.textContent);
       if (!n || base.set[n]) return; // empty or unchanged (verbatim in baseline)
-      // find the closest baseline line by token overlap for a word-level diff
+      // find the closest baseline line — or pair of ADJACENT baseline lines,
+      // to catch a bullet that was merged from two / split into two — by
+      // token overlap, for both the "is this really changed" gate below and
+      // the word-level diff.
       var elTok = diffTokens(el.textContent), best = null, bestScore = 0;
-      for (var i = 0; i < base.lineTokens.length; i++) {
-        var bt = base.lineTokens[i]; if (!bt.length) continue;
+      function scoreAgainst(bt) {
+        if (!bt.length) return null;
         var bset = {}; bt.forEach(function (t) { bset[t] = 1; });
         var hit = 0; elTok.forEach(function (t) { if (bset[t]) hit++; });
-        var score = hit / Math.max(elTok.length, 1);
-        if (score > bestScore) { bestScore = score; best = bset; }
+        return { score: hit / Math.max(elTok.length, 1), bset: bset };
       }
+      for (var i = 0; i < base.lineTokens.length; i++) {
+        var r = scoreAgainst(base.lineTokens[i]);
+        if (r && r.score > bestScore) { bestScore = r.score; best = r.bset; }
+        if (i + 1 < base.lineTokens.length) {
+          var r2 = scoreAgainst(base.lineTokens[i].concat(base.lineTokens[i + 1]));
+          if (r2 && r2.score > bestScore) { bestScore = r2.score; best = r2.bset; }
+        }
+      }
+      // Effectively unchanged: near-total token overlap with some baseline
+      // line (or an adjacent merge/split of two) — almost certainly just a
+      // re-wrap, sentence merge/split, or a punctuation/quote-style diff
+      // diffNormLine didn't already fold away. Don't flag it — only
+      // genuinely reworded or new content gets boxed.
+      if (bestScore >= 0.9) return;
       // Box the WHOLE changed bullet/line in a highlighter-yellow box.
       el.style.background = '#fff3b0'; el.style.borderLeft = '3px solid #f4b400';
       el.style.padding = '4px 9px'; el.style.borderRadius = '5px'; el.style.margin = '4px 0';
