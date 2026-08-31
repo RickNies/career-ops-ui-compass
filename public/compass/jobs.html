@@ -364,7 +364,7 @@
       <!-- ====== Reviewed rail (left) ====== -->
       <aside class="rev-rail" id="revRail">
         <div class="rev-rail-head" id="railToggle">
-          Past
+          Reviewed
           <span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg></span>
         </div>
         <div class="rev-body" id="revBody"><!-- filled by JS --></div>
@@ -459,7 +459,7 @@
           <div class="seg" role="tablist" aria-label="Review status">
             <button data-rev="not" class="on" type="button" role="tab" aria-selected="true" tabindex="0" aria-controls="list">Not reviewed</button>
             <!-- data-tip is set by js/wire.js (wireJobs) from COMPASS_TIPS.reviewedTab — the single source of truth for its copy. -->
-            <button data-rev="reviewed" type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="list">Past</button>
+            <button data-rev="reviewed" type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="list">Reviewed</button>
             <button data-rev="all" type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="list">All</button>
           </div>
           <div class="count" id="count"></div>
@@ -771,13 +771,14 @@ function render(){
 function jobById(id){ for(var i=0;i<JOBS.length;i++){ if(JOBS[i].id===id) return JOBS[i]; } return null; }
 function renderRail(){
   var reviews=getReviews();
-  var hadAnyEver=Object.keys(reviews).length>0;
   var liked=[], passed=[];
   Object.keys(reviews).forEach(function(id){
-    if(!isReviewedThisWeek(id)) return; /* past-week reviews live in the archive (My Jobs), not here */
     var j=jobById(id); if(!j) return;
     (reviews[id].verdict==="bad"?passed:liked).push({j:j, r:reviews[id]});
   });
+  function byNewest(a,b){ return (b.r.ts||0) - (a.r.ts||0); }
+  liked.sort(byNewest);
+  passed.sort(byNewest);
   function itemHTML(x){
     var reason=x.r.reason ? '<span class="ri-reason">'+esc(x.r.reason)+'</span>' : '';
     var sep=x.r.reason ? ' · ' : '';
@@ -803,12 +804,10 @@ function renderRail(){
   }
   var html="";
   if(!liked.length && !passed.length){
-    html = hadAnyEver
-      ? '<div class="rev-empty">Nothing reviewed yet this week. Your past reviews moved to the archive in My Jobs — nothing is deleted.</div>'
-      : '<div class="rev-empty">Nothing reviewed yet. Use the <b style="color:var(--sage)">✓</b> or <b style="color:var(--terra)">✗</b> on any job to sort it here — and jot down why, if you like.</div>';
+    html = '<div class="rev-empty">Nothing reviewed yet. Use the <b style="color:var(--sage)">✓</b> or <b style="color:var(--terra)">✗</b> on any job to sort it here.</div>';
   } else {
     html+=groupHTML("liked","👍 Liked",liked);
-    html+=groupHTML("passed","👎 Passed",passed);
+    html+=groupHTML("passed","👎 Past",passed);
   }
   document.getElementById("revBody").innerHTML=html;
 
