@@ -313,6 +313,10 @@
      summary left, full JD right, each independently scrollable; narrower
      widths stack to a single column (the original mobile layout). */
   .rv-overlay{position:fixed;inset:0;z-index:100;background:var(--bg);display:none;flex-direction:column}
+  /* the review overlay's own z-index (100) sits above the shared .modal
+     (z-index:80), so the "did you apply?" confirm — which opens ON TOP of
+     the review overlay — needs to outrank it, or its buttons are unclickable */
+  #rvApplyModal{z-index:110}
   .rv-overlay.open{display:flex}
   .rv-top{padding:16px 22px 0}
   .rv-progress{height:5px;background:var(--line-soft);border-radius:999px;overflow:hidden}
@@ -754,6 +758,16 @@
         <div class="rv-center" id="rvCenter"><!-- filled by review-mode script below --></div>
         <div class="rv-peek rv-peek-next empty" id="rvPeekNext" aria-hidden="true"></div>
       </div>
+    </div>
+  </div>
+
+  <!-- ====== Review Mode: "did you apply?" confirm — reuses the Quick Add
+       modal's own shell (.modal/.modal-card, styled above) and button
+       classes rather than adding new CSS; only used when window.compassConfirm
+       (job-detail.html's in-app confirm dialog) isn't available on this page. ====== -->
+  <div class="modal" id="rvApplyModal" aria-hidden="true">
+    <div class="modal-card" id="rvApplyCard" role="dialog" aria-modal="true" aria-labelledby="rvApplyTitle" aria-describedby="rvApplySub">
+      <div id="rvApplyBody"></div>
     </div>
   </div>
 
@@ -1865,6 +1879,84 @@ if(location.hash==="#add") openModal();
     if (skip) skip.addEventListener('click', function(){ advance(); });
   }
 
+  /* ============================================================================
+   * Apply → "did you apply?" — Apply opens the posting in a new tab (below,
+   * in wireCard) and stays on the card; a moment later this offers to mark
+   * the job Applied, using the SAME mechanism the regular Apply flow uses
+   * (job-detail.html's .btn.apply handler, wired in wire.js): the in-app
+   * confirm dialog (window.compassConfirm, when present) and the tracker-
+   * status write (POST /api/compass/tracker/status, status "Applied").
+   * window.compassConfirm is only defined on job-detail.html, so on this page
+   * askDidYouApply() falls back to an equivalent dialog built from jobs.html's
+   * OWN existing modal shell (.modal/.modal-card + the Quick Add modal's
+   * qa-actions/qa-cancel/qa-go button styling) and its own trapTab()/toast()
+   * — no new CSS, nothing reimplemented that already exists on this page.
+   * ========================================================================== */
+  var applyModal = document.getElementById('rvApplyModal');
+  var applyBody  = document.getElementById('rvApplyBody');
+  var applyCard  = document.getElementById('rvApplyCard');
+  var applyLastFocus = null, applyResolve = null;
+
+  function closeApplyModal(result){
+    if (!applyModal) return;
+    applyModal.classList.remove('open'); applyModal.setAttribute('aria-hidden', 'true');
+    if (applyLastFocus && applyLastFocus.focus) applyLastFocus.focus();
+    if (applyResolve){ var r = applyResolve; applyResolve = null; r(!!result); }
+  }
+  if (applyModal){
+    applyModal.addEventListener('mousedown', function(e){ if (e.target === applyModal) closeApplyModal(false); }); // backdrop click
+    document.addEventListener('keydown', function(e){
+      if (!applyModal.classList.contains('open')) return;
+      if (e.key === 'Escape'){ e.stopImmediatePropagation(); closeApplyModal(false); return; } // dismiss the prompt only — not the whole review overlay
+      trapTab(applyCard, e); // Tab cycles inside the dialog (reuses the page's existing focus-trap helper)
+    });
+  }
+
+  // "Did you apply?" — window.compassConfirm if present (matches the regular
+  // Apply flow's dialog exactly), else this page's own modal fallback above.
+  function askDidYouApply(j){
+    if (window.compassConfirm){
+      return window.compassConfirm({
+        title: 'Did you apply to this job?',
+        sub: 'We opened the posting in a new tab. We’ll add “' + j.title + ' — ' + j.company + '” to your tracker as Applied.',
+        confirmLabel: 'Yes, mark applied',
+        cancelLabel: 'Not yet'
+      });
+    }
+    if (!applyModal || !applyBody) return Promise.resolve(false);
+    return new Promise(function(resolve){
+      applyLastFocus = document.activeElement;
+      applyResolve = resolve;
+      applyBody.innerHTML =
+        '<h2 id="rvApplyTitle"><span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg></span>Did you apply to this job?</h2>'+
+        '<p class="msub" id="rvApplySub">We opened the posting in a new tab. We’ll add “'+rvEsc(j.title)+' — '+rvEsc(j.company)+'” to your tracker as Applied.</p>'+
+        '<div class="qa-actions"><button class="btn btn--outline qa-cancel" type="button" id="rvApplyNotYet">Not yet</button><button class="btn btn--primary qa-go" type="button" id="rvApplyYes">Yes, mark applied</button></div>';
+      applyModal.classList.add('open'); applyModal.setAttribute('aria-hidden', 'false');
+      document.getElementById('rvApplyNotYet').onclick = function(){ closeApplyModal(false); };
+      document.getElementById('rvApplyYes').onclick = function(){ closeApplyModal(true); };
+      document.getElementById('rvApplyYes').focus();
+    });
+  }
+
+  // Marks the job Applied using the SAME tracker-status write the regular
+  // Apply flow uses — same endpoint, same payload shape, same status value.
+  function markJobApplied(j){
+    fetch('/api/compass/tracker/status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ num: j.num, url: j.url, status: 'Applied' })
+    }).then(function(r){ return r.json(); }).then(function(body){
+      if (body && body.ok){
+        j.status = 'Applied';
+        if (typeof toast === 'function') toast('Marked Applied in the tracker ✓', 'success');
+      } else if (typeof toast === 'function') {
+        toast('That didn\'t save — check your connection and try again.', 'error');
+      }
+    }).catch(function(){
+      if (typeof toast === 'function') toast('That didn\'t save — check your connection and try again.', 'error');
+    });
+  }
+
   // Vote → confirmed state → undo. A verdict button click either CASTS a
   // vote (neutral → confirmed, reason prompt appears) or, if that same
   // button is already confirmed (rv-voted), UNDOES it (clearReview, back to
@@ -1914,7 +2006,14 @@ if(location.hash==="#add") openModal();
     if (applyBtn) applyBtn.onclick = function(){
       if (!j.url){ if (typeof toast==='function') toast('No posting URL on this row', 'info'); return; }
       window.open(j.url, '_blank', 'noopener');
-      // stays on the current card by design — no save, no advance
+      // stays on the current card by design — no save, no advance; a beat
+      // later, offer to mark it Applied (same pattern/mechanism as the
+      // regular Apply flow — see askDidYouApply()/markJobApplied() above).
+      setTimeout(function(){
+        askDidYouApply(j).then(function(ok){
+          if (ok) markJobApplied(j);
+        });
+      }, 300);
     };
 
     // A card can render already-reviewed (revisited via the carousel, or
