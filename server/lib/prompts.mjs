@@ -364,6 +364,12 @@ ${scaffold('readFiles', lang)}
 Then output the full A-G evaluation per modes/oferta.md (Role Summary, CV Match, Risks, Compensation,
 Application Strategy, Verdict, Posting Legitimacy) and a 0-5 score.
 
+SCORING PRIORITY (applies wherever the report judges fit, especially Block B "Match with CV" and Block C "Level and Strategy"):
+- Within any list of responsibilities, requirements, or nice-to-haves, an item listed EARLIER in the JD carries more weight than one listed later — treat list order as the poster's own priority signal, not something to re-rank yourself.
+- Weight REQUIRED / must-have qualifications far above PREFERRED / nice-to-have ones. A missing must-have should pull the match/score down substantially; a missing nice-to-have should only cost a little.
+- Treat seniority/level as a gate, not just one more factor: a clear over-level or under-level mismatch against the candidate's target level is a strong negative signal on its own, not something a few matching bullet points can offset.
+- Ignore boilerplate — benefits/perks lists, company mission/culture marketing copy, and EEO/legal/accommodation notices — when judging fit; it carries no scoring weight in either direction.
+
 VOICE: Address the candidate (the person whose CV/profile is provided) DIRECTLY in the second person — "you" / "your" (e.g. "your CV shows…", "you'd be a strong fit"). Never refer to them in the third person (no "she", "her", "the candidate", or their name).
 
 GROUNDING (critical): Base your analysis STRICTLY on the job description provided below. Do NOT assume or invent the company's industry, business model, or type (e.g. do not call it an "agency", "studio", "startup", "media company", etc.) unless the JD explicitly states it. If the job description below is missing, thin, or unreadable (e.g. boilerplate, navigation, or CSS/markup rather than an actual posting), DO NOT fabricate an evaluation — instead say you could not read the posting and advise opening the original link to verify, and give a low-confidence verdict.
