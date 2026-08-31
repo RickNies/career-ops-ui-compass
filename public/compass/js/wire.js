@@ -3628,6 +3628,14 @@
   // open Compass tab); true OS push with the tab closed would need a service
   // worker (out of scope).
   var NKEY = 'compass_notified';
+  // Per-page-load guard (module scope — resets on every navigation/reload,
+  // deliberately NOT persisted). Jobs already in a terminal state on the
+  // FIRST poll after this page loaded are seeded into `notified` silently
+  // (no toast): they finished before this page/session existed, so replaying
+  // them — e.g. on a new device, or after localStorage is cleared — is just
+  // noise. Anything that newly reaches a terminal state on a later poll
+  // during this session still toasts as usual.
+  var seededThisLoad = false;
   function retryJob(id) {
     jGet('/api/compass/jobs/' + id).then(function (j) { return jPost('/api/compass/generate', { type: j.type, company: j.company, role: j.role, url: j.url, jd: j.jd }); })
       .then(function (r) { var ok = r.body && r.body.jobId; toastMsg(ok ? 'Retrying…' : 'Couldn\'t retry — try again in a moment.', ok ? 'info' : 'error'); });
@@ -3647,11 +3655,12 @@
       updateBadge(list);
       if (typeof window.__compassOnJobs === 'function') window.__compassOnJobs(list); // tasks page live hook
       var notified; try { notified = JSON.parse(localStorage.getItem(NKEY) || 'null'); } catch (e) { notified = null; }
-      var firstRun = (notified === null); if (firstRun) notified = {};
+      if (notified === null) notified = {};
       var TERM = { done: 1, error: 1, cancelled: 1 };
+      var firstPoll = !seededThisLoad; seededThisLoad = true;
       list.forEach(function (j) {
         if (!TERM[j.status]) return;
-        if (firstRun) { notified[j.id] = 1; return; }   // seed silently on the first-ever tick
+        if (firstPoll) { notified[j.id] = 1; return; }   // seed silently on the first poll of THIS page load
         if (notified[j.id]) return;
         notified[j.id] = 1; completionToast(j);
       });
