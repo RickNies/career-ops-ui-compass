@@ -3,10 +3,11 @@
  *
  * Our runtime deps are deliberately just `express` + `js-yaml` (see CLAUDE.md),
  * so rather than pull in the `docx` package we emit a minimal-but-valid .docx:
- * a STORED (uncompressed) ZIP of the four OOXML parts Word/Google Docs need
- * ([Content_Types].xml, _rels/.rels, word/document.xml, word/_rels/document.xml.rels).
- * Input is a list of blocks (headings + paragraphs + bullet lists) so callers
- * don't hand-write XML. Text is XML-escaped; no external images/fonts/links.
+ * a STORED (uncompressed) ZIP of the five OOXML parts Word/Google Docs need
+ * ([Content_Types].xml, _rels/.rels, word/document.xml, word/_rels/document.xml.rels,
+ * word/numbering.xml). Input is a list of blocks (headings + paragraphs + bullet
+ * lists) so callers don't hand-write XML. Text is XML-escaped; no external
+ * images/fonts/links.
  *
  * A STORED zip needs a CRC-32 per entry — the standard IEEE table below.
  */
@@ -117,23 +118,35 @@ export function buildDocx(title, blocks) {
     else if (b.type === 'bullet') body.push(`<w:p><w:pPr><w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr>${runXml(b.text)}</w:p>`);
     else body.push(`<w:p>${runXml(b.text)}</w:p>`);
   }
+  // Résumé-friendly margins: 0.5in on every side (720 twips; 1440 twips = 1in),
+  // on a US Letter page (12240 x 15840 twips). Replaces Word's ~1in fallback
+  // that kicked in when <w:sectPr/> carried no <w:pgMar>/<w:pgSz>.
+  const sectPr = '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>';
+
   const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body.join('')}<w:sectPr/></w:body></w:document>`;
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body.join('')}${sectPr}</w:body></w:document>`;
 
   const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`;
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/></Types>`;
 
   const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`;
 
   const docRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`;
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/></Relationships>`;
+
+  // A single bullet list definition (abstractNumId 0 → numId 1, the numId every
+  // `bullet` block references). Without this part Word can't resolve numId=1
+  // and silently falls back to decimal auto-numbering ("1. 2. 3.").
+  const numberingXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:abstractNum w:abstractNumId="0"><w:multiLevelType w:val="hybridMultilevel"/><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="&#8226;"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="360" w:hanging="360"/></w:pPr><w:rPr><w:rFonts w:ascii="Symbol" w:hAnsi="Symbol" w:hint="default"/></w:rPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>`;
 
   return zip([
     { name: '[Content_Types].xml', data: Buffer.from(contentTypes, 'utf8') },
     { name: '_rels/.rels', data: Buffer.from(rels, 'utf8') },
     { name: 'word/document.xml', data: Buffer.from(documentXml, 'utf8') },
     { name: 'word/_rels/document.xml.rels', data: Buffer.from(docRels, 'utf8') },
+    { name: 'word/numbering.xml', data: Buffer.from(numberingXml, 'utf8') },
   ]);
 }
 
