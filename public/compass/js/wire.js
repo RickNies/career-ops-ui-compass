@@ -3622,19 +3622,48 @@
 
   // Global job watcher — runs on EVERY page (wire.js loads everywhere). Polls
   // GET /api/compass/jobs; updates the badge; fires a dismissable completion
-  // toast when a job first reaches done/error/cancelled. localStorage dedupes
-  // so navigating never double-notifies and a completion that happened on
-  // another page still surfaces on the next tick. NOTE: this is IN-PAGE (any
-  // open Compass tab); true OS push with the tab closed would need a service
-  // worker (out of scope).
+  // toast when a job first reaches done/error/cancelled. Dedupe is SERVER-
+  // BACKED (GET/POST /api/compass/notified — same pattern as reviews/tips)
+  // so a toast acknowledged on one device never replays on another, and a
+  // completion that happened while no device was open never replays either.
+  // NOTE: this is IN-PAGE (any open Compass tab); true OS push with the tab
+  // closed would need a service worker (out of scope).
   var NKEY = 'compass_notified';
+  // __notifiedMap is seeded by loadNotified() as part of the app's boot
+  // Promise.all (see the dispatch call near the bottom of this file) — BEFORE
+  // the first watchJobs() poll, same pattern as __tipsMap/loadTips() above.
+  // Server wins; localStorage is kept only as a same-device fast mirror (and
+  // fail-open fallback if the server's unreachable — never treat a failed
+  // fetch as "everything's already notified", since that would silently
+  // swallow every future toast).
+  var __notifiedMap = null;
+  function loadNotified() {
+    return jGet('/api/compass/notified').then(function (j) {
+      __notifiedMap = (j && j.map) || {};
+      // Merge in whatever this device already marked locally (e.g. a toast
+      // this device fired whose POST hasn't round-tripped yet) so nothing
+      // already acknowledged HERE gets replayed either.
+      try {
+        var local = JSON.parse(localStorage.getItem(NKEY) || 'null');
+        if (local) Object.keys(local).forEach(function (k) { __notifiedMap[k] = 1; });
+      } catch (e) { /* ignore */ }
+      try { localStorage.setItem(NKEY, JSON.stringify(__notifiedMap)); } catch (e) { /* ignore */ }
+      return __notifiedMap;
+    }).catch(function () {
+      // Fail-open: an unreachable server must never block a toast. Fall back
+      // to whatever this device already has locally.
+      try { __notifiedMap = JSON.parse(localStorage.getItem(NKEY) || 'null') || {}; } catch (e) { __notifiedMap = {}; }
+      return __notifiedMap;
+    });
+  }
   // Per-page-load guard (module scope — resets on every navigation/reload,
   // deliberately NOT persisted). Jobs already in a terminal state on the
   // FIRST poll after this page loaded are seeded into `notified` silently
   // (no toast): they finished before this page/session existed, so replaying
   // them — e.g. on a new device, or after localStorage is cleared — is just
   // noise. Anything that newly reaches a terminal state on a later poll
-  // during this session still toasts as usual.
+  // during this session still toasts as usual (and gets POSTed to the server
+  // so it never replays on any OTHER device either).
   var seededThisLoad = false;
   function retryJob(id) {
     jGet('/api/compass/jobs/' + id).then(function (j) { return jPost('/api/compass/generate', { type: j.type, company: j.company, role: j.role, url: j.url, jd: j.jd }); })
@@ -3654,17 +3683,25 @@
       var list = (d && d.jobs) || [];
       updateBadge(list);
       if (typeof window.__compassOnJobs === 'function') window.__compassOnJobs(list); // tasks page live hook
-      var notified; try { notified = JSON.parse(localStorage.getItem(NKEY) || 'null'); } catch (e) { notified = null; }
-      if (notified === null) notified = {};
+      // __notifiedMap is normally already seeded by loadNotified() (boot
+      // Promise.all runs before watchJobs ever starts) — this null-guard is
+      // just belt-and-suspenders for the (shouldn't-happen) case it's called
+      // before that settles.
+      if (!__notifiedMap) __notifiedMap = {};
       var TERM = { done: 1, error: 1, cancelled: 1 };
       var firstPoll = !seededThisLoad; seededThisLoad = true;
       list.forEach(function (j) {
         if (!TERM[j.status]) return;
-        if (firstPoll) { notified[j.id] = 1; return; }   // seed silently on the first poll of THIS page load
-        if (notified[j.id]) return;
-        notified[j.id] = 1; completionToast(j);
+        if (firstPoll) { __notifiedMap[j.id] = 1; return; }   // seed silently on the first poll of THIS page load — never toasts, see comment above
+        if (__notifiedMap[j.id]) return;   // already acknowledged — by THIS device, or another one via the server map
+        __notifiedMap[j.id] = 1;
+        completionToast(j);
+        // Server-persist so this SAME completion never replays on another
+        // device. Best-effort: the local mirror below already marks it seen
+        // for this device regardless of whether the POST lands.
+        jPost('/api/compass/notified', { id: j.id }).catch(function () { /* best-effort */ });
       });
-      try { localStorage.setItem(NKEY, JSON.stringify(notified)); } catch (e) { }
+      try { localStorage.setItem(NKEY, JSON.stringify(__notifiedMap)); } catch (e) { }
       return list;
     }).catch(function () { return []; });
   }
@@ -3723,7 +3760,7 @@
   }
 
   // ======================= dispatch ========================================
-  Promise.all([loadDead(), loadProvider(), loadFit(), loadSalary(), loadPosted(), loadBookmarks(), loadReviews(), loadTips()]).then(function () {
+  Promise.all([loadDead(), loadProvider(), loadFit(), loadSalary(), loadPosted(), loadBookmarks(), loadReviews(), loadTips(), loadNotified()]).then(function () {
     renderNav();
     injectMangoChrome();
     injectActivity();

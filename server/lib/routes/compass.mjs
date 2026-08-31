@@ -40,6 +40,19 @@
  *       as reviews above — a localStorage-only counter would reset on every
  *       new browser, defeating the point of "stop pestering me."
  *
+ *   GET/POST /api/compass/notified → server-side "already toasted you about
+ *       this completion" set (data/compass-notified.jsonl, one row per
+ *       terminal job id) for the global completion-toast watcher
+ *       (watchJobs() in wire.js). Same cross-device reasoning as reviews/tips
+ *       above: a localStorage-only dedupe set is per-browser, so the SAME
+ *       completion would toast again on every other device. GET seeds the
+ *       client's in-memory set on boot, BEFORE the first watchJobs() poll;
+ *       POST marks one job id seen once it's actually been toasted. This is
+ *       a single global set on THIS (:8100, one-user) instance — the
+ *       multi-user build makes it per-user via the store, which is where
+ *       "you never see another user's toast" is actually enforced; nothing
+ *       here needs per-user scoping.
+ *
  *   GET  /api/compass/setup/current → the TRUE current includeTitles/
  *       excludeTitles/cities/remoteUS/searchTerms, read straight off the real
  *       portals.yml (readCurrentPortalsRaw). setup.html fetches this on load
@@ -263,6 +276,33 @@ function writeTipsMap(map) {
   const tmp = TIPS_STORE + '.tmp';
   writeFileSync(tmp, lines.join('\n') + (lines.length ? '\n' : ''));
   renameSync(tmp, TIPS_STORE);
+}
+
+// Cross-device "already toasted you about this completion" set for the global
+// job-completion watcher (watchJobs() in wire.js) — server-side so a toast
+// acknowledged (seen) on one device never replays on another, and a
+// completion that happened while no device was open never replays either.
+// JSONL, ONE row per terminal job id, rewritten in full on every mark — same
+// shape/atomicity as TIPS_STORE just above. { id }. Single global set on this
+// (:8100, one-user) instance; see the module doc comment at the top of this
+// file for the multi-user note.
+const NOTIFIED_STORE = DATA_ROOT + '/data/compass-notified.jsonl';
+function readNotifiedMap() {
+  const map = {};
+  try {
+    readFileSync(NOTIFIED_STORE, 'utf8').split('\n').forEach((ln) => {
+      ln = ln.trim(); if (!ln) return;
+      try { const o = JSON.parse(ln); if (o && o.id) map[String(o.id)] = 1; } catch { /* skip bad line */ }
+    });
+  } catch { /* none yet */ }
+  return map;
+}
+function writeNotifiedMap(map) {
+  mkdirSync(dirname(NOTIFIED_STORE), { recursive: true });
+  const lines = Object.keys(map).sort().map((id) => JSON.stringify({ id }));
+  const tmp = NOTIFIED_STORE + '.tmp';
+  writeFileSync(tmp, lines.join('\n') + (lines.length ? '\n' : ''));
+  renameSync(tmp, NOTIFIED_STORE);
 }
 // Monday 00:00:00.000 local → the "this week" boundary used everywhere in the
 // app (feed's Reviewed tab/rail in jobs.html + the archive endpoint below).
@@ -732,6 +772,25 @@ export function registerCompassRoutes(app) {
     map[key] = (map[key] || 0) + 1;
     writeTipsMap(map);
     res.json({ ok: true, key, count: map[key] });
+  });
+
+  // ── Cross-device "already toasted" set for the global completion watcher
+  // (watchJobs() in wire.js) — see NOTIFIED_STORE comment above. GET → {map:
+  // {<jobId>:1}, count}, seeded into wire.js's boot flow BEFORE the first
+  // watchJobs() poll. POST { id } → mark one terminal job id seen (called
+  // right after a completion is actually toasted).
+  app.get('/api/compass/notified', (_req, res) => {
+    const map = readNotifiedMap();
+    res.json({ map, count: Object.keys(map).length });
+  });
+  app.post('/api/compass/notified', (req, res) => {
+    const body = req.body || {};
+    const id = String(body.id || '').trim().slice(0, 100);
+    if (!id) return res.status(400).json({ error: 'id required' });
+    const map = readNotifiedMap();
+    map[id] = 1;
+    writeNotifiedMap(map);
+    res.json({ ok: true, id });
   });
 
   // ── Review archive: past-week ✓/✗ reviews, for the "Review archive" section
