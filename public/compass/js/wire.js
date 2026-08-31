@@ -911,6 +911,16 @@
     return jGet('/api/compass/posted').then(function (j) { window.__postedMap = (j && j.map) || {}; return window.__postedMap; }).catch(function () { window.__postedMap = {}; return {}; });
   }
   function postedFor(url) { return (window.__postedMap && window.__postedMap[normUrl(url)]) || null; }
+  // Applied-date sidecar (url → epoch ms, this Compass fork's own store —
+  // NOT a applications.md column; see compass.mjs's module doc comment).
+  // Stamped server-side whenever a row's status is set to Applied (POST
+  // /api/compass/tracker/status). A url absent here just means "applied
+  // before this feature existed" — wireSaved()'s sort falls back to the
+  // tracker's existing date-added for those rows.
+  function loadAppliedDates() {
+    return jGet('/api/compass/applied-dates').then(function (j) { window.__appliedDatesMap = (j && j.map) || {}; return window.__appliedDatesMap; }).catch(function () { window.__appliedDatesMap = {}; return {}; });
+  }
+  function appliedDateFor(url) { return (window.__appliedDatesMap && window.__appliedDatesMap[normUrl(url)]) || 0; }
   // Pre-application bookmarks (real "Save" state), keyed by normalized url.
   function loadBookmarks() {
     return jGet('/api/compass/saved').then(function (j) { window.__savedSet = {}; ((j && j.urls) || []).forEach(function (u) { window.__savedSet[normUrl(u)] = true; }); return window.__savedSet; }).catch(function () { window.__savedSet = {}; return {}; });
@@ -1874,10 +1884,21 @@
       var stageList = (arr[1] && arr[1].stages) || ['Applied', 'Responded', 'Interview', 'Offer', 'Rejected', 'Hired', 'Scanned', 'Evaluated'];
       // ONLY real application-stage rows — NO "newest scanned" fallback.
       var mine = rows.filter(function (r) { return SAVED_APP_STAGE.test(r.status || ''); });
-      // Most-recent-first by `date` (date added to tracker, not a true "date
-      // applied" — there's no applied-timestamp field — so this is best-effort
-      // recency, not a guarantee of application order).
-      mine.sort(function (a, b) { return String(b.date || '').localeCompare(String(a.date || '')); });
+      // True "most recently applied first": sort by the applied-date sidecar
+      // (appliedDateFor — stamped server-side whenever a row's status is set
+      // to Applied; see compass.mjs's module doc comment). A row applied to
+      // BEFORE this feature existed has no sidecar entry, so it falls back
+      // to the tracker's own `date` (date added) — parsed to a comparable
+      // timestamp so both kinds of row sort on one unified, most-recent-
+      // first scale. Re-apply a pre-existing row to get an accurate
+      // applied-date going forward.
+      function effectiveAppliedTs(r) {
+        var ad = appliedDateFor(r.url);
+        if (ad) return ad;
+        var t = Date.parse(r.date || '');
+        return isNaN(t) ? 0 : t;
+      }
+      mine.sort(function (a, b) { return effectiveAppliedTs(b) - effectiveAppliedTs(a); });
       var main = document.querySelector('main .wrap') || document.querySelector('main') || document.body;
       // Hide EVERY hardcoded mockup element: demo rows (.row), column heads,
       // the summary stat cards, and any legacy row classes.
@@ -3760,7 +3781,7 @@
   }
 
   // ======================= dispatch ========================================
-  Promise.all([loadDead(), loadProvider(), loadFit(), loadSalary(), loadPosted(), loadBookmarks(), loadReviews(), loadTips(), loadNotified()]).then(function () {
+  Promise.all([loadDead(), loadProvider(), loadFit(), loadSalary(), loadPosted(), loadBookmarks(), loadReviews(), loadTips(), loadNotified(), loadAppliedDates()]).then(function () {
     renderNav();
     injectMangoChrome();
     injectActivity();

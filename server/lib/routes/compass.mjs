@@ -53,6 +53,18 @@
  *       "you never see another user's toast" is actually enforced; nothing
  *       here needs per-user scoping.
  *
+ *   GET /api/compass/applied-dates → this fork's OWN sidecar
+ *       (data/compass-applied-dates.jsonl, one row per normalized job url →
+ *       applied timestamp) powering a true "most recently applied first"
+ *       sort on My Jobs (saved.html's Applications section). Deliberately a
+ *       SIDECAR, not a new applications.md column: applications.md is SHARED
+ *       data (the parser + the original :8099 instance both read it), so its
+ *       format must not change. POST /api/compass/tracker/status (below)
+ *       stamps this sidecar automatically whenever a row's status is set to
+ *       Applied — no separate write endpoint. A job applied-to before this
+ *       feature existed simply has no row here; the client falls back to
+ *       "date added" for it.
+ *
  *   GET  /api/compass/setup/current → the TRUE current includeTitles/
  *       excludeTitles/cities/remoteUS/searchTerms, read straight off the real
  *       portals.yml (readCurrentPortalsRaw). setup.html fetches this on load
@@ -303,6 +315,34 @@ function writeNotifiedMap(map) {
   const tmp = NOTIFIED_STORE + '.tmp';
   writeFileSync(tmp, lines.join('\n') + (lines.length ? '\n' : ''));
   renameSync(tmp, NOTIFIED_STORE);
+}
+
+// Applied-date sidecar (see module doc comment at top of file) — keyed by
+// normalized job url → applied timestamp (epoch ms). JSONL, ONE row per url,
+// rewritten in full on every stamp — same shape/atomicity as the maps above.
+// { url, ts }. Written ONLY from POST /api/compass/tracker/status below, when
+// a row's status transitions to Applied; applications.md's own format is
+// never touched by this store.
+const APPLIED_DATES_STORE = DATA_ROOT + '/data/compass-applied-dates.jsonl';
+function readAppliedDatesMap() {
+  const map = {};
+  try {
+    readFileSync(APPLIED_DATES_STORE, 'utf8').split('\n').forEach((ln) => {
+      ln = ln.trim(); if (!ln) return;
+      try {
+        const o = JSON.parse(ln);
+        if (o && o.url && o.ts) map[normalizeUrl(o.url)] = Number(o.ts) || 0;
+      } catch { /* skip bad line */ }
+    });
+  } catch { /* none yet */ }
+  return map;
+}
+function writeAppliedDatesMap(map) {
+  mkdirSync(dirname(APPLIED_DATES_STORE), { recursive: true });
+  const lines = Object.keys(map).sort().map((u) => JSON.stringify({ url: u, ts: map[u] }));
+  const tmp = APPLIED_DATES_STORE + '.tmp';
+  writeFileSync(tmp, lines.join('\n') + (lines.length ? '\n' : ''));
+  renameSync(tmp, APPLIED_DATES_STORE);
 }
 // Monday 00:00:00.000 local → the "this week" boundary used everywhere in the
 // app (feed's Reviewed tab/rail in jobs.html + the archive endpoint below).
@@ -793,6 +833,13 @@ export function registerCompassRoutes(app) {
     res.json({ ok: true, id });
   });
 
+  // Applied-date sidecar (see APPLIED_DATES_STORE comment above). Read-only
+  // route — the only writer is POST /api/compass/tracker/status below.
+  app.get('/api/compass/applied-dates', (_req, res) => {
+    const map = readAppliedDatesMap();
+    res.json({ map, count: Object.keys(map).length });
+  });
+
   // ── Review archive: past-week ✓/✗ reviews, for the "Review archive" section
   // on My Jobs (public/compass/saved.html). Thin filter over the now-enriched
   // readReviewMap() — no live join against the tracker or feedback.jsonl.
@@ -874,7 +921,7 @@ export function registerCompassRoutes(app) {
       const idxUrl = cols.findIndex((c) => /^url$/i.test(c));
       const idxLocation = cols.findIndex((c) => /^location$/i.test(c));
       if (idxStatus < 0) return res.status(500).json({ error: 'Status column not found in tracker' });
-      let target = -1, beforeLine = null;
+      let target = -1, beforeLine = null, matchedUrlCell = '';
       for (let i = hi + 2; i < lines.length; i++) {
         if (!/^\|/.test(lines[i])) continue;
         let cells = splitUnescaped(lines[i], '|');
@@ -901,6 +948,7 @@ export function registerCompassRoutes(app) {
         if (matchNum || matchUrl) {
           if (cells.length <= idxStatus) continue;
           beforeLine = lines[i];
+          matchedUrlCell = urlCell.trim();
           cells[idxStatus] = ' ' + status + ' ';
           lines[i] = cells.join('|');
           target = i;
@@ -913,6 +961,21 @@ export function registerCompassRoutes(app) {
       const tmp = REAL_APPS_MD + '.tmp-compass';
       writeFileSync(tmp, lines.join('\n'));
       renameSync(tmp, REAL_APPS_MD);
+      // Applied-date sidecar (see APPLIED_DATES_STORE comment above) — IN
+      // ADDITION to the status write above, never in place of it.
+      // applications.md's own format/columns are untouched by this; this is
+      // a separate file, separate write. Best-effort: a failure here must
+      // never fail the (already-committed) status update response.
+      if (/^applied$/i.test(status) && matchedUrlCell) {
+        try {
+          const un = normalizeUrl(matchedUrlCell);
+          if (un) {
+            const am = readAppliedDatesMap();
+            am[un] = Date.now();
+            writeAppliedDatesMap(am);
+          }
+        } catch { /* best-effort — status update already succeeded */ }
+      }
       res.json({ ok: true, num, url, status, before: (beforeLine || '').trim(), after: lines[target].trim() });
       });
     } catch (e) {
