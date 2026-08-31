@@ -106,8 +106,12 @@
   .rev-rail-head .chev svg{width:16px;height:16px}
   .rev-rail.collapsed .chev{transform:rotate(-90deg)}
   .rev-rail.collapsed .rev-body{display:none}
-  .rev-group-t{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:12px 4px 6px;display:flex;gap:7px;align-items:center}
+  .rev-group-t{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:12px 4px 6px;display:flex;gap:7px;align-items:center;cursor:pointer;user-select:none}
   .rev-group-t .rc{margin-left:auto;font-size:11px;font-weight:700;background:var(--line-soft);color:var(--ink-soft);border-radius:999px;padding:1px 8px}
+  .rev-group-t .chev{color:var(--muted);transition:transform .15s ease}
+  .rev-group-t .chev svg{width:14px;height:14px}
+  .rev-group-t.collapsed .chev{transform:rotate(-90deg)}
+  .rev-group-items.collapsed{display:none}
   .rev-item{display:flex;gap:6px;align-items:flex-start;padding:8px;border-radius:10px;border:1px solid var(--line-soft);background:var(--surface-2);margin-bottom:6px}
   .rev-item:hover{border-color:var(--line);background:#fff}
   .ri-main{flex:1;min-width:0}
@@ -792,18 +796,35 @@ function renderRail(){
       '</div>'+
     '</div>';
   }
+  var GRP_CHEV='<span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg></span>';
+  function groupHTML(key, label, list){
+    return '<div class="rev-group-t" data-group="'+key+'">'+label+'<span class="rc">'+list.length+'</span>'+GRP_CHEV+'</div>'+
+      '<div class="rev-group-items" data-group="'+key+'">'+(list.length ? list.map(itemHTML).join("") : '<div class="rev-empty">None yet.</div>')+'</div>';
+  }
   var html="";
   if(!liked.length && !passed.length){
     html = hadAnyEver
       ? '<div class="rev-empty">Nothing reviewed yet this week. Your past reviews moved to the archive in My Jobs — nothing is deleted.</div>'
       : '<div class="rev-empty">Nothing reviewed yet. Use the <b style="color:var(--sage)">✓</b> or <b style="color:var(--terra)">✗</b> on any job to sort it here — and jot down why, if you like.</div>';
   } else {
-    html+='<div class="rev-group-t">👍 Liked<span class="rc">'+liked.length+'</span></div>';
-    html+= liked.length ? liked.map(itemHTML).join("") : '<div class="rev-empty">None yet.</div>';
-    html+='<div class="rev-group-t">👎 Passed<span class="rc">'+passed.length+'</span></div>';
-    html+= passed.length ? passed.map(itemHTML).join("") : '<div class="rev-empty">None yet.</div>';
+    html+=groupHTML("liked","👍 Liked",liked);
+    html+=groupHTML("passed","👎 Passed",passed);
   }
   document.getElementById("revBody").innerHTML=html;
+
+  /* per-group collapse (independent of the whole-rail collapse above),
+     same chevron/persist pattern as compass_railcollapsed but keyed per group. */
+  var gState=getRailGroupState();
+  document.querySelectorAll("#revBody .rev-group-t").forEach(function(h){
+    var g=h.getAttribute("data-group");
+    var items=h.nextElementSibling;
+    if(gState[g]){ h.classList.add("collapsed"); if(items) items.classList.add("collapsed"); }
+    h.addEventListener("click", function(){
+      var c=h.classList.toggle("collapsed");
+      if(items) items.classList.toggle("collapsed", c);
+      var st=getRailGroupState(); st[g]=c; setRailGroupState(st);
+    });
+  });
 
   document.querySelectorAll(".ri-undo").forEach(function(b){
     b.onclick=function(e){ e.stopPropagation(); clearReview(b.getAttribute("data-id")); render(); };
@@ -1068,6 +1089,11 @@ function applyControls(){
 ["locMs","salMs","catMs","funcMs","lvlMs"].forEach(function(id){ Pop.init(document.getElementById(id)); });
 
 /* ============ reviewed rail collapse ============ */
+/* Per-group (Liked/Passed) collapse — same persistence pattern as the
+   whole-rail RAILK toggle below, but keyed per group: {liked:bool,passed:bool}. */
+var RAILGROUPK="compass_railgroupcollapsed";
+function getRailGroupState(){ try{ return JSON.parse(localStorage.getItem(RAILGROUPK)||"{}"); }catch(e){ return {}; } }
+function setRailGroupState(s){ try{ localStorage.setItem(RAILGROUPK, JSON.stringify(s)); }catch(e){} }
 var RAILK="compass_railcollapsed";
 var rail=document.getElementById("revRail");
 if(localStorage.getItem(RAILK)==="1") rail.classList.add("collapsed");
