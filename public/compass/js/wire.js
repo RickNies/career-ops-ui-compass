@@ -3216,7 +3216,7 @@
       if (el.__diffOrig == null) el.__diffOrig = el.innerHTML; // stash the clean render once
       // always start from the clean render + clear any prior box styling
       el.innerHTML = el.__diffOrig;
-      el.style.borderLeft = ''; el.style.padding = ''; el.style.paddingLeft = ''; el.style.background = ''; el.style.borderRadius = ''; el.style.margin = '';
+      el.style.borderLeft = ''; el.style.padding = ''; el.style.paddingLeft = ''; el.style.background = ''; el.style.borderRadius = ''; el.style.margin = ''; el.style.boxShadow = '';
       if (!on) return;
       var n = diffNormLine(el.textContent);
       if (!n || base.set[n]) return; // empty or unchanged (verbatim in baseline)
@@ -3245,9 +3245,16 @@
       // diffNormLine didn't already fold away. Don't flag it — only
       // genuinely reworded or new content gets boxed.
       if (bestScore >= 0.9) return;
-      // Box the WHOLE changed bullet/line in a highlighter-yellow box.
-      el.style.background = '#fff3b0'; el.style.borderLeft = '3px solid #f4b400';
-      el.style.padding = '4px 9px'; el.style.borderRadius = '5px'; el.style.margin = '4px 0';
+      // Box the WHOLE changed bullet/line in a highlighter-yellow box. Use
+      // background + an INSET box-shadow (not padding/border/margin) for the
+      // box look — box-shadow and background don't add to the element's box
+      // model, so a manual multi-line select-and-copy grabs only the text,
+      // never extra padding/margin whitespace. (Most rich-text paste targets
+      // also just drop unsupported box-shadow silently, so a paste into e.g.
+      // Gmail/Word degrades to plain text instead of visible empty boxes.)
+      el.style.background = '#fff3b0';
+      el.style.boxShadow = 'inset 3px 0 0 0 #f4b400';
+      el.style.borderRadius = '5px';
       el.classList.add('diff-box');
       // Within the box, bold-emphasize the specific words that changed.
       if (best && bestScore >= 0.4) {
