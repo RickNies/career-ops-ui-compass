@@ -1861,6 +1861,10 @@
       var stageList = (arr[1] && arr[1].stages) || ['Applied', 'Responded', 'Interview', 'Offer', 'Rejected', 'Hired', 'Scanned', 'Evaluated'];
       // ONLY real application-stage rows — NO "newest scanned" fallback.
       var mine = rows.filter(function (r) { return SAVED_APP_STAGE.test(r.status || ''); });
+      // Most-recent-first by `date` (date added to tracker, not a true "date
+      // applied" — there's no applied-timestamp field — so this is best-effort
+      // recency, not a guarantee of application order).
+      mine.sort(function (a, b) { return String(b.date || '').localeCompare(String(a.date || '')); });
       var main = document.querySelector('main .wrap') || document.querySelector('main') || document.body;
       // Hide EVERY hardcoded mockup element: demo rows (.row), column heads,
       // the summary stat cards, and any legacy row classes.
