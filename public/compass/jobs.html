@@ -319,16 +319,45 @@
   .rv-progress-fill{height:100%;width:0;background:var(--gold);border-radius:999px;transition:width .25s ease}
   .rv-topbar{display:flex;align-items:center;justify-content:space-between;margin-top:10px;max-width:1100px;margin-left:auto;margin-right:auto}
   .rv-count{color:var(--muted);font-size:13.5px;font-weight:600}
-  .rv-exit{width:36px;height:36px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);font-size:16px;line-height:1;display:grid;place-items:center;padding:0}
-  .rv-exit:hover{border-color:var(--terra);color:var(--terra)}
+  .rv-exit{width:48px;height:48px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);font-size:16px;line-height:1;display:grid;place-items:center;padding:0;box-shadow:var(--shadow-sm);transition:border-color .12s ease,color .12s ease,background .12s ease,transform .08s ease}
+  .rv-exit svg{width:20px;height:20px}
+  .rv-exit:hover{border-color:var(--terra);color:var(--terra);background:var(--terra-soft);transform:scale(1.05)}
+  .rv-exit:active{transform:scale(.95)}
   .rv-body{flex:1;display:flex;align-items:flex-start;justify-content:center;padding:26px 22px 40px;overflow:auto}
   .rv-card{position:relative;z-index:2;width:100%;max-width:520px;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:0 4px 10px rgba(22,50,79,.08),0 24px 48px rgba(22,50,79,.16);padding:26px;transition:transform .22s ease,opacity .22s ease}
-  .rv-card::before,.rv-card::after{content:"";position:absolute;left:0;right:0;margin:0 auto;background:var(--surface-2);border:1px solid var(--line-soft);border-radius:20px;z-index:-1}
-  .rv-card::before{top:9px;width:96%;height:100%;opacity:.7}
-  .rv-card::after{top:18px;width:92%;height:100%;opacity:.4}
-  .rv-card.rv-enter{transform:translateX(26px);opacity:0}
-  .rv-card.rv-slide-out{transform:translateX(-26px);opacity:0}
-  @media(prefers-reduced-motion:reduce){ .rv-card{transition:none !important} .rv-progress-fill{transition:none} }
+  /* the real side peeks (below) now provide the "stacked deck" depth cue, so
+     the card no longer needs its own fake ::before/::after shadow layers */
+  .rv-card.rv-enter{transform:translateX(36px) scale(.97);opacity:.15}
+  .rv-card.rv-slide-out{transform:translateX(-36px) scale(.97);opacity:0}
+  @media(prefers-reduced-motion:reduce){ .rv-card{transition:none !important} .rv-progress-fill{transition:none} .rv-peek{transition:none !important} }
+
+  /* ---- carousel: center card + faded/scaled side "peek" shells ----
+     .rv-carousel is a flex row (center + two peeks) with align-items:stretch,
+     so the peeks always stretch to the current center card's full height —
+     that's the "slim faded lines on the sides" effect. Peeks are lightweight
+     SHELLS (a blank fit-ring circle + a few title-block bars) — never the
+     job's real content, never a JD fetch — recycled in place on every
+     advance() via renderPeek(), so the carousel stays cheap regardless of
+     queue size. */
+  .rv-carousel{position:relative;display:flex;align-items:stretch;justify-content:center;gap:14px;width:100%;max-width:1220px;margin:0 auto}
+  .rv-center{flex:1 1 auto;min-width:0;display:flex;justify-content:center}
+  .rv-center .rv-card{margin:0 auto}
+  .rv-peek{flex:none;width:34px;border-radius:20px;background:var(--surface-2);border:1px solid var(--line-soft);opacity:.5;filter:blur(.4px) grayscale(.35);transform:scale(.96);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;overflow:hidden;transition:opacity .18s ease,transform .18s ease}
+  .rv-peek.empty{opacity:0;pointer-events:none}
+  .rv-peek-fade{opacity:0 !important}
+  .rv-shell-fit{flex:none;width:26px;height:26px;border-radius:999px;border:3px solid var(--line);background:var(--surface)}
+  .rv-shell-lines{display:flex;flex-direction:column;gap:6px;width:20px}
+  .rv-shell-lines span{display:block;height:5px;border-radius:3px;background:var(--line)}
+  .rv-shell-lines span:nth-child(2){width:70%}
+  .rv-shell-lines span:nth-child(3){width:85%}
+  .rv-shell-lines span:nth-child(4){width:55%}
+  @media(max-width:620px){
+    .rv-peek{width:14px;border-radius:10px;gap:8px}
+    .rv-shell-fit{width:14px;height:14px;border-width:2px}
+    .rv-shell-lines{width:8px;gap:3px}
+    .rv-shell-lines span{height:3px}
+  }
+
   .rv-grid{display:grid;grid-template-columns:1fr;grid-template-areas:"left" "right";gap:24px}
   .rv-left{grid-area:left;min-width:0}
   .rv-right{grid-area:right;min-width:0}
@@ -347,6 +376,23 @@
   .rv-subhead{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;color:var(--muted);margin:18px 0 6px}
   .rv-highlights{margin:0;padding:0 0 0 18px;color:var(--ink-soft);font-size:14px;line-height:1.6}
   .rv-highlights li{margin-bottom:4px}
+  /* fit sections restyle — sage for "what lines up well", terra/amber for
+     "worth a closer look"; key terms get bold+underline emphasis (see
+     emphasize() in the review script) so both lists stay scannable */
+  .rv-subhead-good{color:var(--sage)}
+  .rv-subhead-bad{color:var(--terra)}
+  .rv-lines-up{list-style:none;background:var(--sage-soft);border-radius:12px;padding:10px 14px 10px 34px}
+  .rv-lines-up li{position:relative;margin-bottom:6px}
+  .rv-lines-up li:last-child{margin-bottom:0}
+  .rv-lines-up li::before{content:"";position:absolute;left:-20px;top:7px;width:9px;height:9px;border-radius:999px;background:var(--sage)}
+  .rv-lines-up strong{color:#1D4F40}
+  .rv-lines-up u{text-decoration-color:var(--sage)}
+  .rv-closer-look{list-style:none;background:var(--terra-soft);border-radius:12px;padding:10px 14px 10px 34px}
+  .rv-closer-look li{position:relative;margin-bottom:6px}
+  .rv-closer-look li:last-child{margin-bottom:0}
+  .rv-closer-look li::before{content:"";position:absolute;left:-20px;top:7px;width:9px;height:9px;border-radius:2px;background:var(--terra);transform:rotate(45deg)}
+  .rv-closer-look strong{color:#7A3A22}
+  .rv-closer-look u{text-decoration-color:var(--terra)}
   .rv-jd-panel{border:1px solid var(--line-soft);border-radius:14px;background:var(--surface-2);padding:16px 18px;display:flex;flex-direction:column;min-height:160px}
   .rv-jd-panel-head{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;color:var(--muted);margin-bottom:10px;flex:none}
   .rv-jd-body{font-size:13.5px;line-height:1.6;color:var(--ink-soft);max-height:clamp(280px,55vh,620px);overflow:auto}
@@ -587,7 +633,7 @@
       <div class="rv-topbar">
         <span class="rv-count" id="rvCount">0 of 0</span>
         <button class="rv-exit" id="rvExit" type="button" aria-label="Exit review mode">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6 6 18M6 6l12 12"/></svg>
         </button>
       </div>
 
@@ -597,8 +643,8 @@
            here updates window.state, persists via the feed's own
            saveFilters(), and recomputes the review queue immediately (see
            the review-mode script at the bottom of the file). -->
-      <div class="rv-filters open" id="rvFilters">
-        <button type="button" class="rv-filters-toggle" id="rvFiltersToggle" aria-expanded="true" aria-controls="rvFiltersBody">
+      <div class="rv-filters" id="rvFilters">
+        <button type="button" class="rv-filters-toggle" id="rvFiltersToggle" aria-expanded="false" aria-controls="rvFiltersBody">
           <svg class="rv-fic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
           Filters
           <span class="rv-filters-summary" id="rvFiltersSummary">No filters active</span>
@@ -653,7 +699,18 @@
         </div>
       </div>
     </div>
-    <div class="rv-body" id="rvBody"><!-- filled by review-mode script below --></div>
+    <div class="rv-body" id="rvBody">
+      <!-- 3-card carousel: faded/scaled peek shells (prev/next, lightweight —
+           no JD, no full render) flank the full center card. See
+           ensureCarouselSkeleton()/renderPeek() in the review script below,
+           which rebuild this whenever renderEnd()/renderNoMatches() replace
+           it with an end-state screen. -->
+      <div class="rv-carousel" id="rvCarousel">
+        <div class="rv-peek rv-peek-prev empty" id="rvPeekPrev" aria-hidden="true"></div>
+        <div class="rv-center" id="rvCenter"><!-- filled by review-mode script below --></div>
+        <div class="rv-peek rv-peek-next empty" id="rvPeekNext" aria-hidden="true"></div>
+      </div>
+    </div>
   </div>
 
   <!-- shared toast: screen-reader announced, non-blocking -->
@@ -1525,8 +1582,8 @@ if(location.hash==="#add") openModal();
     var filtersWrap = document.getElementById('rvFilters');
     var toggleBtn = document.getElementById('rvFiltersToggle');
     if (toggleBtn && filtersWrap){
-      var openPref = true;
-      try { openPref = localStorage.getItem('compass_rvfilters_open') !== '0'; } catch(e){}
+      var openPref = false;
+      try { openPref = localStorage.getItem('compass_rvfilters_open') === '1'; } catch(e){}
       filtersWrap.classList.toggle('open', openPref);
       toggleBtn.setAttribute('aria-expanded', openPref ? 'true' : 'false');
       toggleBtn.addEventListener('click', function(){
@@ -1592,6 +1649,48 @@ if(location.hash==="#add") openModal();
     return (j.gaps && j.gaps.length) ? j.gaps.slice(0,4) : [];
   }
 
+  // Tier-2 requirement-by-requirement scoring (when the fit analysis has run
+  // it), keyed by status per requirement: 'met' → "what lines up well",
+  // 'gap' → "worth a closer look". Falls back to the older strengths/gaps
+  // summary (highlightsFor/gapsFor above) when this isn't present — never
+  // fabricates data either way. Accepts a couple of reasonable field-name
+  // variants since the shape isn't finalized yet.
+  function normalizeReqMatches(j){
+    var rm = j && (j.requirement_matches || j.requirementMatches);
+    if (!rm || !rm.length) return null;
+    var met = [], gap = [];
+    rm.forEach(function(item){
+      if (!item || typeof item !== 'object') return;
+      var rawStatus = item.status || (item.met === true ? 'met' : (item.met === false ? 'gap' : ''));
+      var status = String(rawStatus || '').toLowerCase();
+      var label = item.requirement || item.text || item.label || item.skill || '';
+      if (!label) return;
+      var evidence = item.evidence || item.detail || item.note || '';
+      var line = evidence ? (label + ' — ' + evidence) : label;
+      if (status === 'met') met.push(line);
+      else if (status === 'gap') gap.push(line);
+    });
+    if (!met.length && !gap.length) return null;
+    return { met: met, gap: gap };
+  }
+
+  // Light-touch emphasis over free-text fit lines: bold the leading "key
+  // term" (before a dash/colon, else the first few words) and underline the
+  // supporting phrase after it — keeps the lists scannable without
+  // fabricating structure that isn't there.
+  function emphasize(s){
+    s = String(s == null ? '' : s);
+    var m = s.match(/^(.*?)\s*[–—:]\s+(.*)$/); // – — :
+    if (m && m[1] && m[2]){
+      return '<strong>'+rvEsc(m[1])+'</strong> — <u>'+rvEsc(m[2])+'</u>';
+    }
+    var words = s.split(/\s+/);
+    if (words.length > 4){
+      return '<strong>'+rvEsc(words.slice(0,4).join(' '))+'</strong> '+rvEsc(words.slice(4).join(' '));
+    }
+    return '<strong>'+rvEsc(s)+'</strong>';
+  }
+
   function salaryText(j){
     if (typeof window.fmtSal === 'function') return window.fmtSal(j);
     return j.salMax==null ? 'Salary not listed' : ('$'+j.salMin+'K–$'+j.salMax+'K');
@@ -1617,11 +1716,12 @@ if(location.hash==="#add") openModal();
     else if (rv && rv.verdict === 'bad') rvBadge = '<span class="rv-badge rv-badge-bad">Passed</span>';
     var goodOn = rv && rv.verdict==='good' ? ' on' : '';
     var badOn  = rv && rv.verdict==='bad'  ? ' on' : '';
-    var hi = highlightsFor(j);
-    var gaps = gapsFor(j);
-    var gapsHtml = gaps.length ? (
-      '<div class="rv-subhead">Also worth noting</div>'+
-      '<ul class="rv-highlights">'+gaps.map(function(s){ return '<li>'+rvEsc(s)+'</li>'; }).join('')+'</ul>'
+    var reqm = normalizeReqMatches(j);
+    var linesUp = reqm ? reqm.met : highlightsFor(j);
+    var closerLook = reqm ? reqm.gap : gapsFor(j);
+    var closerLookHtml = closerLook.length ? (
+      '<div class="rv-subhead rv-subhead-bad">Worth a closer look</div>'+
+      '<ul class="rv-highlights rv-closer-look">'+closerLook.map(function(s){ return '<li>'+emphasize(s)+'</li>'; }).join('')+'</ul>'
     ) : '';
     return ''+
     '<div class="rv-card" id="rvCard">'+
@@ -1636,9 +1736,9 @@ if(location.hash==="#add") openModal();
               detailsRow(j)+
             '</div>'+
           '</div>'+
-          '<div class="rv-subhead">Highlights</div>'+
-          '<ul class="rv-highlights">'+hi.map(function(s){ return '<li>'+rvEsc(s)+'</li>'; }).join('')+'</ul>'+
-          gapsHtml+
+          '<div class="rv-subhead rv-subhead-good">What lines up well</div>'+
+          '<ul class="rv-highlights rv-lines-up">'+linesUp.map(function(s){ return '<li>'+emphasize(s)+'</li>'; }).join('')+'</ul>'+
+          closerLookHtml+
           '<div class="rv-actions">'+
             '<button class="vbtn bad rv-big'+badOn+'" id="rvPass" type="button" aria-label="Pass on this role"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></button>'+
             '<button class="btn btn--outline rv-apply" id="rvApply" type="button">Apply<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>'+
@@ -1760,13 +1860,48 @@ if(location.hash==="#add") openModal();
     updateProgress();
   }
 
+  // The carousel skeleton (peek-prev / center / peek-next) lives permanently
+  // in #rvBody EXCEPT when renderEnd()/renderNoMatches() replace it with an
+  // end-state screen — this rebuilds it on the way back (filters loosened,
+  // queue recomputed) so renderCurrent() always has somewhere to render into.
+  function ensureCarouselSkeleton(){
+    if (document.getElementById('rvCarousel')) return;
+    bodyEl.innerHTML =
+      '<div class="rv-carousel" id="rvCarousel">'+
+        '<div class="rv-peek rv-peek-prev empty" id="rvPeekPrev" aria-hidden="true"></div>'+
+        '<div class="rv-center" id="rvCenter"></div>'+
+        '<div class="rv-peek rv-peek-next empty" id="rvPeekNext" aria-hidden="true"></div>'+
+      '</div>';
+  }
+
+  // Lightweight, non-interactive shell for a neighboring queue position — a
+  // blank fit-ring + a few title-block bars, NOT the job's real title/fit
+  // (so "you can tell a job is waiting but can't read it"). No JD fetch, no
+  // per-job content: the SAME markup is reused (recycled) for whatever job
+  // currently occupies that side, so this stays cheap regardless of queue
+  // size or how far into the queue you are.
+  function renderPeek(el, j){
+    if (!el) return;
+    el.classList.remove('rv-peek-fade');
+    el.classList.toggle('empty', !j);
+    el.innerHTML = j
+      ? '<div class="rv-shell-fit"></div><div class="rv-shell-lines"><span></span><span></span><span></span><span></span></div>'
+      : '';
+  }
+
   function renderCurrent(animate){
     if (queue.length === 0){ renderNoMatches(); return; }
     if (cursor >= queue.length){ renderEnd(); return; }
+    ensureCarouselSkeleton();
     var j = queue[cursor];
-    bodyEl.innerHTML = cardMarkup(j);
+    var centerEl = document.getElementById('rvCenter');
+    var prevEl   = document.getElementById('rvPeekPrev');
+    var nextEl   = document.getElementById('rvPeekNext');
+    centerEl.innerHTML = cardMarkup(j);
     wireCard(j);
     loadJd(j);
+    renderPeek(prevEl, queue[cursor-1] || null);
+    renderPeek(nextEl, queue[cursor+1] || null);
     updateProgress();
     if (animate && !reduceMotion()){
       var card = document.getElementById('rvCard');
@@ -1777,11 +1912,23 @@ if(location.hash==="#add") openModal();
     }
   }
 
+  // Slide the row right→left: the current card slides left and fades out,
+  // the side peeks fade during the shuffle (they're recycled — no need to
+  // physically track their motion), then renderCurrent() re-populates the
+  // center from the new cursor and the new center card animates in via
+  // .rv-enter (starts in a peek-like dimmed/scaled state and un-fades to
+  // full size — see .rv-card.rv-enter above). prefers-reduced-motion just
+  // snaps straight to the new state, no transition.
   function advance(){
     cursor++;
-    var card = document.getElementById('rvCard');
-    if (card && !reduceMotion()){
+    var reduced = reduceMotion();
+    var card   = document.getElementById('rvCard');
+    var prevEl = document.getElementById('rvPeekPrev');
+    var nextEl = document.getElementById('rvPeekNext');
+    if (card && !reduced){
       card.classList.add('rv-slide-out');
+      if (prevEl) prevEl.classList.add('rv-peek-fade');
+      if (nextEl) nextEl.classList.add('rv-peek-fade');
       setTimeout(function(){ renderCurrent(true); }, 180);
     } else {
       renderCurrent(true);
