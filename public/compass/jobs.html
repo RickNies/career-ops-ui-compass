@@ -366,6 +366,29 @@
   .rv-end-check{width:64px;height:64px;border-radius:999px;background:var(--sage-soft);color:var(--sage);font-size:28px;font-weight:700;display:grid;place-items:center;margin:0 auto 16px}
   .rv-end h2{font-size:22px;margin-bottom:6px}
   .rv-end p{color:var(--muted);font-size:14px;margin-bottom:20px}
+
+  /* ---- Review Mode: live filter bar (compact, collapsible; reads/writes the
+     SAME shared window.state as the feed's own filter bar above — see the
+     review-mode script at the bottom of this file). ---- */
+  .rv-filters{max-width:1100px;margin:14px auto 0;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm);box-shadow:var(--shadow-sm)}
+  .rv-filters-toggle{width:100%;display:flex;align-items:center;gap:9px;padding:10px 16px;border:0;background:transparent;color:var(--ink-soft);font-size:13px;font-weight:600;cursor:pointer;text-align:left;border-radius:inherit}
+  .rv-filters-toggle .rv-fic{width:14px;height:14px;color:var(--muted);flex:none}
+  .rv-filters-summary{color:var(--muted);font-weight:500;font-size:12px}
+  .rv-filters-toggle .cv{width:12px;height:12px;color:var(--muted);transition:transform .15s ease;margin-left:auto;flex:none}
+  .rv-filters.open .rv-filters-toggle .cv{transform:rotate(180deg)}
+  .rv-filters-body{display:none;padding:2px 16px 14px;border-top:1px solid var(--line-soft)}
+  .rv-filters.open .rv-filters-body{display:block}
+  .rv-f-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .rv-f-label{font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-right:2px;flex:none}
+  .rv-f-search{display:flex;align-items:center;gap:8px;background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:7px 13px;flex:1;min-width:200px}
+  .rv-f-search svg{color:var(--muted);flex:none;width:14px;height:14px}
+  .rv-f-search input{border:0;background:transparent;outline:none;font-size:13px;width:100%;color:var(--ink);font-family:inherit}
+  .rv-filters .chip{padding:6px 12px;font-size:12.5px}
+  .rv-filters .select{padding:6px 28px 6px 12px;font-size:12.5px}
+  .rv-f-sal{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-soft)}
+  .rv-f-sal input[type=number]{width:60px;border:1px solid var(--line);border-radius:8px;padding:5px 7px;font-size:12.5px;font-family:inherit;color:var(--ink)}
+  .rv-filters .sal-unknown,.rv-filters .new-only{padding-top:0;border-top:0;font-size:12.5px}
+  .rv-empty h2{font-size:20px}
   @media(max-width:620px){
     .rv-card-head{flex-direction:column;align-items:flex-start}
     .rv-actions{gap:14px}
@@ -566,6 +589,68 @@
         <button class="rv-exit" id="rvExit" type="button" aria-label="Exit review mode">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6 6 18M6 6l12 12"/></svg>
         </button>
+      </div>
+
+      <!-- Live filter bar: the SAME filters as the feed (search, sort, work
+           type, location, category, function, level, salary, "From last
+           search"), bound to the shared window.state. Changing a control
+           here updates window.state, persists via the feed's own
+           saveFilters(), and recomputes the review queue immediately (see
+           the review-mode script at the bottom of the file). -->
+      <div class="rv-filters open" id="rvFilters">
+        <button type="button" class="rv-filters-toggle" id="rvFiltersToggle" aria-expanded="true" aria-controls="rvFiltersBody">
+          <svg class="rv-fic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+          Filters
+          <span class="rv-filters-summary" id="rvFiltersSummary">No filters active</span>
+          <svg class="cv" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="rv-filters-body" id="rvFiltersBody">
+          <div class="rv-f-row">
+            <label class="rv-f-search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+              <input id="rvQ" type="text" placeholder="Search roles, companies, or keywords…" aria-label="Search">
+            </label>
+            <select class="select" id="rvSort" aria-label="Sort by">
+              <option value="best">Sort: Best match</option>
+              <option value="found">Sort: Newest (found)</option>
+              <option value="posted">Sort: Newest (posted)</option>
+              <option value="salary">Sort: Salary</option>
+            </select>
+          </div>
+          <div class="rv-f-row">
+            <span class="rv-f-label">Work type</span>
+            <div class="fl-group" id="rvWorkGroup"></div>
+          </div>
+          <div class="rv-f-row">
+            <span class="rv-f-label">Location</span>
+            <div class="fl-group" id="rvLocGroup"></div>
+          </div>
+          <div class="rv-f-row">
+            <span class="rv-f-label">Category</span>
+            <div class="fl-group" id="rvCatGroup"></div>
+          </div>
+          <div class="rv-f-row">
+            <span class="rv-f-label">Function</span>
+            <div class="fl-group" id="rvFuncGroup"></div>
+          </div>
+          <div class="rv-f-row">
+            <span class="rv-f-label">Level</span>
+            <div class="fl-group" id="rvLvlGroup"></div>
+          </div>
+          <div class="rv-f-row">
+            <span class="rv-f-label">Salary</span>
+            <div class="rv-f-sal">
+              <span>$</span><input type="number" id="rvSalLow" min="80" max="300" step="5" value="80" aria-label="Minimum salary in thousands">
+              <span>–</span>
+              <span>$</span><input type="number" id="rvSalHigh" min="80" max="300" step="5" value="300" aria-label="Maximum salary in thousands">
+              <span>K</span>
+            </div>
+            <label class="sal-unknown"><input type="checkbox" id="rvSalUnknown" checked>Show jobs with no listed salary</label>
+          </div>
+          <div class="rv-f-row">
+            <label class="new-only"><input type="checkbox" id="rvNewOnly">From last search</label>
+          </div>
+        </div>
       </div>
     </div>
     <div class="rv-body" id="rvBody"><!-- filled by review-mode script below --></div>
@@ -1305,9 +1390,178 @@ if(location.hash==="#add") openModal();
   var exitBtn   = document.getElementById('rvExit');
   if(!overlay || !bodyEl || !launchBtn) return;
 
-  var queue = [];      // locked snapshot for this session — set once, on open
+  var queue = [];      // filtered/sorted snapshot — recomputed live on any filter change
   var cursor = 0;
   var isOpen = false;
+
+  /* ============================================================================
+   * Live filter bar — reads/writes the SAME window.state the feed's own filter
+   * bar uses (defined above, before wire.js runs), and the SAME option sources
+   * (window.CATS/FUNCS/LEVELS — populated by wire.js from the live job list —
+   * and window.LOC_LABEL). Never reimplements matches()/render(); just calls
+   * them. See openReviewMode()/onFilterChange() below for how the queue is
+   * rebuilt and the current position is kept (or reset to top).
+   * ========================================================================== */
+  var WORK_TYPES = ['Remote', 'Hybrid', 'On-site'];
+  var filtersWired = false;
+
+  function rvState(){ return window.state; }
+
+  function clampSal(v){
+    v = Math.round((parseFloat(v) || 80) / 5) * 5;
+    if (v < 80) v = 80;
+    if (v > 300) v = 300;
+    return v;
+  }
+
+  function addFilterChip(groupEl, arr, value, label){
+    if (!groupEl) return;
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip' + (arr.indexOf(value) >= 0 ? ' on' : '');
+    b.textContent = label;
+    b.setAttribute('data-v', value);
+    b.addEventListener('click', function(){
+      window.toggleIn(arr, value);
+      b.classList.toggle('on', arr.indexOf(value) >= 0);
+      onFilterChange();
+    });
+    groupEl.appendChild(b);
+  }
+
+  // Rebuilt on every open (rather than once) so category/function/level chips
+  // always reflect wire.js's live-data CATS/FUNCS/LEVELS (computed from the
+  // actual job list, not the static placeholder arrays higher up the file).
+  function buildFilterOptions(){
+    var st = rvState(); if (!st) return;
+    var workGroup = document.getElementById('rvWorkGroup');
+    var locGroup  = document.getElementById('rvLocGroup');
+    var catGroup  = document.getElementById('rvCatGroup');
+    var funcGroup = document.getElementById('rvFuncGroup');
+    var lvlGroup  = document.getElementById('rvLvlGroup');
+    if (workGroup) { workGroup.innerHTML = ''; WORK_TYPES.forEach(function(w){ addFilterChip(workGroup, st.works, w, w); }); }
+    if (locGroup) {
+      locGroup.innerHTML = '';
+      var locMap = window.LOC_LABEL || {};
+      Object.keys(locMap).forEach(function(key){ addFilterChip(locGroup, st.locs, key, locMap[key]); });
+    }
+    if (catGroup)  { catGroup.innerHTML = '';  (window.CATS   || []).forEach(function(c){ addFilterChip(catGroup, st.cats, c, c); }); }
+    if (funcGroup) { funcGroup.innerHTML = ''; (window.FUNCS  || []).forEach(function(f){ addFilterChip(funcGroup, st.funcs, f, f); }); }
+    if (lvlGroup)  { lvlGroup.innerHTML = '';  (window.LEVELS || []).forEach(function(l){ addFilterChip(lvlGroup, st.levels, l, l); }); }
+  }
+
+  // Reflects window.state into the non-chip controls (chips are seeded at
+  // build time above). Called on every open, since state can change between
+  // sessions (localStorage) or via URL query params (job-detail tag links).
+  function seedFilterBar(){
+    var st = rvState(); if (!st) return;
+    var qEl = document.getElementById('rvQ'); if (qEl) qEl.value = st.q || '';
+    var sortEl = document.getElementById('rvSort');
+    if (sortEl){
+      // Same "hide Newest (posted) until at least one real posted date exists"
+      // rule wire.js applies to the feed's own #sort — kept in sync here.
+      var postedOpt = sortEl.querySelector('option[value="posted"]');
+      if (postedOpt){
+        var anyPosted = (window.JOBS || []).some(function(j){ return j.postedKnown; });
+        postedOpt.hidden = !anyPosted; postedOpt.disabled = !anyPosted;
+      }
+      sortEl.value = (st.sort === 'new' ? 'found' : st.sort);
+    }
+    var loEl = document.getElementById('rvSalLow');  if (loEl) loEl.value = st.salLow;
+    var hiEl = document.getElementById('rvSalHigh'); if (hiEl) hiEl.value = st.salHigh;
+    var unkEl = document.getElementById('rvSalUnknown'); if (unkEl) unkEl.checked = !!st.showUnknown;
+    var newOnlyEl = document.getElementById('rvNewOnly'); if (newOnlyEl) newOnlyEl.checked = !!st.newOnly;
+    updateFiltersSummary();
+  }
+
+  function activeFilterCount(){
+    var st = rvState(); if (!st) return 0;
+    var n = 0;
+    if (st.q) n++;
+    n += st.works.length + st.locs.length + st.cats.length + st.funcs.length + st.levels.length;
+    if (st.salLow > 80 || st.salHigh < 300) n++;
+    if (!st.showUnknown) n++;
+    if (st.newOnly) n++;
+    return n;
+  }
+  function updateFiltersSummary(){
+    var el = document.getElementById('rvFiltersSummary'); if (!el) return;
+    var n = activeFilterCount();
+    el.textContent = n ? (n + (n === 1 ? ' filter active' : ' filters active')) : 'No filters active';
+  }
+
+  // Wired once ever (controls stay in the DOM across open/close — the overlay
+  // is only hidden, never removed) — captures the shared state object, which
+  // itself is never reassigned after page load (only its fields mutate).
+  function wireFilterBar(){
+    if (filtersWired) return;
+    filtersWired = true;
+    var st = rvState(); if (!st) return;
+
+    var qEl = document.getElementById('rvQ');
+    if (qEl) qEl.addEventListener('input', function(e){ st.q = e.target.value; onFilterChange(); });
+
+    var sortEl = document.getElementById('rvSort');
+    if (sortEl) sortEl.addEventListener('change', function(e){ st.sort = e.target.value; onFilterChange(); });
+
+    var loEl = document.getElementById('rvSalLow'), hiEl = document.getElementById('rvSalHigh');
+    if (loEl) loEl.addEventListener('change', function(){
+      var v = clampSal(loEl.value), hv = +hiEl.value;
+      if (v > hv) v = hv;
+      loEl.value = v; st.salLow = v; onFilterChange();
+    });
+    if (hiEl) hiEl.addEventListener('change', function(){
+      var v = clampSal(hiEl.value), lv = +loEl.value;
+      if (v < lv) v = lv;
+      hiEl.value = v; st.salHigh = v; onFilterChange();
+    });
+
+    var unkEl = document.getElementById('rvSalUnknown');
+    if (unkEl) unkEl.addEventListener('change', function(){ st.showUnknown = unkEl.checked; onFilterChange(); });
+
+    var newOnlyEl = document.getElementById('rvNewOnly');
+    if (newOnlyEl) newOnlyEl.addEventListener('change', function(){ st.newOnly = newOnlyEl.checked; onFilterChange(); });
+
+    var filtersWrap = document.getElementById('rvFilters');
+    var toggleBtn = document.getElementById('rvFiltersToggle');
+    if (toggleBtn && filtersWrap){
+      var openPref = true;
+      try { openPref = localStorage.getItem('compass_rvfilters_open') !== '0'; } catch(e){}
+      filtersWrap.classList.toggle('open', openPref);
+      toggleBtn.setAttribute('aria-expanded', openPref ? 'true' : 'false');
+      toggleBtn.addEventListener('click', function(){
+        var open = filtersWrap.classList.toggle('open');
+        toggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        try { localStorage.setItem('compass_rvfilters_open', open ? '1' : '0'); } catch(e){}
+      });
+    }
+  }
+
+  // On ANY filter-bar change: persist to the shared store (same saveFilters()
+  // the feed uses, so Exit → feed carries the change) and recompute the queue.
+  function onFilterChange(){
+    if (typeof window.saveFilters === 'function') window.saveFilters();
+    updateFiltersSummary();
+    recomputeQueue();
+  }
+
+  // Rebuild the queue from the live job list + the (now-updated) shared
+  // matches() — same recipe openReviewMode() uses. Keeps the currently-shown
+  // job in place if it still matches; otherwise jumps to the top of the new
+  // queue (index 0, best-fit first).
+  function recomputeQueue(){
+    if (!window.JOBS || typeof window.matches !== 'function') return;
+    var currentId = (queue[cursor] && queue[cursor].id) || null;
+    queue = window.JOBS.filter(window.matches).slice().sort(function(a,b){ return (b.fit||0) - (a.fit||0); });
+    if (currentId){
+      var idx = -1;
+      for (var i=0; i<queue.length; i++){ if (queue[i].id === currentId){ idx = i; break; } }
+      cursor = idx >= 0 ? idx : 0;
+    } else {
+      cursor = 0;
+    }
+    renderCurrent(false);
+  }
 
   function rvEsc(s){ return String(s==null?'':s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
   function reduceMotion(){ return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
@@ -1495,7 +1749,19 @@ if(location.hash==="#add") openModal();
     if (back) back.onclick = closeReviewMode;
   }
 
+  // Distinct from renderEnd() ("you finished the queue") — this is "the live
+  // filters you just set match nothing". The filter bar (in .rv-top, outside
+  // #rvBody) stays visible and usable so you can loosen them right away.
+  function renderNoMatches(){
+    bodyEl.innerHTML = '<div class="rv-end rv-empty">'+
+      '<h2>No jobs match these filters</h2>'+
+      '<p>Loosen them to keep reviewing.</p>'+
+    '</div>';
+    updateProgress();
+  }
+
   function renderCurrent(animate){
+    if (queue.length === 0){ renderNoMatches(); return; }
     if (cursor >= queue.length){ renderEnd(); return; }
     var j = queue[cursor];
     bodyEl.innerHTML = cardMarkup(j);
@@ -1524,8 +1790,14 @@ if(location.hash==="#add") openModal();
 
   function openReviewMode(){
     if (!window.JOBS || typeof window.matches !== 'function'){ return; }
-    // Snapshot the CURRENT filtered list, best-fit first — LOCKED for the
-    // session (changing filters requires exiting and re-entering).
+    // Seed the filter bar from the CURRENT shared state (option lists rebuilt
+    // fresh each open so category/function/level always match the live data),
+    // then snapshot the filtered list, best-fit first. Unlike the original
+    // one-shot snapshot, this is NOT locked — the filter bar above recomputes
+    // it live via recomputeQueue() on any change.
+    buildFilterOptions();
+    wireFilterBar();
+    seedFilterBar();
     queue = window.JOBS.filter(window.matches).slice().sort(function(a,b){ return (b.fit||0) - (a.fit||0); });
     cursor = 0;
     isOpen = true;
@@ -1540,8 +1812,11 @@ if(location.hash==="#add") openModal();
     overlay.setAttribute('aria-hidden','true');
     document.body.style.overflow = '';
     // Refresh the underlying feed so any reviews made in this session (via
-    // the same saveReview the ✓/✗ buttons use) are reflected in the list/
-    // rail/counts — reuses the existing render(), does not alter it.
+    // the same saveReview the ✓/✗ buttons use), AND any filter changes made
+    // in this session (via the shared window.state), are reflected in the
+    // list/rail/counts/active-filter pills/controls — reuses the existing
+    // applyControls()+render(), does not alter either.
+    if (typeof window.applyControls === 'function') window.applyControls();
     if (typeof window.render === 'function') window.render();
     if (launchBtn) launchBtn.focus();
   }
