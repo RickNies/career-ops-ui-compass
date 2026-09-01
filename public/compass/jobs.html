@@ -375,8 +375,19 @@
   .rv-peek-company{font-size:11px;color:var(--ink-soft);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .rv-peek-lines{list-style:none;margin:2px 0 0;padding:0;font-size:10px;color:var(--muted);line-height:1.4;width:100%}
   .rv-peek-lines li{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* ---- back-step: small round control over the left peek — goes to the
+     PREVIOUS card (goBack() in the review script; also the U key when the
+     current card has no confirmed verdict, and Backspace). Hidden on the
+     first card. */
+  .rv-back{position:absolute;left:14px;top:50%;transform:translateY(-50%);z-index:5;width:44px;height:44px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink-soft);display:grid;place-items:center;padding:0;cursor:pointer;box-shadow:var(--shadow-sm);transition:border-color .12s ease,color .12s ease,transform .08s ease}
+  .rv-back svg{width:19px;height:19px}
+  .rv-back:hover{border-color:var(--gold);color:var(--gold-deep);transform:translateY(-50%) scale(1.07)}
+  .rv-back:active{transform:translateY(-50%) scale(.94)}
+  .rv-back[hidden]{display:none}
   @media(max-width:620px){
     .rv-carousel{gap:8px}
+    .rv-back{width:36px;height:36px;left:2px}
+    .rv-back svg{width:16px;height:16px}
     .rv-peek{width:28px;border-radius:12px;padding:8px 4px}
     .rv-peek .fit .ring{width:18px;height:18px;font-size:8px}
     .rv-peek-title{font-size:8px}
@@ -831,6 +842,9 @@
            which rebuild this whenever renderEnd()/renderNoMatches() replace
            it with an end-state screen. -->
       <div class="rv-carousel" id="rvCarousel">
+        <button class="rv-back" id="rvBack" type="button" aria-label="Back to the previous job" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
         <div class="rv-peek rv-peek-prev empty" id="rvPeekPrev" aria-hidden="true"></div>
         <div class="rv-center" id="rvCenter"><!-- filled by review-mode script below --></div>
         <div class="rv-peek rv-peek-next empty" id="rvPeekNext" aria-hidden="true"></div>
@@ -1706,8 +1720,11 @@ if(location.hash==="#add") openModal();
     var qEl = document.getElementById('rvQ');
     if (qEl) qEl.addEventListener('input', function(e){ st.q = e.target.value; onFilterChange(); });
 
+    // A SORT change jumps to the top of the newly-ordered queue (that is the
+    // point of re-sorting); other filter changes keep the current card in
+    // place when it still matches.
     var sortEl = document.getElementById('rvSort');
-    if (sortEl) sortEl.addEventListener('change', function(e){ st.sort = e.target.value; onFilterChange(); });
+    if (sortEl) sortEl.addEventListener('change', function(e){ st.sort = e.target.value; onFilterChange({ resetCursor: true }); });
 
     var loEl = document.getElementById('rvSalLow'), hiEl = document.getElementById('rvSalHigh');
     if (loEl) loEl.addEventListener('change', function(){
@@ -1755,20 +1772,37 @@ if(location.hash==="#add") openModal();
 
   // On ANY filter-bar change: persist to the shared store (same saveFilters()
   // the feed uses, so Exit → feed carries the change) and recompute the queue.
-  function onFilterChange(){
+  function onFilterChange(opts){
     if (typeof window.saveFilters === 'function') window.saveFilters();
     updateFiltersSummary();
-    recomputeQueue();
+    recomputeQueue(opts);
+  }
+
+  // Order the queue by the SAME state.sort the feed honors (comparators
+  // mirrored from wire.js's compassRender — best / found / posted / salary)
+  // so the review filter panel's sort control actually re-orders the queue.
+  function sortQueue(rows){
+    var st = rvState();
+    var s = (st && st.sort) || 'best';
+    rows = rows.slice();
+    if (s === 'found' || s === 'new') rows.sort(function(a,b){ var af = a.foundAge == null ? Infinity : a.foundAge, bf = b.foundAge == null ? Infinity : b.foundAge; return af - bf; });
+    else if (s === 'posted') rows.sort(function(a,b){
+      if (!!a.postedKnown !== !!b.postedKnown) return a.postedKnown ? -1 : 1;
+      return (a.postedAge != null ? a.postedAge : 0) - (b.postedAge != null ? b.postedAge : 0);
+    });
+    else if (s === 'salary') rows.sort(function(a,b){ return (b.salMax || 0) - (a.salMax || 0); });
+    else rows.sort(function(a,b){ var as = a.fitScored ? 1 : 0, bs = b.fitScored ? 1 : 0; if (as !== bs) return bs - as; return (b.fit || 0) - (a.fit || 0); });
+    return rows;
   }
 
   // Rebuild the queue from the live job list + the (now-updated) shared
   // matches() — same recipe openReviewMode() uses. Keeps the currently-shown
-  // job in place if it still matches; otherwise jumps to the top of the new
-  // queue (index 0, best-fit first).
-  function recomputeQueue(){
+  // job in place if it still matches; otherwise — or when opts.resetCursor
+  // is set (sort change) — jumps to the top of the new queue (index 0).
+  function recomputeQueue(opts){
     if (!window.JOBS || typeof window.matches !== 'function') return;
-    var currentId = (queue[cursor] && queue[cursor].id) || null;
-    queue = window.JOBS.filter(window.matches).slice().sort(function(a,b){ return (b.fit||0) - (a.fit||0); });
+    var currentId = (opts && opts.resetCursor) ? null : ((queue[cursor] && queue[cursor].id) || null);
+    queue = sortQueue(window.JOBS.filter(window.matches));
     if (currentId){
       var idx = -1;
       for (var i=0; i<queue.length; i++){ if (queue[i].id === currentId){ idx = i; break; } }
@@ -2044,6 +2078,38 @@ if(location.hash==="#add") openModal();
     });
   }
 
+  // Ask "did you apply?" when the user RETURNS to this tab after the Apply
+  // click (visibilitychange back to visible, or window focus) — not on a
+  // timer that fires while they're away reading the posting. Listeners are
+  // attached on the next tick so the opening click itself can't satisfy
+  // them, and re-arming (another Apply click) or exiting review mode
+  // replaces/cancels any pending prompt.
+  var applyReturnCleanup = null;
+  function armApplyPrompt(j){
+    if (applyReturnCleanup) applyReturnCleanup();
+    var fired = false;
+    function fire(){
+      if (fired) return; fired = true;
+      cleanup();
+      setTimeout(function(){
+        askDidYouApply(j).then(function(ok){ if (ok) markJobApplied(j); });
+      }, 200);
+    }
+    function onVis(){ if (document.visibilityState === 'visible') fire(); }
+    function onFocus(){ fire(); }
+    function cleanup(){
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('focus', onFocus);
+      applyReturnCleanup = null;
+    }
+    applyReturnCleanup = cleanup;
+    setTimeout(function(){
+      if (fired || applyReturnCleanup !== cleanup) return;
+      document.addEventListener('visibilitychange', onVis);
+      window.addEventListener('focus', onFocus);
+    }, 0);
+  }
+
   // Marks the job Applied using the SAME tracker-status write the regular
   // Apply flow uses — same endpoint, same payload shape, same status value.
   function markJobApplied(j){
@@ -2112,14 +2178,11 @@ if(location.hash==="#add") openModal();
     if (applyBtn) applyBtn.onclick = function(){
       if (!j.url){ if (typeof toast==='function') toast('No posting URL on this row', 'info'); return; }
       window.open(j.url, '_blank', 'noopener');
-      // stays on the current card by design — no save, no advance; a beat
-      // later, offer to mark it Applied (same pattern/mechanism as the
-      // regular Apply flow — see askDidYouApply()/markJobApplied() above).
-      setTimeout(function(){
-        askDidYouApply(j).then(function(ok){
-          if (ok) markJobApplied(j);
-        });
-      }, 300);
+      // stays on the current card by design — no save, no advance; when the
+      // user comes BACK to this tab, offer to mark it Applied (same
+      // mechanism as the regular Apply flow — see armApplyPrompt()/
+      // askDidYouApply()/markJobApplied() above).
+      armApplyPrompt(j);
     };
 
     // A card can render already-reviewed (revisited via the carousel, or
@@ -2174,6 +2237,9 @@ if(location.hash==="#add") openModal();
     if (document.getElementById('rvCarousel')) return;
     bodyEl.innerHTML =
       '<div class="rv-carousel" id="rvCarousel">'+
+        '<button class="rv-back" id="rvBack" type="button" aria-label="Back to the previous job" hidden>'+
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 18l-6-6 6-6"/></svg>'+
+        '</button>'+
         '<div class="rv-peek rv-peek-prev empty" id="rvPeekPrev" aria-hidden="true"></div>'+
         '<div class="rv-center" id="rvCenter"></div>'+
         '<div class="rv-peek rv-peek-next empty" id="rvPeekNext" aria-hidden="true"></div>'+
@@ -2243,6 +2309,9 @@ if(location.hash==="#add") openModal();
     loadJd(j);
     renderPeek(prevEl, queue[cursor-1] || null);
     renderPeek(nextEl, queue[cursor+1] || null);
+    // back-step control: reachable whenever a previous card exists
+    var backBtn = document.getElementById('rvBack');
+    if (backBtn){ backBtn.hidden = cursor <= 0; backBtn.onclick = goBack; }
     updateProgress();
     syncStageHeight();
   }
@@ -2302,17 +2371,28 @@ if(location.hash==="#add") openModal();
     animateSwap('forward', verdict);
   }
 
+  // Back to the PREVIOUS card (makes the left peek reachable). The card
+  // re-renders from the same queue entry, and cardMarkup()/wireCard() read
+  // the saved review back off getReview(), so its Liked/Passed badge and
+  // confirmed-verdict (undoable) state are restored as-is.
+  function goBack(){
+    if (cursor <= 0) return;
+    cursor--;
+    animateSwap('back');
+  }
+
   function openReviewMode(){
     if (!window.JOBS || typeof window.matches !== 'function'){ return; }
     // Seed the filter bar from the CURRENT shared state (option lists rebuilt
     // fresh each open so category/function/level always match the live data),
-    // then snapshot the filtered list, best-fit first. Unlike the original
+    // then snapshot the filtered list, ordered by the same state.sort the
+    // feed honors (sortQueue above). Unlike the original
     // one-shot snapshot, this is NOT locked — the filter bar above recomputes
     // it live via recomputeQueue() on any change.
     buildFilterOptions();
     wireFilterBar();
     seedFilterBar();
-    queue = window.JOBS.filter(window.matches).slice().sort(function(a,b){ return (b.fit||0) - (a.fit||0); });
+    queue = sortQueue(window.JOBS.filter(window.matches));
     cursor = 0;
     isOpen = true;
     overlay.classList.add('open');
@@ -2322,6 +2402,7 @@ if(location.hash==="#add") openModal();
   }
   function closeReviewMode(){
     isOpen = false;
+    if (applyReturnCleanup) applyReturnCleanup(); // drop any pending "did you apply?" prompt
     overlay.classList.remove('open');
     overlay.setAttribute('aria-hidden','true');
     document.body.style.overflow = '';
@@ -2335,7 +2416,25 @@ if(location.hash==="#add") openModal();
     if (launchBtn) launchBtn.focus();
   }
 
-  launchBtn.addEventListener('click', openReviewMode);
+  // Guard the launch: if wire.js hasn't populated window.JOBS yet the button
+  // must not silently no-op — say so, then open automatically once the jobs
+  // land (polls up to ~10s; re-enables + explains if they never do).
+  function launchReview(){
+    if (window.JOBS && typeof window.matches === 'function'){ openReviewMode(); return; }
+    if (typeof toast === 'function') toast('Your jobs are still loading — review mode will open in a moment…', 'info');
+    launchBtn.disabled = true;
+    var tries = 0;
+    var t = setInterval(function(){
+      tries++;
+      if (window.JOBS && typeof window.matches === 'function'){
+        clearInterval(t); launchBtn.disabled = false; openReviewMode();
+      } else if (tries >= 40){
+        clearInterval(t); launchBtn.disabled = false;
+        if (typeof toast === 'function') toast('Your jobs haven’t loaded yet — refresh the page and try again.', 'error');
+      }
+    }, 250);
+  }
+  launchBtn.addEventListener('click', launchReview);
   if (exitBtn) exitBtn.addEventListener('click', closeReviewMode);
   document.addEventListener('keydown', function(e){
     if (!isOpen) return;
