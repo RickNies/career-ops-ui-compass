@@ -412,7 +412,7 @@
   /* ---- carousel: center card + READABLE mini-card peeks (Option A) ----
      .rv-carousel is a flex row (center + two peeks) with align-items:stretch,
      so the peeks stretch to the current center card's full height. Each peek
-     is a real ~225px mini-card — fit ring, title, company, salary line, one
+     is a real ~190px mini-card — fit ring, title, company, salary line, one
      "lines up well" line — built from data already in the queue (never a JD
      fetch; that stays center-only), with stacked card-edges behind it and a
      caption below ("N more in the queue" / the revisit hint). NO blur — the
@@ -421,10 +421,10 @@
      stays non-interactive. Recycled in place on every advance() via
      renderPeek()/peekMarkup(). Hidden below 1020px (next) / 1240px (prev) —
      the round back-step circle covers narrow widths. */
-  .rv-carousel{position:relative;display:flex;align-items:stretch;justify-content:center;gap:16px;width:100%;max-width:1440px;margin:0 auto;min-height:0}
+  .rv-carousel{position:relative;display:flex;align-items:stretch;justify-content:center;gap:16px;width:100%;max-width:1600px;margin:0 auto;min-height:0}
   .rv-center{flex:1 1 auto;min-width:0;min-height:0;display:flex;justify-content:center;position:relative}
   .rv-center .rv-card{margin:0 auto}
-  .rv-peek{flex:none;width:225px;display:none;flex-direction:column;transition:opacity .18s ease,transform .18s ease}
+  .rv-peek{flex:none;width:190px;display:none;flex-direction:column;transition:opacity .18s ease,transform .18s ease}
   .rv-peek.empty{opacity:0 !important;pointer-events:none}
   .rv-peek-fade{opacity:0 !important}
   .rv-peek-prev{cursor:pointer;pointer-events:auto}
@@ -493,16 +493,20 @@
      below never moves). */
   .rv-grid{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;overflow-y:auto}
   .rv-left{flex:none;min-width:0;display:flex;flex-direction:column;padding:14px 20px 16px 22px}
-  .rv-left-scroll{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:12px}
-  /* each fit line clamps to 2 wrapped lines (the clamp lives on an inner
+  /* justify-content:space-between — when the column is taller than its
+     content (roomier card), the leftover distributes BETWEEN the blocks
+     instead of pooling as one dead slab at the bottom; when content
+     overflows, gap is the floor and the column scrolls as before */
+  .rv-left-scroll{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;justify-content:space-between;gap:13px}
+  /* each fit line clamps to 3 wrapped lines (the clamp lives on an inner
      span so the ul's outdented ::before bullets aren't clipped) */
-  .rv-clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .rv-clamp{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
   .rv-right{flex:none;min-width:0;display:flex;flex-direction:column;border-top:1px solid var(--line-soft);background:var(--surface)}
   .rv-subhead{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);margin:0 0 5px}
   .rv-subhead-good{color:var(--sage)}
   .rv-subhead-bad{color:var(--terra)}
-  .rv-highlights{margin:0;padding:0 0 0 18px;color:var(--ink-soft);font-size:13px;line-height:1.45}
-  .rv-highlights li{margin-bottom:4px}
+  .rv-highlights{margin:0;padding:0 0 0 18px;color:var(--ink-soft);font-size:14px;line-height:1.5}
+  .rv-highlights li{margin-bottom:5px}
   .rv-highlights li:last-child{margin-bottom:0}
   .rv-lines-up{list-style:none;background:var(--sage-soft);border-radius:12px;padding:9px 13px 9px 31px}
   .rv-lines-up li{position:relative;margin-bottom:5px}
@@ -521,7 +525,7 @@
      job row (fields only render when known — never fabricated). */
   .rv-glance{border:1px solid var(--line-soft);border-radius:12px;background:var(--surface-2);padding:10px 13px}
   .rv-glance .rv-subhead{margin-bottom:7px}
-  .rv-glance-grid{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:12.5px}
+  .rv-glance-grid{display:grid;grid-template-columns:auto 1fr;gap:7px 14px;font-size:13px}
   .rv-glance-grid span{color:var(--muted)}
   .rv-glance-grid b{color:var(--ink-soft);font-weight:600}
   /* ---- readable JD: reading-size serif-headed text at a ~72ch measure,
@@ -538,8 +542,10 @@
   .rv-jd-body li{margin:6px 0;padding-left:3px}
   .rv-jd-loading,.rv-jd-thin{color:var(--muted)}
   /* ---- labeled action bar: Pass ✗ / Apply / Like ✓, each with a NAME, a
-     short caption, and its keyboard hint — plus an always-visible Undo.
-     Wired to the SAME handlers as before (wireCard() in the review script). */
+     short caption, and its keyboard hint. Undo is NOT a standing button —
+     after a vote the clicked button itself becomes the undo (see the
+     vote-undo affordance below). Wired to the SAME handlers as before
+     (wireCard() in the review script). */
   .rv-actions{position:relative;flex:none;display:flex;align-items:flex-start;justify-content:center;gap:30px;padding:12px 20px 13px;border-top:1px solid var(--line-soft);background:var(--surface-2)}
   .rv-act{display:flex;flex-direction:column;align-items:center;gap:5px;border:0;background:none;cursor:pointer;font-family:inherit;padding:0}
   .rv-act .circ{position:relative;width:56px;height:56px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);display:grid;place-items:center;color:var(--muted);box-shadow:var(--shadow-sm);transition:transform .12s ease,background .12s ease,color .12s ease,border-color .12s ease}
@@ -552,9 +558,6 @@
   .rv-act-pass.on .circ{background:var(--terra);border-color:var(--terra);color:#fff}
   .rv-act-like:hover .circ{border-color:var(--sage);color:var(--sage);background:var(--sage-soft)}
   .rv-act-like.on .circ{background:var(--sage);border-color:var(--sage);color:#fff}
-  .rv-act-undo .circ{width:40px;height:40px;margin-top:9px}
-  .rv-act-undo .circ > svg{width:16px;height:16px}
-  .rv-act-undo:hover .circ{border-color:var(--gold);color:var(--gold-deep)}
   .rv-act-apply .circ{width:auto;height:44px;border-radius:999px;padding:0 20px;margin-top:7px;background:var(--ink);border-color:var(--ink);color:#fff;display:flex;align-items:center;gap:8px;font-weight:700;font-size:13.5px;white-space:nowrap}
   .rv-act-apply:hover .circ{background:#0f2740}
   .rv-act-apply .circ > svg{width:15px;height:15px}
@@ -638,8 +641,9 @@
     .rv-act .circ{width:50px;height:50px}
     .rv-act .circ > svg{width:20px;height:20px}
     .rv-act .d{display:none}
-    .rv-act-undo .circ{width:36px;height:36px}
-    .rv-act-apply .circ{height:40px;padding:0 14px;font-size:12.5px}
+    /* width:auto restated — the .rv-act .circ width above ties at equal
+       specificity and would otherwise squash the Apply pill to a circle */
+    .rv-act-apply .circ{width:auto;height:40px;padding:0 14px;font-size:12.5px}
     /* keep the top row ([count] · [Filters] · [✕]) from crowding on narrow
        screens — drop the "N filters active" summary, tighten the toggle */
     .rv-filters-summary{display:none}
@@ -656,8 +660,8 @@
     /* two-column body: summary left, readable JD right — each column
        scrolls internally so the card (bounded by --rv-avail) never pushes
        the action bar out of reach */
-    .rv-card{max-width:min(1080px,96vw)}
-    .rv-carousel{gap:18px}
+    .rv-card{max-width:min(1200px,96vw)}
+    .rv-carousel{gap:16px}
     .rv-grid{display:grid;grid-template-columns:clamp(280px,32vw,380px) 1fr;grid-template-rows:minmax(0,1fr);overflow:hidden}
     .rv-left{min-height:0;overflow:hidden;border-right:1px solid var(--line-soft)}
     .rv-left-scroll{overflow-y:auto;overflow-x:hidden;padding-right:2px}
@@ -684,8 +688,7 @@
     .rv-actions{padding:9px 16px 10px;gap:26px}
     .rv-act .circ{width:48px;height:48px}
     .rv-act .circ > svg{width:19px;height:19px}
-    .rv-act-undo .circ{width:36px;height:36px;margin-top:6px}
-    .rv-act-apply .circ{height:38px;margin-top:5px;font-size:12.5px;padding:0 16px}
+    .rv-act-apply .circ{width:auto;height:38px;margin-top:5px;font-size:12.5px;padding:0 16px}
     .rv-act .d{max-width:120px;font-size:10px}
     .rv-reasons{padding:8px 14px 10px}
   }
@@ -2325,8 +2328,8 @@ if(location.hash==="#add") openModal();
   // so the fit ring + both sections normally fit with no scrollbar; on very
   // short viewports .rv-left-scroll scrolls while the vote/Apply actions
   // stay pinned below it, always visible (see .rv-left in the CSS).
-  var RV_LINES_UP_MAX = 3;
-  var RV_CLOSER_LOOK_MAX = 2;
+  var RV_LINES_UP_MAX = 4;
+  var RV_CLOSER_LOOK_MAX = 3;
 
   // Set by wireFilterBar() below — lets the "You're all caught up" end
   // screen (renderEnd()) open the SAME filter panel now nested in the top
@@ -2645,7 +2648,7 @@ if(location.hash==="#add") openModal();
     var UNDO_ICON = '<span class="rv-undo-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></span>';
     var reqm = normalizeReqMatches(j);
     // Both match sections are capped to a few items (RV_LINES_UP_MAX/
-    // RV_CLOSER_LOOK_MAX, defined above) and each item clamps to 2 wrapped
+    // RV_CLOSER_LOOK_MAX, defined above) and each item clamps to 3 wrapped
     // lines (.rv-clamp). They live in .rv-left-scroll — a flexing content
     // region that scrolls internally on short viewports — while the labeled
     // action bar + reason strip sit at the CARD level below the body grid,
@@ -2683,10 +2686,6 @@ if(location.hash==="#add") openModal();
         '</div>'+
       '</div>'+
       '<div class="rv-actions">'+
-        '<button class="rv-act rv-act-undo" id="rvUndo" type="button" title="Take back your last verdict" aria-label="Undo your last verdict">'+
-          '<span class="circ"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></span>'+
-          '<span class="t">Undo <kbd class="rv-keycap">U</kbd></span>'+
-        '</button>'+
         '<button class="rv-act rv-act-pass'+badOn+'" id="rvPass" type="button" aria-label="Pass on this role">'+
           '<span class="circ"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg>'+UNDO_ICON+'</span>'+
           '<span class="t">Pass <kbd class="rv-keycap">←</kbd></span>'+
@@ -2923,6 +2922,7 @@ if(location.hash==="#add") openModal();
         likeBtn.classList.toggle('rv-voted', on);
         likeBtn.disabled = !on && !!verdict;
         likeBtn.setAttribute('aria-label', on ? 'Undo — you liked this role' : 'Mark as a good fit');
+        likeBtn.title = on ? 'Click again to undo (U)' : '';
       }
       if (passBtn){
         var onB = verdict === 'bad';
@@ -2930,6 +2930,7 @@ if(location.hash==="#add") openModal();
         passBtn.classList.toggle('rv-voted', onB);
         passBtn.disabled = !onB && !!verdict;
         passBtn.setAttribute('aria-label', onB ? 'Undo — you passed on this role' : 'Pass on this role');
+        passBtn.title = onB ? 'Click again to undo (U)' : '';
       }
     }
 
@@ -2951,15 +2952,6 @@ if(location.hash==="#add") openModal();
 
     if (likeBtn) likeBtn.onclick = function(){ likeBtn.classList.contains('rv-voted') ? undo() : choose('good'); };
     if (passBtn) passBtn.onclick = function(){ passBtn.classList.contains('rv-voted') ? undo() : choose('bad'); };
-    // Always-visible Undo in the action bar — SAME semantics as the U key:
-    // undo this card's confirmed verdict if there is one (clearReview, stays
-    // on the card), else step back to the previous card (goBack).
-    var undoBtn = document.getElementById('rvUndo');
-    if (undoBtn) undoBtn.onclick = function(){
-      var voted = document.querySelector('#rvCard .rv-act.rv-voted');
-      if (voted) voted.click();
-      else goBack();
-    };
     if (applyBtn) applyBtn.onclick = function(){
       if (!j.url){ if (typeof toast==='function') toast('No posting URL on this row', 'info'); return; }
       window.open(j.url, '_blank', 'noopener');
