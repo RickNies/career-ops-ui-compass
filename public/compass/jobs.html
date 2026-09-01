@@ -50,8 +50,10 @@
   /* Iteration 6 — "still open?" liveness badges */
   .badge--live{background:var(--sage-soft);color:var(--sage)} .badge--live .tk{background:var(--sage)}
   .badge--closed{background:var(--terra-soft);color:var(--terra)} .badge--closed .tk{background:var(--terra)}
-  /* shared toast (role=status / aria-live announces completions) */
-  .toast-wrap{position:fixed;z-index:120;left:50%;bottom:24px;transform:translateX(-50%);display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
+  /* shared toast (role=status / aria-live announces completions).
+     Anchored bottom-RIGHT (not bottom-center) so it never covers the centered
+     review-mode reason chips (.rv-reasons) after a Pass/Like. */
+  .toast-wrap{position:fixed;z-index:120;right:18px;bottom:18px;left:auto;transform:none;display:flex;flex-direction:column;gap:8px;align-items:flex-end;pointer-events:none}
   .toast{display:inline-flex;align-items:center;gap:9px;background:var(--ink);color:#fff;border-radius:999px;padding:11px 18px;font-size:13.5px;font-weight:600;box-shadow:0 10px 30px rgba(22,50,79,.25);pointer-events:auto;max-width:92vw;animation:toastin .2s ease}
   .toast svg{width:16px;height:16px;flex:none}
   .toast--success{background:var(--sage)} .toast--info{background:var(--ink)} .toast--error{background:var(--terra)}
