@@ -357,13 +357,14 @@
   .qa-ok svg{width:16px;height:16px}
 
   /* ---- Review Mode (focused, one-job-at-a-time overlay) ----
-     Self-contained: reuses .fit/.ring/.lbl/.fit-strong/.fit-good/.fit-fair
-     (fit ring), .vbtn/.vbtn.good/.vbtn.bad (like/pass buttons), .rpop-chip
+     "Option A — The Dossier" card layout. Self-contained: reuses
+     .fit/.ring/.lbl/.fit-strong/.fit-good/.fit-fair (fit ring), .rpop-chip
      (reason chips) and .btn/.btn--outline/.btn--primary (buttons) from the
      shared vocabulary above — only new layout/chrome rules live here.
-     Desktop (≥880px) widens the card and splits it into two columns — job
-     summary left, full JD right, each independently scrollable; narrower
-     widths stack to a single column (the original mobile layout). */
+     The card is a flex column: banner (identity + serif stat blocks) /
+     two-column body (summary + at-a-glance left, readable JD right, each
+     independently scrollable at ≥880px; stacked in one scroll region
+     narrower) / labeled action bar / reason strip. */
   .rv-overlay{position:fixed;inset:0;z-index:100;background:var(--bg);display:none;flex-direction:column}
   /* the review overlay's own z-index (100) sits above the shared .modal
      (z-index:80), so the "did you apply?" confirm — which opens ON TOP of
@@ -380,9 +381,13 @@
   .rv-exit:hover{border-color:var(--terra);color:var(--terra);background:var(--terra-soft);transform:scale(1.05)}
   .rv-exit:active{transform:scale(.95)}
   .rv-body{flex:1;display:flex;align-items:flex-start;justify-content:center;padding:16px 22px 20px;overflow:auto;min-height:0}
-  .rv-card{position:relative;z-index:2;width:100%;max-width:520px;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:0 4px 10px rgba(22,50,79,.08),0 24px 48px rgba(22,50,79,.16);padding:26px;transition:transform .3s cubic-bezier(.16,1,.3,1),opacity .3s cubic-bezier(.16,1,.3,1)}
-  /* the real side peeks (below) now provide the "stacked deck" depth cue, so
-     the card no longer needs its own fake ::before/::after shadow layers */
+  /* ---- Option A "Dossier" card: a flex COLUMN (banner / two-column body /
+     labeled action bar / reason strip) bounded to the viewport via
+     --rv-avail (computed + kept in sync by syncStageHeight() in the review
+     script) — the body columns scroll INTERNALLY instead of growing the
+     card, so the action bar and the reason prompt are ALWAYS visible and
+     there is always a way to advance. */
+  .rv-card{position:relative;z-index:2;width:100%;max-width:520px;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:0 4px 10px rgba(22,50,79,.08),0 24px 48px rgba(22,50,79,.16);display:flex;flex-direction:column;overflow:hidden;max-height:var(--rv-avail, calc(100vh - 220px));transition:transform .3s cubic-bezier(.16,1,.3,1),opacity .3s cubic-bezier(.16,1,.3,1)}
   /* ---- card-turn: the OUTGOING card is a positioned clone (.rv-ghost) laid
      over the center slot so exit + enter can OVERLAP (no dead frame, no
      premature innerHTML swap). Exit is directional by verdict — Like slides
@@ -396,41 +401,63 @@
   .rv-card.rv-enter-from-right{transform:translateX(90px) scale(.985);opacity:0;transition:none}
   .rv-card.rv-enter-from-left{transform:translateX(-90px) scale(.985);opacity:0;transition:none}
   /* brief verdict stamp on the outgoing clone */
-  .rv-stamp{position:absolute;top:20px;font-family:var(--serif);font-size:19px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:4px 14px;border:3px solid;border-radius:10px;background:var(--surface);transform:rotate(-8deg)}
+  .rv-stamp{position:absolute;top:20px;font-family:var(--serif);font-size:19px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:4px 14px;border:3px solid;border-radius:10px;background:var(--surface);transform:rotate(-8deg);z-index:4}
   .rv-stamp-good{color:var(--sage);border-color:var(--sage);right:24px}
   .rv-stamp-bad{color:var(--terra);border-color:var(--terra);left:24px;transform:rotate(8deg)}
   /* small inward nudge on the peek the incoming card "came from" */
-  .rv-peek-next.rv-peek-nudge{transform:scale(.95) translateX(-12px)}
-  .rv-peek-prev.rv-peek-nudge{transform:scale(.95) translateX(12px)}
+  .rv-peek-next.rv-peek-nudge{transform:translateX(-12px)}
+  .rv-peek-prev.rv-peek-nudge{transform:translateX(12px)}
   @media(prefers-reduced-motion:reduce){ .rv-card{transition:none !important} .rv-progress-fill{transition:none} .rv-peek{transition:none !important} .rv-card.rv-ghost{display:none} }
 
-  /* ---- carousel: center card + blurred "peek" preview of each neighbor ----
+  /* ---- carousel: center card + READABLE mini-card peeks (Option A) ----
      .rv-carousel is a flex row (center + two peeks) with align-items:stretch,
-     so the peeks always stretch to the current center card's full height.
-     Peeks now render a LIGHTWEIGHT REAL preview of the neighbor job (fit
-     ring, title, company, a couple of "what lines up well" lines) built from
-     data already in the queue (never a JD fetch — that stays center-only),
-     then get thrown out of focus via filter:blur()+reduced opacity+scale so
-     they read as "the next job, out of frame" rather than a legible card.
-     Recycled in place on every advance() via renderPeek()/peekMarkup(), so
-     the carousel stays cheap regardless of queue size. */
-  .rv-carousel{position:relative;display:flex;align-items:stretch;justify-content:center;gap:14px;width:100%;max-width:1220px;margin:0 auto;min-height:0}
+     so the peeks stretch to the current center card's full height. Each peek
+     is a real ~225px mini-card — fit ring, title, company, salary line, one
+     "lines up well" line — built from data already in the queue (never a JD
+     fetch; that stays center-only), with stacked card-edges behind it and a
+     caption below ("N more in the queue" / the revisit hint). NO blur — the
+     deck should read as a deck. The PREVIOUS peek shows its saved verdict
+     ("✗ You passed" / "✓ Liked") and is clickable (goBack()); the next peek
+     stays non-interactive. Recycled in place on every advance() via
+     renderPeek()/peekMarkup(). Hidden below 1020px (next) / 1240px (prev) —
+     the round back-step circle covers narrow widths. */
+  .rv-carousel{position:relative;display:flex;align-items:stretch;justify-content:center;gap:16px;width:100%;max-width:1440px;margin:0 auto;min-height:0}
   .rv-center{flex:1 1 auto;min-width:0;min-height:0;display:flex;justify-content:center;position:relative}
   .rv-center .rv-card{margin:0 auto}
-  .rv-peek{flex:none;width:90px;border-radius:20px;background:var(--surface-2);border:1px solid var(--line-soft);opacity:.55;filter:blur(3px) grayscale(.25);transform:scale(.95);display:flex;flex-direction:column;align-items:stretch;justify-content:center;overflow:hidden;padding:18px 12px;pointer-events:none;transition:opacity .18s ease,transform .18s ease}
-  .rv-peek.empty{opacity:0;pointer-events:none}
+  .rv-peek{flex:none;width:225px;display:none;flex-direction:column;transition:opacity .18s ease,transform .18s ease}
+  .rv-peek.empty{opacity:0 !important;pointer-events:none}
   .rv-peek-fade{opacity:0 !important}
-  .rv-peek-inner{display:flex;flex-direction:column;gap:8px;width:100%;text-align:center}
-  .rv-peek .fit{width:auto}
-  .rv-peek .fit .ring{width:38px;height:38px;font-size:14px;margin:0 auto}
-  .rv-peek-title{font-family:var(--serif);font-size:12.5px;font-weight:600;color:var(--ink);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .rv-peek-company{font-size:11px;color:var(--ink-soft);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .rv-peek-lines{list-style:none;margin:2px 0 0;padding:0;font-size:10px;color:var(--muted);line-height:1.4;width:100%}
-  .rv-peek-lines li{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  /* ---- back-step: small round control over the left peek — goes to the
+  .rv-peek-prev{cursor:pointer;pointer-events:auto}
+  .rv-peek-next{pointer-events:none}
+  .rv-peek-card{position:relative;z-index:0;flex:1 1 auto;display:flex;flex-direction:column;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:var(--shadow-sm);opacity:.93;transform:scale(.97);transition:transform .15s ease,opacity .15s ease,box-shadow .15s ease}
+  .rv-peek-prev:hover .rv-peek-card{opacity:1;transform:scale(1);box-shadow:0 4px 10px rgba(22,50,79,.08),0 24px 48px rgba(22,50,79,.16)}
+  /* stacked-edge look: two card lips peeking out underneath */
+  .rv-peek-card::before,.rv-peek-card::after{content:"";position:absolute;left:7px;right:7px;height:12px;background:var(--surface);border:1px solid var(--line-soft);border-radius:12px;z-index:-1}
+  .rv-peek-card::before{bottom:-5px}
+  .rv-peek-card::after{bottom:-10px;left:14px;right:14px;opacity:.7}
+  .rv-peek-eyebrow{font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--gold-deep)}
+  .rv-peek-prev .rv-peek-eyebrow{color:var(--muted)}
+  .rv-peek-fitrow{display:flex;align-items:center;gap:10px;text-align:left}
+  .rv-peek-fitrow .fit{width:auto;flex:none;text-align:center}
+  .rv-peek-fitrow .fit .ring{width:44px;height:44px;font-size:15.5px;margin:0}
+  .rv-peek-idtx{min-width:0}
+  .rv-peek-title{font-family:var(--serif);font-size:15px;font-weight:600;line-height:1.25;color:var(--ink);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .rv-peek-company{font-size:12.5px;color:var(--ink-soft);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .rv-peek-meta{font-size:11.5px;color:var(--muted);line-height:1.5}
+  .rv-peek-line{font-size:11.5px;color:var(--sage);font-weight:600;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .rv-peek-verdict{align-self:flex-start;font-size:10.5px;font-weight:700;border-radius:999px;padding:3px 10px}
+  .rv-peek-verdict.liked{background:var(--sage-soft);color:var(--sage)}
+  .rv-peek-verdict.passed{background:var(--terra-soft);color:var(--terra)}
+  .rv-peek-more{flex:none;margin-top:9px;text-align:center;font-size:11px;color:var(--muted);line-height:1.4}
+  .rv-peek-more b{color:var(--ink-soft)}
+  /* keycap hints (action-bar labels, peek captions, reason chips) */
+  .rv-keycap{display:inline-grid;place-items:center;min-width:20px;height:19px;padding:0 5px;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;background:var(--surface-2);color:var(--muted);font-size:10.5px;font-weight:700;font-family:var(--sans);font-style:normal;line-height:1}
+  @media(min-width:1020px){ .rv-peek-next{display:flex} }
+  @media(min-width:1240px){ .rv-peek-prev{display:flex} .rv-back{display:none} }
+  /* ---- back-step: small round control at the left edge — goes to the
      PREVIOUS card (goBack() in the review script; also the U key when the
      current card has no confirmed verdict, and Backspace). Hidden on the
-     first card. */
+     first card; visually replaced by the clickable prev mini-card ≥1240px. */
   .rv-back{position:absolute;left:14px;top:50%;transform:translateY(-50%);z-index:5;width:44px;height:44px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink-soft);display:grid;place-items:center;padding:0;cursor:pointer;box-shadow:var(--shadow-sm);transition:border-color .12s ease,color .12s ease,transform .08s ease}
   .rv-back svg{width:19px;height:19px}
   .rv-back:hover{border-color:var(--gold);color:var(--gold-deep);transform:translateY(-50%) scale(1.07)}
@@ -440,100 +467,117 @@
     .rv-carousel{gap:8px}
     .rv-back{width:36px;height:36px;left:2px}
     .rv-back svg{width:16px;height:16px}
-    .rv-peek{width:28px;border-radius:12px;padding:8px 4px}
-    .rv-peek .fit .ring{width:18px;height:18px;font-size:8px}
-    .rv-peek-title{font-size:8px}
-    .rv-peek-company,.rv-peek-lines{display:none}
   }
 
-  .rv-grid{display:grid;grid-template-columns:1fr;grid-template-areas:"left" "right";gap:24px}
-  /* ---- fit-to-viewport stage: .rv-left is a flex COLUMN under the
-     --rv-avail bound (computed+kept in sync by syncStageHeight() in the
-     review script — measures #rvCard's top + the live top-chrome height on
-     every render/resize/filter-toggle). The summary content (fit ring, meta,
-     both match sections) lives in .rv-left-scroll, which flexes and — only
-     if a short viewport truly can't fit it — scrolls; the vote/Apply
-     actions and the reason prompt sit BELOW it as flex:none siblings, so
-     they are PINNED and can never be clipped or pushed out of reach.
-     cardMarkup() still caps both match sections to a few items and each
-     item clamps to 2 lines (.rv-clamp), so in practice nothing scrolls.
-     The JD panel (right column) keeps its own scroll — it shares the same
-     --rv-avail bound at ≥880px so both columns align to one row height. */
-  .rv-left{grid-area:left;min-width:0;max-height:var(--rv-avail, calc(100vh - 260px));overflow:hidden;padding-right:2px;display:flex;flex-direction:column;min-height:0}
-  .rv-left-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden}
-  .rv-actions{flex:none}
-  .rv-reasons{flex:none}
-  /* each fit line clamps to 2 wrapped lines (the clamp lives on an inner
-     span so the ul's outdented ::before bullets aren't clipped) */
-  .rv-clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-  .rv-right{grid-area:right;min-width:0}
-  .rv-card-head{display:flex;gap:14px;align-items:flex-start}
-  .rv-card-head .fit{width:70px}
-  .rv-card-head .fit .ring{width:60px;height:60px;font-size:21px}
-  .rv-headtext{flex:1;min-width:0}
-  .rv-title{font-size:clamp(16px,1vw + 11px,20px);display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  /* ---- banner: identity + serif STAT BLOCKS (salary / location / work
+     type promoted from small muted text to first-class decision facts).
+     Spans the full card so it doesn't read as two loose halves. */
+  .rv-banner{position:relative;flex:none;display:flex;align-items:center;gap:16px;padding:16px 22px 14px;border-bottom:1px solid var(--line-soft);background:linear-gradient(180deg,var(--surface-2),var(--surface))}
+  .rv-banner .fit{flex:none;width:auto;text-align:center}
+  .rv-banner .fit .ring{width:58px;height:58px;font-size:20px}
+  .rv-id{flex:1 1 auto;min-width:0}
+  .rv-title{font-size:clamp(17px,1vw + 11px,22px);line-height:1.2;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
   .rv-company{color:var(--ink-soft);font-weight:600;font-size:14.5px;margin-top:2px}
-  .rv-meta{color:var(--muted);font-size:13px;margin-top:5px;display:flex;gap:12px;flex-wrap:wrap}
+  .rv-sub{color:var(--muted);font-size:12px;margin-top:4px}
   .rv-badge{font-size:11px;font-weight:700;border-radius:999px;padding:3px 10px}
   .rv-badge-good{background:var(--sage-soft);color:var(--sage)}
   .rv-badge-bad{background:var(--terra-soft);color:var(--terra)}
-  .rv-details{display:flex;flex-wrap:wrap;gap:5px 16px;margin-top:5px;font-size:12px;color:var(--muted)}
-  .rv-details b{color:var(--ink-soft);font-weight:600;margin-right:4px}
-  .rv-subhead{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;color:var(--muted);margin:10px 0 4px}
-  .rv-highlights{margin:0;padding:0 0 0 18px;color:var(--ink-soft);font-size:clamp(12px,.35vw + 11px,13.5px);line-height:1.45}
-  .rv-highlights li{margin-bottom:3px}
-  .rv-highlights li:last-child{margin-bottom:0}
-  /* fit sections restyle — sage for "what lines up well", terra/amber for
-     "worth a closer look"; key terms get bold+underline emphasis (see
-     emphasize() in the review script) so both lists stay scannable.
-     cardMarkup() caps each list to a handful of lines (see the review
-     script) so — combined with this tighter spacing — both sections plus
-     the actions below always fit in .rv-left with no scroll. */
+  .rv-stats{display:flex;gap:10px;flex:none;min-width:0}
+  .rv-stat{min-width:112px;max-width:180px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:9px 13px;box-shadow:var(--shadow-sm)}
+  .rv-stat b{display:block;font-family:var(--serif);font-size:16.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rv-stat span{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+
+  /* ---- body: summary-left / JD-right. Mobile-first it's a single stacked
+     scroll region; ≥880px it becomes a two-column grid where EACH column
+     scrolls internally under the card's --rv-avail bound (so the action bar
+     below never moves). */
+  .rv-grid{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;overflow-y:auto}
+  .rv-left{flex:none;min-width:0;display:flex;flex-direction:column;padding:14px 20px 16px 22px}
+  .rv-left-scroll{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:12px}
+  /* each fit line clamps to 2 wrapped lines (the clamp lives on an inner
+     span so the ul's outdented ::before bullets aren't clipped) */
+  .rv-clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .rv-right{flex:none;min-width:0;display:flex;flex-direction:column;border-top:1px solid var(--line-soft);background:var(--surface)}
+  .rv-subhead{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);margin:0 0 5px}
   .rv-subhead-good{color:var(--sage)}
   .rv-subhead-bad{color:var(--terra)}
-  .rv-lines-up{list-style:none;background:var(--sage-soft);border-radius:12px;padding:8px 12px 8px 30px}
-  .rv-lines-up li{position:relative;margin-bottom:4px}
+  .rv-highlights{margin:0;padding:0 0 0 18px;color:var(--ink-soft);font-size:13px;line-height:1.45}
+  .rv-highlights li{margin-bottom:4px}
+  .rv-highlights li:last-child{margin-bottom:0}
+  .rv-lines-up{list-style:none;background:var(--sage-soft);border-radius:12px;padding:9px 13px 9px 31px}
+  .rv-lines-up li{position:relative;margin-bottom:5px}
   .rv-lines-up li:last-child{margin-bottom:0}
   .rv-lines-up li::before{content:"";position:absolute;left:-18px;top:6px;width:8px;height:8px;border-radius:999px;background:var(--sage)}
   .rv-lines-up strong{color:#1D4F40}
   .rv-lines-up u{text-decoration-color:var(--sage)}
-  .rv-closer-look{list-style:none;background:var(--terra-soft);border-radius:12px;padding:8px 12px 8px 30px}
-  .rv-closer-look li{position:relative;margin-bottom:4px}
+  .rv-closer-look{list-style:none;background:var(--terra-soft);border-radius:12px;padding:9px 13px 9px 31px}
+  .rv-closer-look li{position:relative;margin-bottom:5px}
   .rv-closer-look li:last-child{margin-bottom:0}
   .rv-closer-look li::before{content:"";position:absolute;left:-18px;top:6px;width:8px;height:8px;border-radius:2px;background:var(--terra);transform:rotate(45deg)}
   .rv-closer-look strong{color:#7A3A22}
   .rv-closer-look u{text-decoration-color:var(--terra)}
-  /* Below 880px, left/right STACK (single column) — capping the JD panel to
-     the same full --rv-avail as .rv-left would double the card's height
-     (left's bound + jd-panel's bound, stacked). Keep it a modest
-     viewport-relative cap there instead; only at ≥880px (side-by-side
-     columns, see media query below) does it share --rv-avail with .rv-left
-     so both columns align to the same row height. */
-  .rv-jd-panel{border:1px solid var(--line-soft);border-radius:14px;background:var(--surface-2);padding:16px 18px;display:flex;flex-direction:column;min-height:160px;max-height:clamp(220px,42vh,440px)}
-  .rv-jd-panel-head{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;color:var(--muted);margin-bottom:10px;flex:none}
-  .rv-jd-body{font-size:clamp(12px,.35vw + 11px,13.5px);line-height:1.6;color:var(--ink-soft);flex:1 1 auto;min-height:0;overflow:auto}
-  .rv-jd-body h3{font-size:14px;margin:10px 0 4px}
-  .rv-jd-body ul,.rv-jd-body ol{margin:4px 0 8px;padding-left:20px}
+  /* ---- "At a glance" facts grid — level / function / category / found —
+     fills the former dead zone under the fit lists with data already on the
+     job row (fields only render when known — never fabricated). */
+  .rv-glance{border:1px solid var(--line-soft);border-radius:12px;background:var(--surface-2);padding:10px 13px}
+  .rv-glance .rv-subhead{margin-bottom:7px}
+  .rv-glance-grid{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:12.5px}
+  .rv-glance-grid span{color:var(--muted)}
+  .rv-glance-grid b{color:var(--ink-soft);font-weight:600}
+  /* ---- readable JD: reading-size serif-headed text at a ~72ch measure,
+     its own scroll (≥880px), comfortable padding. */
+  .rv-jd-head{flex:none;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 22px 9px;font-size:11.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line-soft)}
+  .rv-jd-head a{color:var(--gold-deep);font-size:12px;text-transform:none;letter-spacing:0;font-weight:600;text-decoration:none}
+  .rv-jd-head a:hover{text-decoration:underline}
+  .rv-jd-body{flex:1 1 auto;min-height:0;padding:16px 24px 22px;font-size:15px;line-height:1.72;color:var(--ink-soft)}
+  .rv-jd-body > *{max-width:72ch}
+  .rv-jd-body h3,.rv-jd-body h4,.rv-jd-body h5{font-family:var(--serif);font-size:16.5px;font-weight:600;color:var(--ink);margin:22px 0 8px;letter-spacing:-.01em}
+  .rv-jd-body h3:first-child,.rv-jd-body h4:first-child,.rv-jd-body h5:first-child{margin-top:2px}
+  .rv-jd-body p{margin:0 0 14px}
+  .rv-jd-body ul,.rv-jd-body ol{margin:7px 0 16px;padding-left:22px}
+  .rv-jd-body li{margin:6px 0;padding-left:3px}
   .rv-jd-loading,.rv-jd-thin{color:var(--muted)}
-  .rv-actions{display:flex;align-items:center;justify-content:center;gap:18px;margin-top:14px}
-  .vbtn.rv-big{width:64px;height:64px;position:relative}
-  .vbtn.rv-big svg{width:27px;height:27px}
-  .vbtn.rv-big:disabled{opacity:.5;cursor:default}
+  /* ---- labeled action bar: Pass ✗ / Apply / Like ✓, each with a NAME, a
+     short caption, and its keyboard hint — plus an always-visible Undo.
+     Wired to the SAME handlers as before (wireCard() in the review script). */
+  .rv-actions{position:relative;flex:none;display:flex;align-items:flex-start;justify-content:center;gap:30px;padding:12px 20px 13px;border-top:1px solid var(--line-soft);background:var(--surface-2)}
+  .rv-act{display:flex;flex-direction:column;align-items:center;gap:5px;border:0;background:none;cursor:pointer;font-family:inherit;padding:0}
+  .rv-act .circ{position:relative;width:56px;height:56px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);display:grid;place-items:center;color:var(--muted);box-shadow:var(--shadow-sm);transition:transform .12s ease,background .12s ease,color .12s ease,border-color .12s ease}
+  .rv-act .circ > svg{width:23px;height:23px}
+  .rv-act:hover .circ{transform:scale(1.06)}
+  .rv-act:active .circ{transform:scale(.95)}
+  .rv-act .t{font-size:12.5px;font-weight:700;color:var(--ink-soft);display:flex;align-items:center;gap:6px}
+  .rv-act .d{font-size:10.5px;color:var(--muted);max-width:130px;text-align:center;line-height:1.35}
+  .rv-act-pass:hover .circ{border-color:var(--terra);color:var(--terra);background:var(--terra-soft)}
+  .rv-act-pass.on .circ{background:var(--terra);border-color:var(--terra);color:#fff}
+  .rv-act-like:hover .circ{border-color:var(--sage);color:var(--sage);background:var(--sage-soft)}
+  .rv-act-like.on .circ{background:var(--sage);border-color:var(--sage);color:#fff}
+  .rv-act-undo .circ{width:40px;height:40px;margin-top:9px}
+  .rv-act-undo .circ > svg{width:16px;height:16px}
+  .rv-act-undo:hover .circ{border-color:var(--gold);color:var(--gold-deep)}
+  .rv-act-apply .circ{width:auto;height:44px;border-radius:999px;padding:0 20px;margin-top:7px;background:var(--ink);border-color:var(--ink);color:#fff;display:flex;align-items:center;gap:8px;font-weight:700;font-size:13.5px;white-space:nowrap}
+  .rv-act-apply:hover .circ{background:#0f2740}
+  .rv-act-apply .circ > svg{width:15px;height:15px}
+  .rv-act:disabled{opacity:.45;cursor:default}
+  .rv-act:disabled .circ{transform:none}
   /* ---- vote-undo affordance: once a verdict is confirmed, the clicked
-     button keeps its normal confirmed color (.on) AND gains a small ↺ badge
+     button keeps its confirmed color (.on) AND gains a small ↺ badge
      (rv-voted) signalling "click again to undo" — clicking it calls
      clearReview() and returns to neutral. See wireCard()/setVoted() in the
      review script. */
-  .vbtn .rv-undo-icon{position:absolute;right:-6px;bottom:-6px;width:22px;height:22px;border-radius:999px;background:var(--surface);border:1.5px solid var(--line);color:var(--muted);display:none;align-items:center;justify-content:center;padding:3px;box-shadow:var(--shadow-sm)}
-  .vbtn .rv-undo-icon svg{width:13px;height:13px}
-  .vbtn.rv-voted .rv-undo-icon{display:flex}
-  .vbtn.rv-voted.good .rv-undo-icon{border-color:var(--sage);color:var(--sage)}
-  .vbtn.rv-voted.bad .rv-undo-icon{border-color:var(--terra);color:var(--terra)}
-  .vbtn.rv-voted:hover .rv-undo-icon{transform:scale(1.1)}
-  .rv-apply{padding:12px 20px}
-  .rv-reasons{margin-top:10px;text-align:center}
-  .rv-reasons-hint{color:var(--muted);font-size:12.5px;margin-bottom:5px}
+  .rv-act .rv-undo-icon{position:absolute;right:-6px;bottom:-6px;width:22px;height:22px;border-radius:999px;background:var(--surface);border:1.5px solid var(--line);color:var(--muted);display:none;align-items:center;justify-content:center;padding:3px;box-shadow:var(--shadow-sm)}
+  .rv-act .rv-undo-icon svg{width:13px;height:13px}
+  .rv-act.rv-voted .rv-undo-icon{display:flex}
+  .rv-act.rv-voted.rv-act-like .rv-undo-icon{border-color:var(--sage);color:var(--sage)}
+  .rv-act.rv-voted.rv-act-pass .rv-undo-icon{border-color:var(--terra);color:var(--terra)}
+  .rv-act.rv-voted:hover .rv-undo-icon{transform:scale(1.1)}
+  /* ---- reason strip: the "why?" chips appear here (under the action bar,
+     full card width) after a vote — see showReasons() in the review script. */
+  .rv-reasons{flex:none;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;padding:10px 18px 12px;border-top:1px dashed var(--line);background:var(--surface-2)}
+  .rv-reasons[hidden]{display:none}
+  .rv-reasons-hint{color:var(--muted);font-size:12.5px}
   .rv-reasons-chips{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;align-items:center}
+  .rv-reason-chip .rv-keycap{margin-left:5px}
   .rv-reason-skip{padding:5px 14px;font-size:12px}
   .rv-end{text-align:center;max-width:360px;margin:40px auto 0}
   .rv-end-check{width:64px;height:64px;border-radius:999px;background:var(--sage-soft);color:var(--sage);font-size:28px;font-weight:700;display:grid;place-items:center;margin:0 auto 16px}
@@ -582,55 +626,68 @@
   .rv-filters .sal-unknown,.rv-filters .new-only{padding-top:0;border-top:0;font-size:12.5px}
   .rv-empty h2{font-size:20px}
   @media(max-width:620px){
-    .rv-card{padding:20px}
-    .rv-card-head{flex-direction:column;align-items:flex-start}
-    .rv-actions{gap:8px}
-    .rv-apply{padding:10px 12px}
-    .vbtn.rv-big{width:58px;height:58px}
-    .vbtn.rv-big svg{width:24px;height:24px}
+    .rv-banner{flex-wrap:wrap;gap:12px;padding:14px 16px 12px}
+    .rv-banner .fit .ring{width:48px;height:48px;font-size:17px}
+    .rv-stats{width:100%;gap:8px}
+    .rv-stat{flex:1;min-width:0;max-width:none;padding:7px 10px}
+    .rv-stat b{font-size:14px}
+    .rv-left{padding:12px 16px 14px}
+    .rv-jd-head{padding:11px 16px 8px}
+    .rv-jd-body{padding:14px 16px 18px;font-size:14px}
+    .rv-actions{gap:12px;padding:10px 10px 11px}
+    .rv-act .circ{width:50px;height:50px}
+    .rv-act .circ > svg{width:20px;height:20px}
+    .rv-act .d{display:none}
+    .rv-act-undo .circ{width:36px;height:36px}
+    .rv-act-apply .circ{height:40px;padding:0 14px;font-size:12.5px}
     /* keep the top row ([count] · [Filters] · [✕]) from crowding on narrow
        screens — drop the "N filters active" summary, tighten the toggle */
     .rv-filters-summary{display:none}
     .rv-filters-toggle{padding:8px 10px;font-size:12px;gap:5px}
     .rv-filters-body{width:88vw}
   }
+  /* very narrow phones: keep the full salary range readable in its stat block */
+  @media(max-width:430px){
+    .rv-stat{padding:7px 8px}
+    .rv-stat b{font-size:12.5px}
+    .rv-stat span{font-size:9.5px}
+  }
   @media(min-width:880px){
-    /* fluid card width/padding/column split — grows smoothly from the
-       880px switch point instead of jumping straight to the full 1100px
-       two-column spread */
-    .rv-card{max-width:min(1100px,96vw);padding:clamp(20px,1vw + 12px,24px) clamp(22px,2.4vw + 2px,36px)}
-    .rv-grid{grid-template-columns:clamp(300px,34vw,420px) 1fr;grid-template-areas:"left right";gap:clamp(22px,2.4vw,36px);align-items:start}
-    .rv-carousel{max-width:1440px;gap:20px}
-    .rv-peek{width:140px;padding:22px 16px}
-    .rv-peek .fit .ring{width:44px;height:44px;font-size:16px}
-    .rv-peek-title{font-size:13.5px}
-    .rv-peek-company{font-size:12px}
-    .rv-peek-lines{font-size:10.5px}
-    /* side-by-side columns now — share the same fit-to-viewport bound as
-       .rv-left so left/right align to one row height. */
-    .rv-jd-panel{max-height:var(--rv-avail, calc(100vh - 260px))}
+    /* two-column body: summary left, readable JD right — each column
+       scrolls internally so the card (bounded by --rv-avail) never pushes
+       the action bar out of reach */
+    .rv-card{max-width:min(1080px,96vw)}
+    .rv-carousel{gap:18px}
+    .rv-grid{display:grid;grid-template-columns:clamp(280px,32vw,380px) 1fr;grid-template-rows:minmax(0,1fr);overflow:hidden}
+    .rv-left{min-height:0;overflow:hidden;border-right:1px solid var(--line-soft)}
+    .rv-left-scroll{overflow-y:auto;overflow-x:hidden;padding-right:2px}
+    .rv-right{border-top:0;min-height:0}
+    .rv-jd-body{overflow-y:auto}
   }
 
   /* ---- compact density for short laptop viewports: tighter chrome,
-     smaller ring/buttons, so the pinned actions keep comfortable room ---- */
+     smaller ring/stats/buttons, so the pinned actions keep comfortable room ---- */
   @media(max-height:760px){
     .rv-top{padding:10px 22px 0}
     .rv-topbar{margin-top:6px}
     .rv-exit{width:40px;height:40px}
     .rv-exit svg{width:17px;height:17px}
     .rv-body{padding:10px 22px 12px}
-    .rv-card{padding:16px 22px}
-    .rv-card-head{gap:11px}
-    .rv-card-head .fit{width:56px}
-    .rv-card-head .fit .ring{width:46px;height:46px;font-size:16px}
-    .rv-subhead{margin:7px 0 3px}
-    .rv-highlights li{margin-bottom:2px}
-    .rv-actions{margin-top:10px;gap:14px}
-    .vbtn.rv-big{width:52px;height:52px}
-    .vbtn.rv-big svg{width:21px;height:21px}
-    .rv-apply{padding:9px 15px}
-    .rv-reasons{margin-top:8px}
-    .rv-jd-panel{padding:12px 14px}
+    .rv-banner{padding:12px 20px 11px;gap:13px}
+    .rv-banner .fit .ring{width:48px;height:48px;font-size:17px}
+    .rv-stat{padding:7px 11px}
+    .rv-stat b{font-size:15px}
+    .rv-left{padding:11px 18px 12px 20px}
+    .rv-left-scroll{gap:9px}
+    .rv-jd-head{padding:10px 20px 8px}
+    .rv-jd-body{font-size:14px;line-height:1.66;padding:13px 22px 18px}
+    .rv-actions{padding:9px 16px 10px;gap:26px}
+    .rv-act .circ{width:48px;height:48px}
+    .rv-act .circ > svg{width:19px;height:19px}
+    .rv-act-undo .circ{width:36px;height:36px;margin-top:6px}
+    .rv-act-apply .circ{height:38px;margin-top:5px;font-size:12.5px;padding:0 16px}
+    .rv-act .d{max-width:120px;font-size:10px}
+    .rv-reasons{padding:8px 14px 10px}
   }
 
   @media(max-width:920px){
@@ -910,7 +967,7 @@
       </div>
     </div>
     <div class="rv-body" id="rvBody">
-      <!-- 3-card carousel: faded/scaled peek shells (prev/next, lightweight —
+      <!-- 3-card carousel: readable mini-card peeks (prev/next, lightweight —
            no JD, no full render) flank the full center card. See
            ensureCarouselSkeleton()/renderPeek() in the review script below,
            which rebuild this whenever renderEnd()/renderNoMatches() replace
@@ -2528,21 +2585,45 @@ if(location.hash==="#add") openModal();
     return '<strong>'+rvEsc(s)+'</strong>';
   }
 
-  function salaryText(j){
-    if (typeof window.fmtSal === 'function') return window.fmtSal(j);
-    return j.salMax==null ? 'Salary not listed' : ('$'+j.salMin+'K–$'+j.salMax+'K');
+  function ageText(n){ return n === 0 ? 'today' : (n + 'd ago'); }
+
+  // Muted one-liner under the company in the banner — "Posted 2d ago · via
+  // LinkedIn · Not yet applied". Each field only renders when known.
+  function bannerSub(j){
+    var parts = [];
+    if (j.postedKnown && j.postedAge!=null) parts.push('Posted '+ageText(j.postedAge));
+    else if (j.foundAge!=null) parts.push('Found '+ageText(j.foundAge));
+    if (j.source) parts.push('via '+rvEsc(j.source));
+    if (typeof isApplied === 'function') parts.push(isApplied(j) ? 'Applied' : 'Not yet applied');
+    return parts.join(' · ');
   }
 
-  // Compact "Source / Level / Posted-or-Found" row — the wide layout has
-  // room to show these without crowding the mobile card; each field only
-  // renders when known (never fabricated).
-  function detailsRow(j){
-    var parts = [];
-    if (j.source) parts.push('<span><b>Source</b> '+rvEsc(j.source)+'</span>');
-    if (j.level) parts.push('<span><b>Level</b> '+rvEsc(j.level)+'</span>');
-    if (j.postedKnown && j.postedAge!=null) parts.push('<span><b>Posted</b> '+j.postedAge+'d ago</span>');
-    else if (j.foundAge!=null) parts.push('<span><b>Found</b> '+j.foundAge+'d ago</span>');
-    return parts.length ? ('<div class="rv-details">'+parts.join('')+'</div>') : '';
+  // Serif stat blocks in the banner — salary / location / work type promoted
+  // from small muted text to first-class decision facts (Option A).
+  function bannerStats(j){
+    var sal = j.salMax==null ? 'Not listed' : ('$'+j.salMin+'K–$'+j.salMax+'K');
+    return '<div class="rv-stats">'+
+      '<div class="rv-stat"><b>'+rvEsc(sal)+'</b><span>Salary</span></div>'+
+      '<div class="rv-stat"><b>'+rvEsc(j.loc||'—')+'</b><span>Location</span></div>'+
+      '<div class="rv-stat"><b>'+rvEsc(j.work||'—')+'</b><span>Work type</span></div>'+
+    '</div>';
+  }
+
+  // "At a glance" facts grid — level / function / category / found — fills
+  // the left column's former dead zone with data already on the job row.
+  // Rows only render when known (never fabricated); the whole block is
+  // omitted if nothing is.
+  function glanceHtml(j){
+    var rows = [];
+    if (j.level) rows.push(['Level', j.level]);
+    if (j.func) rows.push(['Function', j.func]);
+    if (j.cat) rows.push(['Category', j.cat]);
+    if (j.postedKnown && j.foundAge!=null) rows.push(['Found', ageText(j.foundAge)]); // posted date is in the banner sub — found adds info
+    else if (!j.postedKnown && j.source) rows.push(['Source', j.source]);
+    if (!rows.length) return '';
+    return '<div class="rv-glance"><div class="rv-subhead">At a glance</div><div class="rv-glance-grid">'+
+      rows.map(function(r){ return '<span>'+rvEsc(r[0])+'</span><b>'+rvEsc(r[1])+'</b>'; }).join('')+
+    '</div></div>';
   }
 
   function cardMarkup(j){
@@ -2558,47 +2639,62 @@ if(location.hash==="#add") openModal();
     // Both match sections are capped to a few items (RV_LINES_UP_MAX/
     // RV_CLOSER_LOOK_MAX, defined above) and each item clamps to 2 wrapped
     // lines (.rv-clamp). They live in .rv-left-scroll — a flexing content
-    // region that can scroll on very short viewports — while the vote/Apply
-    // actions + reason prompt below stay OUTSIDE it, pinned at the bottom
-    // of .rv-left, so there is always a visible way to advance.
+    // region that scrolls internally on short viewports — while the labeled
+    // action bar + reason strip sit at the CARD level below the body grid,
+    // pinned, so there is always a visible way to advance.
     var linesUp = (reqm ? reqm.met : highlightsFor(j)).slice(0, RV_LINES_UP_MAX);
     var closerLook = (reqm ? reqm.gap : gapsFor(j)).slice(0, RV_CLOSER_LOOK_MAX);
     var closerLookHtml = closerLook.length ? (
-      '<div class="rv-subhead rv-subhead-bad">Worth a closer look</div>'+
-      '<ul class="rv-highlights rv-closer-look">'+closerLook.map(function(s){ return '<li><span class="rv-clamp">'+emphasize(s)+'</span></li>'; }).join('')+'</ul>'
+      '<div><div class="rv-subhead rv-subhead-bad">Worth a closer look</div>'+
+      '<ul class="rv-highlights rv-closer-look">'+closerLook.map(function(s){ return '<li><span class="rv-clamp">'+emphasize(s)+'</span></li>'; }).join('')+'</ul></div>'
     ) : '';
+    var sub = bannerSub(j);
     return ''+
     '<div class="rv-card" id="rvCard">'+
+      '<div class="rv-banner">'+
+        '<div class="fit '+fi.cls+'"><div class="ring">'+fi.fit+'</div><div class="lbl">'+fi.lbl+'</div></div>'+
+        '<div class="rv-id">'+
+          '<h2 class="rv-title">'+rvEsc(j.title)+rvBadge+'</h2>'+
+          '<div class="rv-company">'+rvEsc(j.company)+'</div>'+
+          (sub ? '<div class="rv-sub">'+sub+'</div>' : '')+
+        '</div>'+
+        bannerStats(j)+
+      '</div>'+
       '<div class="rv-grid">'+
         '<div class="rv-left">'+
           '<div class="rv-left-scroll">'+
-          '<div class="rv-card-head">'+
-            '<div class="fit '+fi.cls+'"><div class="ring">'+fi.fit+'</div><div class="lbl">'+fi.lbl+'</div></div>'+
-            '<div class="rv-headtext">'+
-              '<h2 class="rv-title">'+rvEsc(j.title)+rvBadge+'</h2>'+
-              '<div class="rv-company">'+rvEsc(j.company)+'</div>'+
-              '<div class="rv-meta"><span>'+rvEsc(j.loc||'—')+'</span>'+(j.work?'<span>'+rvEsc(j.work)+'</span>':'')+'<span>'+rvEsc(salaryText(j))+'</span></div>'+
-              detailsRow(j)+
-            '</div>'+
-          '</div>'+
-          '<div class="rv-subhead rv-subhead-good">What lines up well</div>'+
-          '<ul class="rv-highlights rv-lines-up">'+linesUp.map(function(s){ return '<li><span class="rv-clamp">'+emphasize(s)+'</span></li>'; }).join('')+'</ul>'+
+          '<div><div class="rv-subhead rv-subhead-good">What lines up well</div>'+
+          '<ul class="rv-highlights rv-lines-up">'+linesUp.map(function(s){ return '<li><span class="rv-clamp">'+emphasize(s)+'</span></li>'; }).join('')+'</ul></div>'+
           closerLookHtml+
+          glanceHtml(j)+
           '</div>'+
-          '<div class="rv-actions">'+
-            '<button class="vbtn bad rv-big'+badOn+'" id="rvPass" type="button" aria-label="Pass on this role"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg>'+UNDO_ICON+'</button>'+
-            '<button class="btn btn--outline rv-apply" id="rvApply" type="button">Apply<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>'+
-            '<button class="vbtn good rv-big'+goodOn+'" id="rvLike" type="button" aria-label="Mark as a good fit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>'+UNDO_ICON+'</button>'+
-          '</div>'+
-          '<div class="rv-reasons" id="rvReasons" hidden></div>'+
         '</div>'+
         '<div class="rv-right">'+
-          '<div class="rv-jd-panel">'+
-            '<div class="rv-jd-panel-head">Full job description</div>'+
-            '<div class="rv-jd-body" id="rvJdBody"><p class="rv-jd-loading">Loading the full posting…</p></div>'+
-          '</div>'+
+          '<div class="rv-jd-head">Full posting'+(j.url ? '<a href="'+rvEsc(j.url)+'" target="_blank" rel="noopener">Open original ↗</a>' : '')+'</div>'+
+          '<div class="rv-jd-body" id="rvJdBody"><p class="rv-jd-loading">Loading the full posting…</p></div>'+
         '</div>'+
       '</div>'+
+      '<div class="rv-actions">'+
+        '<button class="rv-act rv-act-undo" id="rvUndo" type="button" title="Take back your last verdict" aria-label="Undo your last verdict">'+
+          '<span class="circ"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></span>'+
+          '<span class="t">Undo <kbd class="rv-keycap">U</kbd></span>'+
+        '</button>'+
+        '<button class="rv-act rv-act-pass'+badOn+'" id="rvPass" type="button" aria-label="Pass on this role">'+
+          '<span class="circ"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg>'+UNDO_ICON+'</span>'+
+          '<span class="t">Pass <kbd class="rv-keycap">←</kbd></span>'+
+          '<span class="d">Not for you — moves to the next job</span>'+
+        '</button>'+
+        '<button class="rv-act rv-act-apply" id="rvApply" type="button">'+
+          '<span class="circ">Apply on their site <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M7 17L17 7M9 7h8v8"/></svg></span>'+
+          '<span class="d">Opens the posting — we’ll ask “did you apply?” when you return</span>'+
+        '</button>'+
+        '<button class="rv-act rv-act-like'+goodOn+'" id="rvLike" type="button" aria-label="Mark as a good fit">'+
+          '<span class="circ"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>'+UNDO_ICON+'</span>'+
+          '<span class="t">Like <kbd class="rv-keycap">→</kbd></span>'+
+          '<span class="d">Saves to your Liked list — next job</span>'+
+        '</button>'+
+      '</div>'+
+      '<div class="rv-reasons" id="rvReasons" hidden></div>'+
     '</div>';
   }
 
@@ -2669,8 +2765,10 @@ if(location.hash==="#add") openModal();
     var reasons = (typeof REASONS!=='undefined' && REASONS[good?'good':'bad']) ? REASONS[good?'good':'bad'] : [];
     var hint = good ? 'Liked — mind sharing why?' : 'Passed — mind sharing why?';
     wrap.innerHTML = '<div class="rv-reasons-hint">'+hint+'</div>'+
-      '<div class="rv-reasons-chips">'+reasons.map(function(r){
-        return '<button type="button" class="rpop-chip rv-reason-chip" data-r="'+rvEsc(r)+'">'+rvEsc(r)+'</button>';
+      '<div class="rv-reasons-chips">'+reasons.map(function(r, i){
+        // 1–9 keycap hints mirror the existing keyboard shortcut (1–9 picks the Nth chip)
+        var kc = i < 9 ? ' <kbd class="rv-keycap">'+(i+1)+'</kbd>' : '';
+        return '<button type="button" class="rpop-chip rv-reason-chip" data-r="'+rvEsc(r)+'">'+rvEsc(r)+kc+'</button>';
       }).join('')+
       '<button type="button" class="btn btn--outline rv-reason-skip" id="rvReasonSkip">Skip →</button>'+
       '</div>';
@@ -2845,6 +2943,15 @@ if(location.hash==="#add") openModal();
 
     if (likeBtn) likeBtn.onclick = function(){ likeBtn.classList.contains('rv-voted') ? undo() : choose('good'); };
     if (passBtn) passBtn.onclick = function(){ passBtn.classList.contains('rv-voted') ? undo() : choose('bad'); };
+    // Always-visible Undo in the action bar — SAME semantics as the U key:
+    // undo this card's confirmed verdict if there is one (clearReview, stays
+    // on the card), else step back to the previous card (goBack).
+    var undoBtn = document.getElementById('rvUndo');
+    if (undoBtn) undoBtn.onclick = function(){
+      var voted = document.querySelector('#rvCard .rv-act.rv-voted');
+      if (voted) voted.click();
+      else goBack();
+    };
     if (applyBtn) applyBtn.onclick = function(){
       if (!j.url){ if (typeof toast==='function') toast('No posting URL on this row', 'info'); return; }
       window.open(j.url, '_blank', 'noopener');
@@ -2941,39 +3048,71 @@ if(location.hash==="#add") openModal();
       '</div>';
   }
 
-  // Lightweight, non-interactive REAL preview of a neighboring queue
-  // position — fit ring, title, company, and up to 2 "what lines up well"
-  // lines, built entirely from data already sitting in `queue` (never a JD
-  // fetch — that stays center-card-only). The container (.rv-peek) throws
-  // it out of focus via filter:blur()+opacity+scale (see CSS), so it reads
-  // as "the next job, waiting, out of frame" rather than something legible.
-  // Non-interactive by design (aria-hidden on the shell, pointer-events:none
-  // in CSS) — recycled in place for whatever job occupies that side.
+  // READABLE mini-card preview of a neighboring queue position (Option A):
+  // fit ring, title, company, one salary/work/location line, and either the
+  // saved verdict (prev side — "✗ You passed" / "✓ Liked") or one "lines up
+  // well" line (next side), built entirely from data already sitting in
+  // `queue` (never a JD fetch — that stays center-card-only). No blur — the
+  // deck should read as a deck; stacked card-edges + the "N more in the
+  // queue" caption come from the CSS/markup below. The PREV peek is
+  // clickable (goBack — wired in renderCurrent); the next peek stays
+  // non-interactive. Recycled in place for whatever job occupies that side.
   function peekLines(j){
     var reqm = normalizeReqMatches(j);
     var src = reqm ? reqm.met : highlightsFor(j);
     return (src || []).filter(Boolean).slice(0, 2);
   }
-  function peekMarkup(j){
-    var fi = fitInfo(j);
-    var lines = peekLines(j);
-    return ''+
-      '<div class="rv-peek-inner">'+
-        '<div class="fit '+fi.cls+'"><div class="ring">'+fi.fit+'</div></div>'+
-        '<div class="rv-peek-title">'+rvEsc(j.title)+'</div>'+
-        '<div class="rv-peek-company">'+rvEsc(j.company)+'</div>'+
-        (lines.length ? ('<ul class="rv-peek-lines">'+lines.map(function(s){ return '<li>'+rvEsc(String(s))+'</li>'; }).join('')+'</ul>') : '')+
-      '</div>';
+  function peekMeta(j){
+    var parts = [];
+    if (j.salMax != null) parts.push('$'+j.salMin+'–'+j.salMax+'K');
+    if (j.work) parts.push(j.work);
+    if (j.loc) parts.push(j.loc);
+    return parts.join(' · ');
   }
-  function renderPeek(el, j){
+  function peekVerdictHtml(j){
+    var rv = (typeof window.getReview === 'function') ? window.getReview(j.id) : null;
+    if (rv && rv.verdict === 'good') return '<span class="rv-peek-verdict liked">✓ Liked</span>';
+    if (rv && rv.verdict === 'bad') return '<span class="rv-peek-verdict passed">✗ You passed</span>';
+    return '';
+  }
+  function nextMoreText(){
+    var rem = queue.length - cursor - 2; // beyond the up-next card
+    if (rem > 0) return '<b>'+rem+' more</b> in the queue after this one';
+    return 'Last one in the queue';
+  }
+  function peekMarkup(j, side){
+    var fi = fitInfo(j);
+    var prev = side === 'prev';
+    var meta = peekMeta(j);
+    var line = prev ? '' : (peekLines(j)[0] || '');
+    var tail = prev ? peekVerdictHtml(j) : (line ? '<div class="rv-peek-line">✓ '+rvEsc(String(line))+'</div>' : '');
+    var more = prev
+      ? '<span class="rv-keycap">⌫</span> or click to revisit &amp; change your mind'
+      : nextMoreText();
+    return ''+
+      '<div class="rv-peek-card">'+
+        '<div class="rv-peek-eyebrow">'+(prev ? '‹ Previous' : 'Up next ›')+'</div>'+
+        '<div class="rv-peek-fitrow">'+
+          '<div class="fit '+fi.cls+'"><div class="ring">'+fi.fit+'</div></div>'+
+          '<div class="rv-peek-idtx">'+
+            '<div class="rv-peek-title">'+rvEsc(j.title)+'</div>'+
+            '<div class="rv-peek-company">'+rvEsc(j.company)+'</div>'+
+          '</div>'+
+        '</div>'+
+        (meta ? '<div class="rv-peek-meta">'+rvEsc(meta)+'</div>' : '')+
+        tail+
+      '</div>'+
+      '<div class="rv-peek-more">'+more+'</div>';
+  }
+  function renderPeek(el, j, side){
     if (!el) return;
     el.classList.remove('rv-peek-fade');
     el.classList.toggle('empty', !j);
-    el.innerHTML = j ? peekMarkup(j) : '';
+    el.innerHTML = j ? peekMarkup(j, side) : '';
   }
 
-  // ---- fit-to-viewport: keeps --rv-avail (read by .rv-left/.rv-jd-panel's
-  // max-height, see CSS) in sync with the ACTUAL remaining room below the
+  // ---- fit-to-viewport: keeps --rv-avail (read by .rv-card's max-height,
+  // see CSS) in sync with the ACTUAL remaining room below the
   // top chrome. Measures from #rvCard's top (which never moves — rv-body is
   // top-aligned) down to the viewport edge, minus the card's own bottom
   // padding and a little breathing room. Re-run on every render (queue
@@ -3003,8 +3142,14 @@ if(location.hash==="#add") openModal();
     wireCard(j);
     loadJd(j);
     prefetchJd(queue[cursor+1] || null); // warm the next JD — no "Fetching…" flash on advance
-    renderPeek(prevEl, queue[cursor-1] || null);
-    renderPeek(nextEl, queue[cursor+1] || null);
+    renderPeek(prevEl, queue[cursor-1] || null, 'prev');
+    renderPeek(nextEl, queue[cursor+1] || null, 'next');
+    // the readable prev mini-card is itself the back-step affordance at wide
+    // widths — click = the SAME goBack() as the ‹ circle and Backspace
+    if (prevEl){
+      prevEl.onclick = function(){ if (cursor > 0) goBack(); };
+      prevEl.title = queue[cursor-1] ? 'Click (or press Backspace) to revisit the previous job' : '';
+    }
     // back-step control: reachable whenever a previous card exists
     var backBtn = document.getElementById('rvBack');
     if (backBtn){ backBtn.hidden = cursor <= 0; backBtn.onclick = goBack; }
@@ -3163,7 +3308,7 @@ if(location.hash==="#add") openModal();
     }
     if (e.key === 'u' || e.key === 'U'){
       e.preventDefault();
-      var voted = document.querySelector('#rvCard .vbtn.rv-voted');
+      var voted = document.querySelector('#rvCard .rv-act.rv-voted');
       if (voted) voted.click(); // undo this card's confirmed verdict
       else goBack();            // nothing to undo here — step back a card
       return;
