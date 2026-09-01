@@ -168,6 +168,7 @@
   .qsg .sg-row .cnt{margin-left:auto;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;flex:none}
   .qsg .sg-row .kbd{margin-left:auto;font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:1px 6px;background:var(--surface-2);flex:none}
   .qsg .sg-row .pin{margin-left:auto;font-size:10.5px;font-weight:700;color:var(--sage);background:var(--sage-soft);padding:1px 8px;border-radius:999px;flex:none}
+  .qsg .sg-row .pin + .cnt{margin-left:8px}
   .qsg .sg-row.broad{background:var(--sage-soft)}
   .qsg .sg-row.broad:hover,.qsg .sg-row.broad.on{background:#D8ECE2}
   .qsg .sg-row.broad .fld{color:var(--sage)}
@@ -1366,14 +1367,12 @@ function renderRail(){
 /* ============ active filters bar ============ */
 function renderActiveFilters(){
   var bar=document.getElementById("activeFilters");
+  renderSearchChips();   // the search bar shows q chips + loc/cat/func/level facet chips — keep it live on every render
   var pills=[];
-  /* no more q pill — the chip search bar IS the visualization of the query
-     (rendering the same terms twice was the duplication to avoid) */
+  /* no q pill (the chip bar IS the query display) and no loc/cat/func/level
+     pills (those facets now render as dark chips IN the search bar) —
+     rendering the same filter twice was the duplication to avoid */
   state.works.forEach(function(v){ pills.push({k:"work", v:v, label:v}); });
-  state.locs.forEach(function(v){ pills.push({k:"loc", v:v, label:LOC_LABEL[v]||v}); });
-  state.cats.forEach(function(v){ pills.push({k:"cat", v:v, label:v}); });
-  state.funcs.forEach(function(v){ pills.push({k:"func", v:v, label:v}); });
-  state.levels.forEach(function(v){ pills.push({k:"level", v:v, label:v}); });
   if(state.salLow>80 || state.salHigh<300) pills.push({k:"sal", v:"", label:"$"+state.salLow+"K–$"+state.salHigh+"K"+(state.salHigh>=300?"+":"")});
   if(!state.showUnknown) pills.push({k:"unknown", v:"", label:"Hiding no-salary roles"});
 
@@ -1388,19 +1387,26 @@ function renderActiveFilters(){
   });
   document.getElementById("clearAll").onclick=clearAllFilters;
 }
+/* NOTE: the facet arrays are mutated IN PLACE (splice/length=0), never
+   replaced — wireCb()'s checkbox closures (and wire.js's re-wiring) capture
+   the array references at boot, so replacing an array here would silently
+   desync every later dropdown toggle from state (pre-existing bug, surfaced
+   once chip-removal made removal a first-class gesture). */
 function removeFilter(k,v){
+  function drop(arr){ var i=arr.indexOf(v); if(i>=0) arr.splice(i,1); }
   if(k==="q") state.q="";
-  else if(k==="work") state.works=state.works.filter(function(x){return x!==v;});
-  else if(k==="loc") state.locs=state.locs.filter(function(x){return x!==v;});
-  else if(k==="cat") state.cats=state.cats.filter(function(x){return x!==v;});
-  else if(k==="func") state.funcs=state.funcs.filter(function(x){return x!==v;});
-  else if(k==="level") state.levels=state.levels.filter(function(x){return x!==v;});
+  else if(k==="work") drop(state.works);
+  else if(k==="loc") drop(state.locs);
+  else if(k==="cat") drop(state.cats);
+  else if(k==="func") drop(state.funcs);
+  else if(k==="level") drop(state.levels);
   else if(k==="sal"){ state.salLow=80; state.salHigh=300; }
   else if(k==="unknown") state.showUnknown=true;
   applyControls(); render();
 }
 function clearAllFilters(){
-  state.q=""; state.works=[]; state.locs=[]; state.cats=[]; state.funcs=[]; state.levels=[];
+  state.q="";
+  state.works.length=0; state.locs.length=0; state.cats.length=0; state.funcs.length=0; state.levels.length=0;
   state.salLow=80; state.salHigh=300; state.showUnknown=true;
   applyControls(); render();
 }
@@ -1655,20 +1661,41 @@ function textChipHTML(raw,i){
     '<button type="button" class="x" data-i="'+i+'" aria-label="Remove '+esc(lbl)+'">×</button>'+
   '</span>';
 }
+/* dark "real filter" chips — the ACTUAL facet state (same arrays the
+   dropdown controls write), folded into the one bar. Removing one clears
+   that facet via the existing removeFilter(); toggling a facet anywhere
+   else re-renders here on the next render(). */
+function facetChipHTML(k, v, prefix, label){
+  var lbl=prefix+" "+label;
+  return '<span class="qchip facet"><span class="qc-edit" style="cursor:default">'+
+    '<span class="fld">'+esc(prefix)+'</span><span class="val">'+esc(label)+'</span></span>'+
+    '<button type="button" class="x" data-k="'+k+'" data-v="'+esc(v)+'" aria-label="Remove filter '+esc(lbl)+'">×</button></span>';
+}
+function facetChipsHTML(){
+  var out=[];
+  state.locs.forEach(function(v){ out.push(facetChipHTML("loc", v, "location:", LOC_LABEL[v]||v)); });
+  state.cats.forEach(function(v){ out.push(facetChipHTML("cat", v, "category:", v)); });
+  state.funcs.forEach(function(v){ out.push(facetChipHTML("func", v, "function:", v)); });
+  state.levels.forEach(function(v){ out.push(facetChipHTML("level", v, "level:", v)); });
+  return out.join("");
+}
 /* signature guard: renderSearchChips runs on every render (via
    renderActiveFilters) — skip the DOM write when nothing changed so typing in
    #q never churns sibling nodes */
 var __chipSig=null;
 function renderSearchChips(){
-  var html=qCommitted.map(textChipHTML).join("");
+  var html=facetChipsHTML()+qCommitted.map(textChipHTML).join("");
   if(html===__chipSig) return;
   __chipSig=html;
   qChipsWrap.innerHTML=html;
-  qChipsWrap.querySelectorAll(".qc-edit").forEach(function(b){
+  qChipsWrap.querySelectorAll(".qc-edit[data-i]").forEach(function(b){
     b.onclick=function(e){ e.stopPropagation(); editChip(+b.getAttribute("data-i")); };
   });
-  qChipsWrap.querySelectorAll(".x").forEach(function(b){
+  qChipsWrap.querySelectorAll(".x[data-i]").forEach(function(b){
     b.onclick=function(e){ e.stopPropagation(); removeChip(+b.getAttribute("data-i")); };
+  });
+  qChipsWrap.querySelectorAll(".x[data-k]").forEach(function(b){
+    b.onclick=function(e){ e.stopPropagation(); removeFilter(b.getAttribute("data-k"), b.getAttribute("data-v")); };
   });
 }
 function removeChip(i){
@@ -1698,10 +1725,33 @@ function promoteSalaryValue(val){
   state.salLow=lo; state.salHigh=hi;
   return true;
 }
+/* facet promotion: a typed value that EXACTLY matches a real filter option
+   becomes the actual facet filter (state.locs/levels/cats/funcs — the same
+   arrays the dropdown controls write), not a text token. Rendered as a dark
+   "real filter" chip in the bar. Negated terms never promote (the facets
+   can't express NOT) — they stay text tokens, which matches() handles. */
+function facetArrFor(fieldKey){
+  return fieldKey==="level"?state.levels : fieldKey==="cat"?state.cats
+       : fieldKey==="func"?state.funcs  : fieldKey==="loc"?state.locs : null;
+}
+function facetForTerm(t){
+  if(t.neg || !t.field) return null;
+  var body=t.raw, ci=body.indexOf(":");
+  if(ci<0) return null;
+  var val=body.slice(ci+1).replace(/["“”]/g,"").trim().toLowerCase();
+  if(!val) return null;
+  function findIn(list){ for(var i=0;i<(list||[]).length;i++){ if(String(list[i]).toLowerCase()===val) return list[i]; } return null; }
+  if(t.field==="level"){ var v1=findIn(window.LEVELS||LEVELS); if(v1) return {arr:state.levels, v:v1}; }
+  if(t.field==="cat"){ var v2=findIn(window.CATS||CATS); if(v2) return {arr:state.cats, v:v2}; }
+  if(t.field==="func"){ var v3=findIn(window.FUNCS||FUNCS); if(v3) return {arr:state.funcs, v:v3}; }
+  if(t.field==="loc"){ for(var k in LOC_LABEL){ if(k===val || LOC_LABEL[k].toLowerCase()===val) return {arr:state.locs, v:k}; } }
+  return null;
+}
 /* Enter/Tab: commit the current input into chip(s) — one chip per parsed term.
-   state.q's VALUE doesn't change on commit (same terms, chips are display),
-   so filtering stays continuous through the gesture. Salary terms promote to
-   the range control instead of chipping (see promoteSalaryValue above). */
+   state.q's VALUE doesn't change for plain text terms (chips are display), so
+   filtering stays continuous through the gesture. Salary terms promote to the
+   range control; exact facet values promote to the real facet — never dup'd
+   as text tokens. */
 function commitDraft(rerender){
   var toks=parseQuery(qInput.value);
   if(!toks.length) return;   // mid-type ("title:", "-", bare quotes) — nothing committable yet, keep typing
@@ -1714,7 +1764,9 @@ function commitDraft(rerender){
       else toast("Salary works as a range — try salary:150-250 or salary:150+", "info");
       return;  // never a text token either way
     }
-    qCommitted.push(commitTermRaw(t));
+    var fp=facetForTerm(t);
+    if(fp){ if(fp.arr.indexOf(fp.v)<0) fp.arr.push(fp.v); promoted=true; return; }
+    qCommitted.push(t.raw);
   });
   qInput.value="";
   syncStateQ();
@@ -1722,9 +1774,6 @@ function commitDraft(rerender){
   if(rerender!==false) render();
   updateSuggest();
 }
-/* hook: phase-3 facet promotion rewrites this to return null for promoted
-   facet values; until then every non-salary term commits as its raw chip */
-function commitTermRaw(t){ return t.raw; }
 
 /* ============ suggestion dropdown ============
    Opens on focus: all fields with plain-English hints + an "…or just type"
@@ -1789,16 +1838,24 @@ function promoteSalaryDraft(val){
   syncStateQ(); applyControls(); render(); updateSuggest();
   qInput.focus();
 }
+/* picking a facet-flavored suggestion sets the REAL filter (same array the
+   dropdown controls write) — no text token, no duplicate chip */
+function promoteFacet(arr, v){
+  if(arr && arr.indexOf(v)<0) arr.push(v);
+  qInput.value="";
+  syncStateQ(); applyControls(); render(); updateSuggest();
+  qInput.focus();
+}
 
 /* bare word ↔ known filter values (levels, categories, location buckets,
    sources; companies once 3+ chars) */
 function didYouMean(text){
   var t=String(text).toLowerCase(); if(t.length<2) return [];
   var out=[];
-  function push(fname,key,val,facet,cnt){ if(out.length<4) out.push({fname:fname,key:key,val:val,facet:facet,cnt:cnt}); }
-  (window.LEVELS||LEVELS).forEach(function(v){ if(String(v).toLowerCase().indexOf(t)===0) push("level","level",v,true,sgCountEq("level",v)); });
-  (window.CATS||CATS).forEach(function(v){ if(String(v).toLowerCase().indexOf(t)===0) push("category","cat",v,true,sgCountEq("cat",v)); });
-  Object.keys(LOC_LABEL).forEach(function(k){ if(LOC_LABEL[k].toLowerCase().indexOf(t)===0 || k.indexOf(t)===0) push("location","loc",LOC_LABEL[k],true,sgCountLocKey(k)); });
+  function push(fname,key,val,facet,cnt,fkey){ if(out.length<4) out.push({fname:fname,key:key,val:val,facet:facet,cnt:cnt,fkey:fkey}); }
+  (window.LEVELS||LEVELS).forEach(function(v){ if(String(v).toLowerCase().indexOf(t)===0) push("level","level",v,true,sgCountEq("level",v),v); });
+  (window.CATS||CATS).forEach(function(v){ if(String(v).toLowerCase().indexOf(t)===0) push("category","cat",v,true,sgCountEq("cat",v),v); });
+  Object.keys(LOC_LABEL).forEach(function(k){ if(LOC_LABEL[k].toLowerCase().indexOf(t)===0 || k.indexOf(t)===0) push("location","loc",LOC_LABEL[k],true,sgCountLocKey(k),k); });
   sgDistinct("source").forEach(function(v){ if(String(v).toLowerCase().indexOf(t)===0) push("source","source",v,false,sgCountEq("source",v)); });
   if(t.length>=3) sgDistinct("company").forEach(function(v){ if(String(v).toLowerCase().indexOf(t)===0) push("company","company",v,false,sgCountEq("company",v)); });
   return out;
@@ -1831,8 +1888,11 @@ function sgRows(){
       rows.push({t:"hd", html:"Did you mean"});
       dym.forEach(function(s){
         rows.push({t:"row",
-          html:'<span class="fld">'+s.fname+':</span> '+esc(s.val)+'<span class="cnt">'+s.cnt+'</span>',
-          act:function(){ addFieldTextChip(s.fname, s.val, false); }});
+          html:'<span class="fld">'+s.fname+':</span> '+esc(s.val)+(s.facet?'<span class="pin">exact filter</span>':'')+'<span class="cnt">'+s.cnt+'</span>',
+          act:function(){
+            if(s.facet) promoteFacet(facetArrFor(s.key), s.fkey);
+            else addFieldTextChip(s.fname, s.val, false);
+          }});
       });
     }
   }
@@ -1857,8 +1917,8 @@ function sgRows(){
       Object.keys(LOC_LABEL).forEach(function(k){
         var lbl=LOC_LABEL[k];
         if(val && lbl.toLowerCase().indexOf(val.toLowerCase())===-1 && k.indexOf(val.toLowerCase())===-1) return;
-        rows.push({t:"row", html:esc(lbl)+'<span class="cnt">'+sgCountLocKey(k)+'</span>',
-          act:function(){ addFieldTextChip("location", lbl, d.neg); }});
+        rows.push({t:"row", html:esc(lbl)+(d.neg?'':'<span class="pin">exact filter</span>')+'<span class="cnt">'+sgCountLocKey(k)+'</span>',
+          act:function(){ if(d.neg) addFieldTextChip("location", lbl, true); else promoteFacet(state.locs, k); }});
       });
       if(val) rows.push({t:"row", html:'location contains “'+esc(val)+'”<span class="cnt">'+sgCountSub("loc",val)+'</span>',
         act:function(){ addFieldTextChip("location", val, d.neg); }});
@@ -1871,11 +1931,13 @@ function sgRows(){
     }
     else { // company / level / cat / func / source — real values from the loaded jobs
       var fname=d.fname;
+      var facetArr=facetArrFor(f);   // level/cat/func → promote to the real facet; company/source → text chips
       rows.push({t:"hd", html:esc(fname)+": — pick a value"});
       var vals=sgDistinct(f).filter(function(v){ return !val || String(v).toLowerCase().indexOf(val.toLowerCase())!==-1; }).slice(0,8);
       vals.forEach(function(v){
-        rows.push({t:"row", html:esc(v)+'<span class="cnt">'+sgCountEq(f,v)+'</span>',
-          act:function(){ addFieldTextChip(fname, v, d.neg); }});
+        var canPromote=!!facetArr && !d.neg;
+        rows.push({t:"row", html:esc(v)+(canPromote?'<span class="pin">exact filter</span>':'')+'<span class="cnt">'+sgCountEq(f,v)+'</span>',
+          act:function(){ if(canPromote) promoteFacet(facetArr, v); else addFieldTextChip(fname, v, d.neg); }});
       });
       if(val && (f==="company"||f==="source")) rows.push({t:"row", html:esc(fname)+' contains “'+esc(val)+'”<span class="cnt">'+sgCountSub(f,val)+'</span>',
         act:function(){ addFieldTextChip(fname, val, d.neg); }});
