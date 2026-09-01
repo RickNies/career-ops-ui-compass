@@ -896,25 +896,50 @@ export function registerCompassRoutes(app) {
     const m = readJdCache(); m[u] = jd; writeJdCache(m);
     res.json({ ok: true, bytes: jd.length });
   });
-  // Full-text search over the JD cache — backs the feed's `jd:` search field.
-  // The browser never holds every JD, so `jd:` terms resolve here: return the
-  // normalized urls whose cached JD text contains the term (case-insensitive
-  // substring), capped. Read-only; same store as GET/POST /api/compass/jd-cache.
+  // Full-text search over the SCRAPED JD store — backs the feed's `jd:` search
+  // field. The browser never holds every JD, so `jd:` terms resolve here.
+  // Source is the pipeline's data/jd-cache.jsonl ({url, jd} per line, ~2.4k
+  // entries / ~13.5 MB, refreshed daily) — NOT the tiny pasted-JD
+  // compass-jd-cache.json, which stays dedicated to GET/POST /api/compass/jd-cache.
+  // Parsed lazily on first search and mtime-cached (same pattern as
+  // readFitMap/readSalaryMap) with urls pre-normalized and JD text
+  // pre-lowercased, so repeated searches are a pure in-memory scan.
+  const JD_SEARCH_STORE = DATA_ROOT + '/data/jd-cache.jsonl';
   app.get('/api/compass/jd-search', (req, res) => {
     const q = String(req.query.q || '').trim().toLowerCase();
     if (!q) return res.json({ q: '', urls: [], total: 0, capped: false });
     const CAP = 2000;
-    const m = readJdCache();
+    const entries = readJdSearchEntries();
     const urls = [];
-    for (const k of Object.keys(m)) {
+    for (const e of entries) {
       if (urls.length >= CAP) break;
-      const jd = m[k];
-      if (typeof jd === 'string' && jd.toLowerCase().includes(q)) {
-        urls.push(normalizeUrl(k) || k); // keys are written canonical already — re-normalize defensively
-      }
+      if (e.text.includes(q)) urls.push(e.url);
     }
     res.json({ q, urls, total: urls.length, capped: urls.length >= CAP });
   });
+  let _jdSearchCache = null, _jdSearchMtime = -1;
+  function readJdSearchEntries() {
+    try {
+      const st = statSync(JD_SEARCH_STORE);
+      if (_jdSearchCache && st.mtimeMs === _jdSearchMtime) return _jdSearchCache;
+      const entries = [];
+      const seen = new Set(); // last line wins for a re-scraped url (newest JD)
+      const lines = readFileSync(JD_SEARCH_STORE, 'utf8').split(/\r?\n/);
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const l = lines[i].trim();
+        if (!l) continue;
+        try {
+          const j = JSON.parse(l);
+          if (!j || typeof j.url !== 'string' || typeof j.jd !== 'string' || !j.jd) continue;
+          const u = normalizeUrl(j.url) || j.url;
+          if (seen.has(u)) continue;
+          seen.add(u);
+          entries.push({ url: u, text: j.jd.toLowerCase() });
+        } catch { /* skip malformed line */ }
+      }
+      _jdSearchCache = entries; _jdSearchMtime = st.mtimeMs; return entries;
+    } catch { return _jdSearchCache || []; }
+  }
 
   // ── Tracker STATUS update (the app itself only appends). Finds the row in
   //    applications.md by num (preferred) or url and rewrites its Status cell
