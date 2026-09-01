@@ -328,12 +328,29 @@
   .rv-exit:hover{border-color:var(--terra);color:var(--terra);background:var(--terra-soft);transform:scale(1.05)}
   .rv-exit:active{transform:scale(.95)}
   .rv-body{flex:1;display:flex;align-items:flex-start;justify-content:center;padding:16px 22px 20px;overflow:auto;min-height:0}
-  .rv-card{position:relative;z-index:2;width:100%;max-width:520px;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:0 4px 10px rgba(22,50,79,.08),0 24px 48px rgba(22,50,79,.16);padding:26px;transition:transform .22s ease,opacity .22s ease}
+  .rv-card{position:relative;z-index:2;width:100%;max-width:520px;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:0 4px 10px rgba(22,50,79,.08),0 24px 48px rgba(22,50,79,.16);padding:26px;transition:transform .3s cubic-bezier(.16,1,.3,1),opacity .3s cubic-bezier(.16,1,.3,1)}
   /* the real side peeks (below) now provide the "stacked deck" depth cue, so
      the card no longer needs its own fake ::before/::after shadow layers */
-  .rv-card.rv-enter{transform:translateX(36px) scale(.97);opacity:.15}
-  .rv-card.rv-slide-out{transform:translateX(-36px) scale(.97);opacity:0}
-  @media(prefers-reduced-motion:reduce){ .rv-card{transition:none !important} .rv-progress-fill{transition:none} .rv-peek{transition:none !important} }
+  /* ---- card-turn: the OUTGOING card is a positioned clone (.rv-ghost) laid
+     over the center slot so exit + enter can OVERLAP (no dead frame, no
+     premature innerHTML swap). Exit is directional by verdict — Like slides
+     right (+ small rotate), Pass slides left — on an accelerating-out ease;
+     the incoming card starts offset toward the side it "came from" (next
+     peek on advance, prev peek on back-step) and decelerates in on the base
+     .rv-card transition above. See animateSwap() in the review script. */
+  .rv-card.rv-ghost{position:absolute;top:0;z-index:3;margin:0;pointer-events:none;transition:transform .26s cubic-bezier(.5,0,.85,.5),opacity .26s cubic-bezier(.5,0,.85,.5)}
+  .rv-card.rv-ghost.rv-exit-right{transform:translateX(150px) rotate(2.5deg);opacity:0}
+  .rv-card.rv-ghost.rv-exit-left{transform:translateX(-150px) rotate(-2.5deg);opacity:0}
+  .rv-card.rv-enter-from-right{transform:translateX(90px) scale(.985);opacity:0;transition:none}
+  .rv-card.rv-enter-from-left{transform:translateX(-90px) scale(.985);opacity:0;transition:none}
+  /* brief verdict stamp on the outgoing clone */
+  .rv-stamp{position:absolute;top:20px;font-family:var(--serif);font-size:19px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:4px 14px;border:3px solid;border-radius:10px;background:var(--surface);transform:rotate(-8deg)}
+  .rv-stamp-good{color:var(--sage);border-color:var(--sage);right:24px}
+  .rv-stamp-bad{color:var(--terra);border-color:var(--terra);left:24px;transform:rotate(8deg)}
+  /* small inward nudge on the peek the incoming card "came from" */
+  .rv-peek-next.rv-peek-nudge{transform:scale(.95) translateX(-12px)}
+  .rv-peek-prev.rv-peek-nudge{transform:scale(.95) translateX(12px)}
+  @media(prefers-reduced-motion:reduce){ .rv-card{transition:none !important} .rv-progress-fill{transition:none} .rv-peek{transition:none !important} .rv-card.rv-ghost{display:none} }
 
   /* ---- carousel: center card + blurred "peek" preview of each neighbor ----
      .rv-carousel is a flex row (center + two peeks) with align-items:stretch,
@@ -346,7 +363,7 @@
      Recycled in place on every advance() via renderPeek()/peekMarkup(), so
      the carousel stays cheap regardless of queue size. */
   .rv-carousel{position:relative;display:flex;align-items:stretch;justify-content:center;gap:14px;width:100%;max-width:1220px;margin:0 auto;min-height:0}
-  .rv-center{flex:1 1 auto;min-width:0;min-height:0;display:flex;justify-content:center}
+  .rv-center{flex:1 1 auto;min-width:0;min-height:0;display:flex;justify-content:center;position:relative}
   .rv-center .rv-card{margin:0 auto}
   .rv-peek{flex:none;width:90px;border-radius:20px;background:var(--surface-2);border:1px solid var(--line-soft);opacity:.55;filter:blur(3px) grayscale(.25);transform:scale(.95);display:flex;flex-direction:column;align-items:stretch;justify-content:center;overflow:hidden;padding:18px 12px;pointer-events:none;transition:opacity .18s ease,transform .18s ease}
   .rv-peek.empty{opacity:0;pointer-events:none}
@@ -1759,7 +1776,7 @@ if(location.hash==="#add") openModal();
     } else {
       cursor = 0;
     }
-    renderCurrent(false);
+    renderCurrent();
   }
 
   function rvEsc(s){ return String(s==null?'':s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
@@ -1961,11 +1978,11 @@ if(location.hash==="#add") openModal();
         wrap.querySelectorAll('.rv-reason-chip').forEach(function(x){ x.classList.remove('on'); });
         c.classList.add('on');
         window.saveReview(j.id, verdict, c.getAttribute('data-r'));
-        advance();
+        advance(verdict);
       });
     });
     var skip = document.getElementById('rvReasonSkip');
-    if (skip) skip.addEventListener('click', function(){ advance(); });
+    if (skip) skip.addEventListener('click', function(){ advance(verdict); });
   }
 
   /* ============================================================================
@@ -2213,7 +2230,7 @@ if(location.hash==="#add") openModal();
     overlay.style.setProperty('--rv-avail', avail + 'px');
   }
 
-  function renderCurrent(animate){
+  function renderCurrent(){
     if (queue.length === 0){ renderNoMatches(); return; }
     if (cursor >= queue.length){ renderEnd(); return; }
     ensureCarouselSkeleton();
@@ -2228,36 +2245,61 @@ if(location.hash==="#add") openModal();
     renderPeek(nextEl, queue[cursor+1] || null);
     updateProgress();
     syncStageHeight();
-    if (animate && !reduceMotion()){
-      var card = document.getElementById('rvCard');
-      if (card){
-        card.classList.add('rv-enter');
-        requestAnimationFrame(function(){ requestAnimationFrame(function(){ card.classList.remove('rv-enter'); }); });
-      }
-    }
   }
 
-  // Slide the row right→left: the current card slides left and fades out,
-  // the side peeks fade during the shuffle (they're recycled — no need to
-  // physically track their motion), then renderCurrent() re-populates the
-  // center from the new cursor and the new center card animates in via
-  // .rv-enter (starts in a peek-like dimmed/scaled state and un-fades to
-  // full size — see .rv-card.rv-enter above). prefers-reduced-motion just
-  // snaps straight to the new state, no transition.
-  function advance(){
-    cursor++;
-    var reduced = reduceMotion();
-    var card   = document.getElementById('rvCard');
-    var prevEl = document.getElementById('rvPeekPrev');
-    var nextEl = document.getElementById('rvPeekNext');
-    if (card && !reduced){
-      card.classList.add('rv-slide-out');
-      if (prevEl) prevEl.classList.add('rv-peek-fade');
-      if (nextEl) nextEl.classList.add('rv-peek-fade');
-      setTimeout(function(){ renderCurrent(true); }, 180);
-    } else {
-      renderCurrent(true);
+  // ---- card-turn: clone the outgoing card (.rv-ghost, absolutely positioned
+  // over the center slot), swap the real card underneath it in the SAME
+  // frame, then run exit + enter simultaneously — no dead frame, and the
+  // outgoing card's full transition survives the innerHTML swap. Exit is
+  // DIRECTIONAL by verdict (Like → slides right with a small rotate, Pass →
+  // slides left; back-step → right, toward where the card is headed) on an
+  // accelerating-out ease, with a brief Liked/Passed stamp; the incoming
+  // card starts offset toward the peek it came from (next peek on advance,
+  // prev peek on back-step) and decelerates in, while that peek gets a
+  // small inward nudge for continuity. prefers-reduced-motion (and end-of-
+  // queue, where the carousel is replaced by an end screen) just snaps.
+  var GHOST_MS = 420;
+  function animateSwap(dir, verdict){
+    var centerEl = document.getElementById('rvCenter');
+    var card = document.getElementById('rvCard');
+    var atEnd = (queue.length === 0 || cursor >= queue.length);
+    if (reduceMotion() || !centerEl || !card || atEnd){ renderCurrent(); return; }
+    // clone the outgoing card and pin it over the center slot (ids stripped
+    // so the live card keeps sole ownership of #rvCard etc.)
+    var ghost = card.cloneNode(true);
+    ghost.removeAttribute('id');
+    ghost.querySelectorAll('[id]').forEach(function(el){ el.removeAttribute('id'); });
+    var w = card.offsetWidth;
+    ghost.classList.add('rv-ghost');
+    ghost.style.width = w + 'px';
+    ghost.style.left = '50%';
+    ghost.style.marginLeft = (-w / 2) + 'px';
+    if (verdict === 'good' || verdict === 'bad'){
+      var stamp = document.createElement('div');
+      stamp.className = 'rv-stamp ' + (verdict === 'good' ? 'rv-stamp-good' : 'rv-stamp-bad');
+      stamp.textContent = verdict === 'good' ? 'Liked' : 'Passed';
+      ghost.appendChild(stamp);
     }
+    // swap the real card underneath, starting from the incoming side
+    renderCurrent();
+    var newCard = document.getElementById('rvCard');
+    var fromRight = dir !== 'back';
+    if (newCard) newCard.classList.add(fromRight ? 'rv-enter-from-right' : 'rv-enter-from-left');
+    centerEl.appendChild(ghost);
+    var nudgeEl = document.getElementById(fromRight ? 'rvPeekNext' : 'rvPeekPrev');
+    if (nudgeEl) nudgeEl.classList.add('rv-peek-nudge');
+    requestAnimationFrame(function(){ requestAnimationFrame(function(){
+      var exitRight = dir === 'back' || verdict === 'good';
+      ghost.classList.add(exitRight ? 'rv-exit-right' : 'rv-exit-left');
+      if (newCard) newCard.classList.remove('rv-enter-from-right', 'rv-enter-from-left');
+      if (nudgeEl) nudgeEl.classList.remove('rv-peek-nudge');
+    }); });
+    setTimeout(function(){ if (ghost.parentNode) ghost.parentNode.removeChild(ghost); }, GHOST_MS);
+  }
+
+  function advance(verdict){
+    cursor++;
+    animateSwap('forward', verdict);
   }
 
   function openReviewMode(){
@@ -2276,7 +2318,7 @@ if(location.hash==="#add") openModal();
     overlay.classList.add('open');
     overlay.setAttribute('aria-hidden','false');
     document.body.style.overflow = 'hidden';
-    renderCurrent(false);
+    renderCurrent();
   }
   function closeReviewMode(){
     isOpen = false;
