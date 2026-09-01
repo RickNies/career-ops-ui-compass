@@ -58,6 +58,9 @@
   .toast svg{width:16px;height:16px;flex:none}
   .toast--success{background:var(--sage)} .toast--info{background:var(--ink)} .toast--error{background:var(--terra)}
   @keyframes toastin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  /* jd: search — brief in-flight status under the search bar */
+  .jd-searching{margin:6px 2px -2px;font-size:12.5px;color:var(--muted)}
+  .jd-searching[hidden]{display:none}
   @media(prefers-reduced-motion:reduce){ .toast,.btn{animation:none;transition:none} }
 
   /* ---- top nav shell ---- */
@@ -1257,7 +1260,9 @@ function isApplied(j){ return /appl|interview|phone|screen|offer|hired|reject|re
    parseQuery(str) → tokens. Syntax (case-insensitive, substring semantics):
      director                    bare term → matches the broad all-field haystack
      title:director              field-scoped (title, company, level, location,
-                                 category, source; salary reserved — see below)
+                                 category, source; jd searches the full
+                                 description SERVER-side — async, see
+                                 __jdSearchCache; salary reserved — see below)
      title:"finance director"    quotes make a phrase (spaces kept as one substring)
      title:"vp & fin | director" & = AND, | = OR within ONE value (| binds looser)
      -recruiter  -title:contract leading minus negates a term
@@ -1275,6 +1280,7 @@ var Q_FIELDS={ title:"title", t:"title",
                category:"cat", cat:"cat",
                func:"func", "function":"func", fn:"func",
                source:"source", via:"source",
+               jd:"jd", desc:"jd", description:"jd", // full-description search — ASYNC, resolved server-side (see __jdSearchCache below)
                salary:"__sal", sal:"__sal" }; // salary: reserved — parsed but a no-op until range promotion ships
 function splitTerms(str){
   var terms=[], cur="", inQ=false, i, ch;
@@ -1325,8 +1331,104 @@ function queryTokens(q){
   if(__qTokCache.q!==q){ __qTokCache.q=q; __qTokCache.toks=parseQuery(q); }
   return __qTokCache.toks;
 }
+/* ---- jd: full-description search (ASYNC — resolved server-side) ----
+   The browser never holds every JD, so a jd: term is answered by
+   GET /api/compass/jd-search?q=<term> (case-insensitive substring over the
+   server's JD cache; returns normalized urls). Results cache PER TERM in this
+   MODULE map — never on state (state is persisted whole by saveFilters() and
+   a stored Set would come back stale). While a term is in flight the token
+   matches nothing yet (pending, not a crash); a re-render fires when the Set
+   lands. One shared debounce timer means terms the user typed straight
+   through are dropped before they ever hit the network. */
+var __jdSearchCache = {};   // term → { status:'pending'|'ready'|'error', set:{urlKey:true}|null, inflight:bool }
+var __jdFetchTimer = null;
+function jdUrlKey(u){ return String(u==null?"":u).split("#")[0].replace(/\/+$/,""); } // same light url keying wire.js uses for its url-keyed maps
+function jdTermsInQuery(){
+  var out={}, q=(window.state && window.state.q) || "";
+  if(q) queryTokens(q).forEach(function(t){
+    if(t.field==="jd") t.groups.forEach(function(g){ g.forEach(function(w){ out[w]=true; }); });
+  });
+  return out;
+}
+function jdRequest(term){
+  var e=__jdSearchCache[term];
+  if(!e){
+    e=__jdSearchCache[term]={status:"pending", set:null, inflight:false};
+    if(__jdFetchTimer) clearTimeout(__jdFetchTimer);
+    __jdFetchTimer=setTimeout(jdRunFetches, 300);
+    jdSyncIndicator();
+  }
+  return e;
+}
+function jdRunFetches(){
+  __jdFetchTimer=null;
+  var want=jdTermsInQuery();
+  Object.keys(__jdSearchCache).forEach(function(term){
+    var e=__jdSearchCache[term];
+    if(e.status!=="pending" || e.inflight) return;
+    if(!want[term]){ delete __jdSearchCache[term]; return; } // typed-through intermediate — never fetched
+    e.inflight=true;
+    fetch("/api/compass/jd-search?q="+encodeURIComponent(term))
+      .then(function(r){ if(!r.ok) throw new Error("http "+r.status); return r.json(); })
+      .then(function(j){ var s={}; ((j&&j.urls)||[]).forEach(function(u){ s[jdUrlKey(u)]=true; }); e.status="ready"; e.set=s; })
+      .catch(function(){ e.status="error"; e.set={}; }) // unreachable → no matches for this term, never a crash
+      .then(function(){ e.inflight=false; jdOnSettled(); });
+  });
+  jdSyncIndicator();
+}
+function jdPending(){
+  var want=jdTermsInQuery(), t;
+  for(t in want){ var e=__jdSearchCache[t]; if(!e || e.status==="pending") return true; }
+  return false;
+}
+function jdOnSettled(){
+  jdSyncIndicator();
+  if(typeof window.render==="function") window.render();
+  /* review-mode overlay open? nudge its queue rebuild through its own search
+     input's handler (the exact path a keystroke takes) — guarded so we only
+     do it when rvQ already mirrors the canonical state.q (it always does
+     while the overlay is open; openReviewMode seeds it and typing syncs it) */
+  var ov=document.getElementById("rvOverlay"), rvQ=document.getElementById("rvQ");
+  if(ov && ov.getAttribute("aria-hidden")==="false" && rvQ && rvQ.value===((window.state&&window.state.q)||"")){
+    try{ rvQ.dispatchEvent(new Event("input", {bubbles:true})); }catch(e){ /* older engines — feed already re-rendered */ }
+  }
+}
+/* small "Searching descriptions…" status under the search bar while any jd:
+   term is in flight (created lazily; role=status so it's announced) */
+function jdSyncIndicator(){
+  var on=jdPending();
+  var el=document.getElementById("jdSearching");
+  if(!el){
+    if(!on) return;
+    el=document.createElement("div");
+    el.id="jdSearching";
+    el.className="jd-searching";
+    el.setAttribute("role","status");
+    el.textContent="Searching descriptions…";
+    var bar=document.getElementById("searchBar");
+    if(bar && bar.parentNode) bar.parentNode.insertBefore(el, bar.nextSibling);
+    else document.body.appendChild(el);
+  }
+  el.hidden=!on;
+}
+
 function tokenMatches(t, j){
   if(t.field==="__sal") return true; // salary: text token is harmless until the UI pass promotes it to the range control
+  if(t.field==="jd"){
+    /* ASYNC field — answered by the server (see __jdSearchCache above). A job
+       passes only once its url key is in the fetched Set; while the term is
+       still loading nothing matches it yet (re-render fires on arrival).
+       &/| groups keep their usual semantics — each WORD is its own server
+       term with its own cached Set. */
+    var key=jdUrlKey(j.url);
+    var jdHit=t.groups.some(function(g){
+      return g.every(function(w){
+        var e=jdRequest(w);
+        return !!(key && e.set && e.set[key]);
+      });
+    });
+    return t.neg ? !jdHit : jdHit;
+  }
   var hay = t.field
     ? String(j[t.field]==null ? "" : j[t.field]).toLowerCase()
     : (j.title+" "+j.company+" "+j.cat+" "+j.func+" "+j.level+" "+j.loc).toLowerCase(); // same broad haystack as always
@@ -1875,7 +1977,8 @@ var SG_FIELDS=[
   {name:"location", key:"loc",    hint:"city or remote"},
   {name:"category", key:"cat",    hint:"where it sits in your pipeline"},
   {name:"salary",   key:"__sal",  hint:"pay range"},
-  {name:"source",   key:"source", hint:"the job board"}
+  {name:"source",   key:"source", hint:"the job board"},
+  {name:"jd",       key:"jd",     hint:"search the full description"}
 ];
 function sgDistinct(key){
   var seen={}, out=[];
@@ -2009,6 +2112,12 @@ function sgRows(){
       if(val) rows.push({t:"row", html:'title contains “'+esc(val)+'”<span class="cnt">'+sgCountSub("title",val)+'</span><span class="kbd">↵</span>',
         act:function(){ commitDraft(); }});
       else rows.push({t:"note", html:"e.g. title:director, title:\"finance director\" — quotes keep a phrase together."});
+    }
+    else if(f==="jd"){ // full-description search — server-side, so no local value list
+      rows.push({t:"hd", html:"jd: — search the full description"});
+      if(val) rows.push({t:"row", html:'descriptions containing “'+esc(val)+'”<span class="kbd">↵</span>',
+        act:function(){ commitDraft(); }});
+      else rows.push({t:"note", html:"Searches the full posting text (cached descriptions) — e.g. jd:sql, jd:\"scenario planning\"."});
     }
     else { // company / level / cat / func / source — real values from the loaded jobs
       var fname=d.fname;

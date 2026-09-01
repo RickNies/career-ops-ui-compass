@@ -896,6 +896,25 @@ export function registerCompassRoutes(app) {
     const m = readJdCache(); m[u] = jd; writeJdCache(m);
     res.json({ ok: true, bytes: jd.length });
   });
+  // Full-text search over the JD cache — backs the feed's `jd:` search field.
+  // The browser never holds every JD, so `jd:` terms resolve here: return the
+  // normalized urls whose cached JD text contains the term (case-insensitive
+  // substring), capped. Read-only; same store as GET/POST /api/compass/jd-cache.
+  app.get('/api/compass/jd-search', (req, res) => {
+    const q = String(req.query.q || '').trim().toLowerCase();
+    if (!q) return res.json({ q: '', urls: [], total: 0, capped: false });
+    const CAP = 2000;
+    const m = readJdCache();
+    const urls = [];
+    for (const k of Object.keys(m)) {
+      if (urls.length >= CAP) break;
+      const jd = m[k];
+      if (typeof jd === 'string' && jd.toLowerCase().includes(q)) {
+        urls.push(normalizeUrl(k) || k); // keys are written canonical already — re-normalize defensively
+      }
+    }
+    res.json({ q, urls, total: urls.length, capped: urls.length >= CAP });
+  });
 
   // ── Tracker STATUS update (the app itself only appends). Finds the row in
   //    applications.md by num (preferred) or url and rewrites its Status cell
