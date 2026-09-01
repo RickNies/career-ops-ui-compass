@@ -127,9 +127,35 @@
 
   /* ---- filter bar ---- */
   .filters{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px;margin:0 0 14px}
-  .search{display:flex;align-items:center;gap:10px;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 13px}
+  .search{display:flex;align-items:center;gap:8px;flex-wrap:wrap;position:relative;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:8px 13px;min-height:44px}
+  .search:focus-within{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-soft)}
   .search svg{color:var(--muted);flex:none}
-  .search input{border:0;background:transparent;outline:none;font-size:15px;width:100%;color:var(--ink);font-family:inherit}
+  .search input{border:0;background:transparent;outline:none;font-size:15px;flex:1 1 160px;width:auto;min-width:110px;color:var(--ink);font-family:inherit;padding:4px 0}
+
+  /* ---- search chips: ONE gold family for typed field/text terms (muted
+     field-prefix + bold value differentiates fields — no per-field hues),
+     terra struck-through for negation, dark ink for REAL facet filters
+     promoted/folded into the bar. Chip body + × are separate real buttons
+     (no invalid nested-interactive markup). ---- */
+  .qchip{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;
+    padding:4px 5px 4px 10px;border-radius:8px;background:var(--gold-soft);color:var(--gold-deep);
+    border:1px solid #E7D3A8;white-space:nowrap;max-width:100%}
+  .qchip .qc-edit{display:inline-flex;align-items:center;gap:5px;background:transparent;border:0;padding:0;margin:0;
+    font:inherit;color:inherit;cursor:pointer;max-width:100%;min-width:0}
+  .qchip .fld{opacity:.72;font-weight:700;flex:none}
+  .qchip .val{font-weight:700;overflow:hidden;text-overflow:ellipsis;max-width:34ch}
+  .qchip .x{width:16px;height:16px;border-radius:5px;display:grid;place-items:center;color:inherit;flex:none;
+    background:rgba(150,112,47,.12);font-size:12px;line-height:1;border:0;padding:0;cursor:pointer}
+  .qchip .x:hover{background:rgba(150,112,47,.28)}
+  .qchip.neg{background:var(--terra-soft);color:var(--terra);border-color:#E7C3B0}
+  .qchip.neg .val{text-decoration:line-through;text-decoration-thickness:1.5px;opacity:.9}
+  .qchip.neg .x{background:rgba(181,98,59,.12)}
+  .qchip.neg .x:hover{background:rgba(181,98,59,.28)}
+  .qchip.facet{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .qchip.facet .fld{opacity:.62}
+  .qchip.facet .x{background:rgba(255,255,255,.18)}
+  .qchip.facet .x:hover{background:rgba(255,255,255,.4)}
+  .qclear{background:transparent;border:0;color:var(--gold-deep);font-weight:600;font-size:12.5px;text-decoration:underline;cursor:pointer;padding:0 2px;flex:none}
   .filter-row{display:flex;align-items:center;gap:10px;margin-top:13px;flex-wrap:wrap}
   .filter-row.tags-row{margin-top:11px;padding-top:11px;border-top:1px solid var(--line-soft)}
   .fl-group{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -654,10 +680,17 @@
       <!-- ====== Main column ====== -->
       <div class="jobs-main">
         <section class="filters" aria-label="Filter jobs">
-          <label class="search">
+          <!-- Chip search bar: committed terms render as chips in #qChips (a
+               display:contents wrapper, so chips join the flex row without the
+               renderer ever touching the #q input node — focus/caret survive
+               every re-render). #q stays a REAL text input holding only the
+               uncommitted tail; state.q remains the one canonical STRING
+               (committed raws + tail), recomposed on every change. -->
+          <div class="search" id="searchBar">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-            <input id="q" type="text" placeholder="Search roles, companies, or keywords…" />
-          </label>
+            <span id="qChips" style="display:contents" role="group" aria-label="Search terms"></span>
+            <input id="q" type="text" placeholder="Search roles, companies, or keywords… try title:director" aria-label="Search" autocomplete="off" spellcheck="false" />
+          </div>
 
           <div class="filter-row">
             <div class="fl-group">
@@ -1313,7 +1346,8 @@ function renderRail(){
 function renderActiveFilters(){
   var bar=document.getElementById("activeFilters");
   var pills=[];
-  if(state.q) pills.push({k:"q", v:state.q, label:'“'+state.q+'”'});
+  /* no more q pill — the chip search bar IS the visualization of the query
+     (rendering the same terms twice was the duplication to avoid) */
   state.works.forEach(function(v){ pills.push({k:"work", v:v, label:v}); });
   state.locs.forEach(function(v){ pills.push({k:"loc", v:v, label:LOC_LABEL[v]||v}); });
   state.cats.forEach(function(v){ pills.push({k:"cat", v:v, label:v}); });
@@ -1503,7 +1537,9 @@ buildMenu("funcMenu","func-cb",FUNCS);
 buildMenu("lvlMenu","lvl-cb",LEVELS);
 
 /* ============ wire controls ============ */
-document.getElementById("q").addEventListener("input", function(e){ state.q=e.target.value; render(); });
+/* #q input wiring now lives in the chip-search-bar block below (renderSearchChips
+   et al.) — same live-filter semantics: every keystroke recomposes state.q and
+   calls render(). */
 document.getElementById("sort").addEventListener("change", function(e){ state.sort=e.target.value; render(); });
 document.getElementById("salUnknown").addEventListener("change", function(e){ state.showUnknown=e.target.checked; render(); });
 document.getElementById("newOnly").addEventListener("change", function(e){ state.newOnly=e.target.checked; render(); });
@@ -1539,7 +1575,7 @@ var segTabs = initTabs(document.querySelector(".seg"), {
 
 /* reflect the full state object into every control (used on load + when filters change elsewhere) */
 function applyControls(){
-  document.getElementById("q").value=state.q;
+  syncSearchFromState();   /* chips + inline #q re-derived from canonical state.q (chip bar block below) */
   document.getElementById("sort").value=(state.sort==="new"?"found":state.sort);
   salLow.value=state.salLow; salHigh.value=state.salHigh; paintSlider();
   document.getElementById("salUnknown").checked=state.showUnknown;
@@ -1561,6 +1597,109 @@ function applyControls(){
 
 /* activate the accessible dropdown controller on every filter popover */
 ["locMs","salMs","catMs","funcMs","lvlMs"].forEach(function(id){ Pop.init(document.getElementById(id)); });
+
+/* ============ chip search bar (custom search UI over parseQuery) ============
+   state.q REMAINS the one canonical search STRING — chips are purely a render
+   of parseQuery(state.q). qCommitted holds the committed term raws; #q.value
+   holds the uncommitted tail (still filtering live, exactly as the old plain
+   input did); state.q is recomposed from both on every change. Tokens are
+   never stored on state. Never touches parseQuery/matches/render — UI only. */
+var qInput=document.getElementById("q");
+var qChipsWrap=document.getElementById("qChips");
+var qCommitted=[];   // committed raw term strings, in order
+
+function composeQ(){ return (qCommitted.join(" ")+" "+qInput.value).replace(/\s+/g," ").trim(); }
+function syncStateQ(){ state.q=composeQ(); }
+
+/* internal field key (parseTerm's t.field) → display name for the chip prefix */
+var FIELD_LABEL={ title:"title", company:"company", loc:"location", level:"level", cat:"category", func:"function", source:"source", "__sal":"salary" };
+function chipParts(raw){
+  var t=parseTerm(raw);
+  var body=t.neg?raw.slice(1):raw;
+  var fld="", val=body;
+  if(t.field){
+    var ci=body.indexOf(":");
+    if(ci>0){ fld=FIELD_LABEL[t.field]||body.slice(0,ci).toLowerCase(); val=body.slice(ci+1); }
+  }
+  return {neg:t.neg, fld:fld, val:val};
+}
+function textChipHTML(raw,i){
+  var p=chipParts(raw);
+  var lbl=(p.neg?"not ":"")+(p.fld?p.fld+": ":"")+p.val;
+  var pre = p.neg
+    ? '<span class="fld">–'+(p.fld?esc(p.fld)+':':'')+'</span>'
+    : (p.fld?'<span class="fld">'+esc(p.fld)+':</span>':'');
+  return '<span class="qchip'+(p.neg?' neg':'')+'">'+
+    '<button type="button" class="qc-edit" data-i="'+i+'" aria-label="Edit search term '+esc(lbl)+'">'+pre+'<span class="val">'+esc(p.val)+'</span></button>'+
+    '<button type="button" class="x" data-i="'+i+'" aria-label="Remove '+esc(lbl)+'">×</button>'+
+  '</span>';
+}
+/* signature guard: renderSearchChips runs on every render (via
+   renderActiveFilters) — skip the DOM write when nothing changed so typing in
+   #q never churns sibling nodes */
+var __chipSig=null;
+function renderSearchChips(){
+  var html=qCommitted.map(textChipHTML).join("");
+  if(html===__chipSig) return;
+  __chipSig=html;
+  qChipsWrap.innerHTML=html;
+  qChipsWrap.querySelectorAll(".qc-edit").forEach(function(b){
+    b.onclick=function(e){ e.stopPropagation(); editChip(+b.getAttribute("data-i")); };
+  });
+  qChipsWrap.querySelectorAll(".x").forEach(function(b){
+    b.onclick=function(e){ e.stopPropagation(); removeChip(+b.getAttribute("data-i")); };
+  });
+}
+function removeChip(i){
+  qCommitted.splice(i,1);
+  syncStateQ(); renderSearchChips(); render();
+  qInput.focus();
+}
+function editChip(i){
+  if(qInput.value.trim()) commitDraft(false);  // don't lose in-progress text
+  var raw=qCommitted.splice(i,1)[0];
+  qInput.value=raw;
+  syncStateQ(); renderSearchChips(); render();
+  qInput.focus();
+  try{ qInput.setSelectionRange(qInput.value.length, qInput.value.length); }catch(e){}
+}
+/* Enter/Tab: commit the current input into chip(s) — one chip per parsed term.
+   state.q's VALUE doesn't change on commit (same terms, chips are display),
+   so filtering stays continuous through the gesture. */
+function commitDraft(rerender){
+  var raws=parseQuery(qInput.value).map(function(t){ return t.raw; });
+  if(!raws.length) return;   // mid-type ("title:", "-", bare quotes) — nothing committable yet, keep typing
+  qCommitted=qCommitted.concat(raws);
+  qInput.value="";
+  syncStateQ(); renderSearchChips();
+  if(rerender!==false) render();
+}
+qInput.addEventListener("input", function(){ syncStateQ(); render(); });
+qInput.addEventListener("keydown", function(e){
+  if(e.key==="Enter" && qInput.value.trim()){ e.preventDefault(); commitDraft(); return; }
+  if(e.key==="Tab" && qInput.value.trim()){ e.preventDefault(); commitDraft(); return; }
+  if(e.key==="Backspace" && !qInput.value && qCommitted.length){
+    // pop the last chip back into the input as editable text
+    e.preventDefault();
+    qInput.value=qCommitted.pop();
+    syncStateQ(); renderSearchChips(); render();
+    return;
+  }
+});
+/* clicking bare bar space focuses the input (the old <label> behavior) */
+document.getElementById("searchBar").addEventListener("click", function(e){
+  if(e.target===this || e.target===qChipsWrap) qInput.focus();
+});
+/* re-derive chips + tail from canonical state.q when it changed OUTSIDE this
+   widget (load, URL ?q=, review-mode's #rvQ, clear-all) — everything becomes
+   committed chips, tail empties. When already in sync, just repaint chips. */
+function syncSearchFromState(){
+  if(composeQ()!==state.q){
+    qCommitted=parseQuery(state.q).map(function(t){ return t.raw; });
+    qInput.value="";
+  }
+  renderSearchChips();
+}
 
 /* ============ reviewed rail collapse ============ */
 /* Per-group (Liked/Passed) collapse — same persistence pattern as the
