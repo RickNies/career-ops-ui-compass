@@ -625,9 +625,13 @@
   .rv-filters.open .rv-filters-body{display:block}
   .rv-f-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px}
   .rv-f-label{font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-right:2px;flex:none}
-  .rv-f-search{display:flex;align-items:center;gap:8px;background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:7px 13px;flex:1;min-width:200px}
+  /* chip-capable: wraps like the feed's .search bar; relative anchors the .qsg dropdown */
+  .rv-f-search{display:flex;align-items:center;gap:8px;flex-wrap:wrap;position:relative;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:7px 13px;flex:1;min-width:200px}
+  .rv-f-search:focus-within{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-soft)}
   .rv-f-search svg{color:var(--muted);flex:none;width:14px;height:14px}
-  .rv-f-search input{border:0;background:transparent;outline:none;font-size:13px;width:100%;color:var(--ink);font-family:inherit}
+  .rv-f-search input{border:0;background:transparent;outline:none;font-size:13px;flex:1 1 120px;width:auto;min-width:90px;color:var(--ink);font-family:inherit}
+  /* the panel (.rv-filters-body) scroll-clips at ~66vh — keep the dropdown reachable inside it */
+  #rvQSuggest{max-height:min(40vh,340px)}
   .rv-filters .chip{padding:6px 12px;font-size:12.5px}
   .rv-filters .select{padding:6px 28px 6px 12px;font-size:12.5px}
   .rv-f-sal{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-soft)}
@@ -937,10 +941,17 @@
           </button>
           <div class="rv-filters-body" id="rvFiltersBody">
           <div class="rv-f-row">
-            <label class="rv-f-search">
+            <!-- Chip search bar — SAME widget as the feed's #searchBar (see
+                 createChipSearch): committed terms render as chips in
+                 #rvQChips, #rvQ holds only the uncommitted tail, and the
+                 suggestion dropdown lives in #rvQSuggest. Wired to the same
+                 canonical state.q by the review IIFE's wireFilterBar(). -->
+            <div class="rv-f-search" id="rvSearchBar">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-              <input id="rvQ" type="text" placeholder="Search roles, companies, or keywords…" aria-label="Search">
-            </label>
+              <span id="rvQChips" style="display:contents" role="group" aria-label="Search terms"></span>
+              <input id="rvQ" type="text" placeholder="Search roles, companies, or keywords… try title:director" aria-label="Search" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-controls="rvQSuggest" aria-autocomplete="list">
+              <div class="qsg" id="rvQSuggest" role="listbox" aria-label="Search suggestions" hidden></div>
+            </div>
             <select class="select" id="rvSort" aria-label="Sort by">
               <option value="best">Sort: Best match</option>
               <option value="found">Sort: Newest (found)</option>
@@ -1394,8 +1405,14 @@ function jdOnSettled(){
      do it when rvQ already mirrors the canonical state.q (it always does
      while the overlay is open; openReviewMode seeds it and typing syncs it) */
   var ov=document.getElementById("rvOverlay"), rvQ=document.getElementById("rvQ");
-  if(ov && ov.getAttribute("aria-hidden")==="false" && rvQ && rvQ.value===((window.state&&window.state.q)||"")){
-    try{ rvQ.dispatchEvent(new Event("input", {bubbles:true})); }catch(e){ /* older engines — feed already re-rendered */ }
+  if(ov && ov.getAttribute("aria-hidden")==="false"){
+    if(window.__rvChipSearch){
+      /* chip widget: recompute the queue via the same onQ path a keystroke
+         takes, WITHOUT opening the suggestion menu */
+      window.__rvChipSearch.refilter();
+    } else if(rvQ && rvQ.value===((window.state&&window.state.q)||"")){
+      try{ rvQ.dispatchEvent(new Event("input", {bubbles:true})); }catch(e){ /* older engines — feed already re-rendered */ }
+    }
   }
 }
 /* small "Searching descriptions…" status under the search bar while any jd:
@@ -1808,12 +1825,24 @@ function applyControls(){
 
 /* ============ chip search bar (custom search UI over parseQuery) ============
    state.q REMAINS the one canonical search STRING — chips are purely a render
-   of parseQuery(state.q). qCommitted holds the committed term raws; #q.value
-   holds the uncommitted tail (still filtering live, exactly as the old plain
-   input did); state.q is recomposed from both on every change. Tokens are
-   never stored on state. Never touches parseQuery/matches/render — UI only. */
-var qInput=document.getElementById("q");
-var qChipsWrap=document.getElementById("qChips");
+   of parseQuery(state.q). qCommitted holds the committed term raws; the input's
+   value holds the uncommitted tail (still filtering live, exactly as the old
+   plain input did); state.q is recomposed from both on every change. Tokens are
+   never stored on state. Never touches parseQuery/matches/render — UI only.
+
+   FACTORY: createChipSearch(cfg) binds the widget to a given input/chips/
+   suggest/bar node set so the FEED (#q) and REVIEW MODE (#rvQ) share the exact
+   same chip + suggestion code. cfg:
+     input/chips/sg/bar — the DOM nodes (text input, chips mount, .qsg, bar)
+     onQ()       — run after state.q changed and results must re-filter
+                   (feed: render(); review: onFilterChange → queue recompute)
+     onPromote() — run after a facet/salary PROMOTION mutated real filter state
+                   (feed: applyControls(); review: rebuild the panel's chips)
+     removeFilter(k,v) / clearAll() — optional overrides for the facet-chip ×
+                   and "Clear all" (default to the feed's global handlers) */
+function createChipSearch(cfg){
+var qInput=cfg.input;
+var qChipsWrap=cfg.chips;
 var qCommitted=[];   // committed raw term strings, in order
 
 function composeQ(){ return (qCommitted.join(" ")+" "+qInput.value).replace(/\s+/g," ").trim(); }
@@ -1881,21 +1910,21 @@ function renderSearchChips(){
     b.onclick=function(e){ e.stopPropagation(); removeChip(+b.getAttribute("data-i")); };
   });
   qChipsWrap.querySelectorAll(".x[data-k]").forEach(function(b){
-    b.onclick=function(e){ e.stopPropagation(); removeFilter(b.getAttribute("data-k"), b.getAttribute("data-v")); };
+    b.onclick=function(e){ e.stopPropagation(); (cfg.removeFilter||removeFilter)(b.getAttribute("data-k"), b.getAttribute("data-v")); };
   });
   var ca=qChipsWrap.querySelector("[data-clear-all]");
-  if(ca) ca.onclick=function(e){ e.stopPropagation(); clearAllFilters(); };
+  if(ca) ca.onclick=function(e){ e.stopPropagation(); (cfg.clearAll||clearAllFilters)(); };
 }
 function removeChip(i){
   qCommitted.splice(i,1);
-  syncStateQ(); renderSearchChips(); render();
+  syncStateQ(); renderSearchChips(); cfg.onQ();
   qInput.focus();
 }
 function editChip(i){
   if(qInput.value.trim()) commitDraft(false);  // don't lose in-progress text
   var raw=qCommitted.splice(i,1)[0];
   qInput.value=raw;
-  syncStateQ(); renderSearchChips(); render();
+  syncStateQ(); renderSearchChips(); cfg.onQ();
   qInput.focus();
   try{ qInput.setSelectionRange(qInput.value.length, qInput.value.length); }catch(e){}
 }
@@ -1958,8 +1987,8 @@ function commitDraft(rerender){
   });
   qInput.value="";
   syncStateQ();
-  if(promoted) applyControls(); else renderSearchChips();
-  if(rerender!==false) render();
+  if(promoted) cfg.onPromote(); else renderSearchChips();
+  if(rerender!==false) cfg.onQ();
   updateSuggest();
 }
 
@@ -1970,7 +1999,8 @@ function commitDraft(rerender){
    matching a known filter value gets a "Did you mean" row. Keyboard: ↑/↓ to
    move, Enter to take the highlighted row (no highlight = free-form commit,
    so plain typing always works), Esc closes. */
-var sgEl=document.getElementById("qSuggest");
+var sgEl=cfg.sg;
+var sgOptPrefix=(qInput.id||"q")+"SgOpt";   // per-instance option ids (feed + review both render .sg-rows)
 var sgActs=[];    // action per rendered .sg-row, in DOM order
 var sgActive=-1;
 var sgOpen=false;
@@ -2014,17 +2044,17 @@ function draftInfo(){
   return {mode:"prefix", text:body.trim(), neg:neg};
 }
 
-function setDraft(s){ qInput.value=s; qInput.focus(); syncStateQ(); render(); updateSuggest(); }
+function setDraft(s){ qInput.value=s; qInput.focus(); syncStateQ(); cfg.onQ(); updateSuggest(); }
 function addFieldTextChip(fname, val, neg){
   qCommitted.push((neg?"-":"")+fname+":"+maybeQuote(val));
   qInput.value="";
-  syncStateQ(); renderSearchChips(); render(); updateSuggest();
+  syncStateQ(); renderSearchChips(); cfg.onQ(); updateSuggest();
   qInput.focus();
 }
 function promoteSalaryDraft(val){
   if(!promoteSalaryValue(val)) return;
   qInput.value="";
-  syncStateQ(); applyControls(); render(); updateSuggest();
+  syncStateQ(); cfg.onPromote(); cfg.onQ(); updateSuggest();
   qInput.focus();
 }
 /* picking a facet-flavored suggestion sets the REAL filter (same array the
@@ -2032,7 +2062,7 @@ function promoteSalaryDraft(val){
 function promoteFacet(arr, v){
   if(arr && arr.indexOf(v)<0) arr.push(v);
   qInput.value="";
-  syncStateQ(); applyControls(); render(); updateSuggest();
+  syncStateQ(); cfg.onPromote(); cfg.onQ(); updateSuggest();
   qInput.focus();
 }
 
@@ -2153,7 +2183,7 @@ function updateSuggest(){
     if(r.t==="hd"){ html+='<div class="sg-hd">'+r.html+'</div>'; return; }
     if(r.t==="div"){ html+='<div class="sg-divide"></div>'; return; }
     if(r.t==="note"){ html+='<div class="sg-note">'+r.html+'</div>'; return; }
-    html+='<button type="button" class="sg-row'+(r.cls?" "+r.cls:"")+'" id="sgOpt'+ri+'" role="option" data-i="'+ri+'">'+r.html+'</button>';
+    html+='<button type="button" class="sg-row'+(r.cls?" "+r.cls:"")+'" id="'+sgOptPrefix+ri+'" role="option" data-i="'+ri+'">'+r.html+'</button>';
     sgActs.push(r.act); ri++;
   });
   sgEl.innerHTML=html;
@@ -2172,26 +2202,26 @@ function sgMove(dir){
   sgActive=((sgActive+1+dir+(sgActs.length+1))%(sgActs.length+1))-1;   // cycles through -1 (none) too
   var rowsEls=sgEl.querySelectorAll(".sg-row");
   rowsEls.forEach(function(el,i){ el.classList.toggle("on", i===sgActive); });
-  qInput.setAttribute("aria-activedescendant", sgActive>=0 ? "sgOpt"+sgActive : "");
+  qInput.setAttribute("aria-activedescendant", sgActive>=0 ? sgOptPrefix+sgActive : "");
   if(sgActive>=0 && rowsEls[sgActive] && rowsEls[sgActive].scrollIntoView) rowsEls[sgActive].scrollIntoView({block:"nearest"});
 }
 function openSuggest(){ sgOpen=true; updateSuggest(); }
 function closeSuggest(){ sgOpen=false; sgEl.hidden=true; sgActive=-1; qInput.setAttribute("aria-expanded","false"); }
 
-qInput.addEventListener("input", function(){ syncStateQ(); render(); sgOpen=true; updateSuggest(); });
+qInput.addEventListener("input", function(){ syncStateQ(); cfg.onQ(); sgOpen=true; updateSuggest(); });
 qInput.addEventListener("focus", openSuggest);
 qInput.addEventListener("click", openSuggest);   // reopen after Esc without leaving the field
 document.addEventListener("mousedown", function(e){
   // a row's own action can re-render the menu mid-mousedown, DETACHING the
   // clicked row before this bubbled handler runs — a detached target was
   // inside the widget, so only close for attached targets truly outside it
-  if(sgOpen && e.target && document.contains(e.target) && !document.getElementById("searchBar").contains(e.target)) closeSuggest();
+  if(sgOpen && e.target && document.contains(e.target) && !cfg.bar.contains(e.target)) closeSuggest();
 });
 qInput.addEventListener("keydown", function(e){
   if(sgOpen){
     if(e.key==="ArrowDown"){ e.preventDefault(); sgMove(1); return; }
     if(e.key==="ArrowUp"){ e.preventDefault(); sgMove(-1); return; }
-    if(e.key==="Escape"){ e.preventDefault(); closeSuggest(); return; }
+    if(e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); closeSuggest(); return; }   /* swallow so review-mode's doc-level Esc (exit) doesn't also fire */
     if(e.key==="Enter" && sgActive>=0 && sgActs[sgActive]){ e.preventDefault(); sgActs[sgActive](); return; }
     if(e.key==="Tab" && sgActive>=0 && sgActs[sgActive]){ e.preventDefault(); sgActs[sgActive](); return; }
   }
@@ -2201,16 +2231,16 @@ qInput.addEventListener("keydown", function(e){
     // pop the last chip back into the input as editable text
     e.preventDefault();
     qInput.value=qCommitted.pop();
-    syncStateQ(); renderSearchChips(); render(); updateSuggest();
+    syncStateQ(); renderSearchChips(); cfg.onQ(); updateSuggest();
     return;
   }
 });
 /* clicking bare bar space focuses the input (the old <label> behavior) */
-document.getElementById("searchBar").addEventListener("click", function(e){
+cfg.bar.addEventListener("click", function(e){
   if(e.target===this || e.target===qChipsWrap) qInput.focus();
 });
 /* re-derive chips + tail from canonical state.q when it changed OUTSIDE this
-   widget (load, URL ?q=, review-mode's #rvQ, clear-all) — everything becomes
+   widget (load, URL ?q=, the OTHER instance, clear-all) — everything becomes
    committed chips, tail empties. When already in sync, just repaint chips. */
 function syncSearchFromState(){
   if(composeQ()!==state.q){
@@ -2219,6 +2249,31 @@ function syncSearchFromState(){
   }
   renderSearchChips();
 }
+
+/* per-instance surface (feed shims below + review-mode wiring at the bottom) */
+return {
+  renderChips: renderSearchChips,
+  syncFromState: syncSearchFromState,
+  /* recompute results from the CURRENT committed+tail without opening the
+     suggest menu — used when async jd: results settle while review is open */
+  refilter: function(){ syncStateQ(); cfg.onQ(); }
+};
+}
+window.createChipSearch=createChipSearch;
+
+/* the FEED instance — same nodes + same side-effects the pre-factory inline
+   wiring used, so feed behavior is unchanged */
+var feedChipSearch=createChipSearch({
+  input: document.getElementById("q"),
+  chips: document.getElementById("qChips"),
+  sg:    document.getElementById("qSuggest"),
+  bar:   document.getElementById("searchBar"),
+  onQ:      function(){ render(); },
+  onPromote:function(){ applyControls(); }
+});
+/* global names the existing render/applyControls paths call */
+function renderSearchChips(){ feedChipSearch.renderChips(); }
+function syncSearchFromState(){ feedChipSearch.syncFromState(); }
 
 /* ============ sort direction ↑↓ toggle ============
    state.sortDir: "desc" (default — today's order for every sort) | "asc"
@@ -2461,6 +2516,7 @@ if(location.hash==="#add") openModal();
    * ========================================================================== */
   var WORK_TYPES = ['Remote', 'Hybrid', 'On-site'];
   var filtersWired = false;
+  var rvChips = null;   // review-mode chip-search instance (same createChipSearch widget as the feed)
 
   // Cap "what lines up well" / "worth a closer look" to a handful of items
   // each (each item also clamps to 2 wrapped lines — .rv-clamp in the CSS)
@@ -2525,7 +2581,8 @@ if(location.hash==="#add") openModal();
   // sessions (localStorage) or via URL query params (job-detail tag links).
   function seedFilterBar(){
     var st = rvState(); if (!st) return;
-    var qEl = document.getElementById('rvQ'); if (qEl) qEl.value = st.q || '';
+    if (rvChips) rvChips.syncFromState();   // chips + tail re-derived from canonical state.q
+    else { var qEl = document.getElementById('rvQ'); if (qEl) qEl.value = st.q || ''; }
     var sortEl = document.getElementById('rvSort');
     if (sortEl){
       // Same "hide Newest (posted) until at least one real posted date exists"
@@ -2568,8 +2625,25 @@ if(location.hash==="#add") openModal();
     filtersWired = true;
     var st = rvState(); if (!st) return;
 
-    var qEl = document.getElementById('rvQ');
-    if (qEl) qEl.addEventListener('input', function(e){ st.q = e.target.value; onFilterChange(); });
+    // Chip search — the SAME widget the feed's #searchBar uses
+    // (createChipSearch above), pointed at the review panel's own nodes.
+    // Typing/committing recomposes the one canonical state.q (inside the
+    // widget) and re-filters the queue LIVE via the same onFilterChange()
+    // path the old plain #rvQ input used; facet promotion writes the same
+    // real filter arrays, then the panel's option chips + summary refresh.
+    if (typeof window.createChipSearch === 'function' && document.getElementById('rvQ')){
+      rvChips = window.createChipSearch({
+        input: document.getElementById('rvQ'),
+        chips: document.getElementById('rvQChips'),
+        sg:    document.getElementById('rvQSuggest'),
+        bar:   document.getElementById('rvSearchBar'),
+        onQ:      function(){ onFilterChange(); },
+        onPromote:function(){ buildFilterOptions(); },
+        removeFilter: function(k, v){ window.removeFilter(k, v); buildFilterOptions(); onFilterChange(); },
+        clearAll:     function(){ window.clearAllFilters(); buildFilterOptions(); onFilterChange(); }
+      });
+      window.__rvChipSearch = rvChips;   // jdOnSettled() nudges the queue through this when jd: results land
+    }
 
     // A SORT change jumps to the top of the newly-ordered queue (that is the
     // point of re-sorting); other filter changes keep the current card in
@@ -2626,6 +2700,10 @@ if(location.hash==="#add") openModal();
   function onFilterChange(opts){
     if (typeof window.saveFilters === 'function') window.saveFilters();
     updateFiltersSummary();
+    // Repaint the search bar's chips (facet chips fold into it, same as the
+    // feed) — sig-guarded inside the widget, and never clobbers a mid-typed
+    // tail (it only re-derives when state.q changed outside the widget).
+    if (rvChips) rvChips.renderChips();
     recomputeQueue(opts);
   }
 
