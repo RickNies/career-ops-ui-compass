@@ -156,6 +156,23 @@
   .qchip.facet .x{background:rgba(255,255,255,.18)}
   .qchip.facet .x:hover{background:rgba(255,255,255,.4)}
   .qclear{background:transparent;border:0;color:var(--gold-deep);font-weight:600;font-size:12.5px;text-decoration:underline;cursor:pointer;padding:0 2px;flex:none}
+
+  /* ---- search suggestion dropdown (fields → values+counts → did-you-mean) ---- */
+  .qsg{position:absolute;z-index:30;top:calc(100% + 8px);left:0;width:min(360px,calc(100vw - 44px));max-height:min(52vh,430px);overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm);box-shadow:var(--shadow)}
+  .qsg[hidden]{display:none}
+  .qsg .sg-hd{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:10px 14px 5px}
+  .qsg .sg-row{display:flex;align-items:center;gap:9px;padding:8px 14px;font-size:13.5px;color:var(--ink);cursor:pointer;border:0;background:none;width:100%;text-align:left;font-family:inherit}
+  .qsg .sg-row:hover,.qsg .sg-row.on{background:var(--gold-soft)}
+  .qsg .sg-row .fld{font-weight:700;color:var(--gold-deep);flex:none}
+  .qsg .sg-row .hint{color:var(--muted);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .qsg .sg-row .cnt{margin-left:auto;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;flex:none}
+  .qsg .sg-row .kbd{margin-left:auto;font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:1px 6px;background:var(--surface-2);flex:none}
+  .qsg .sg-row .pin{margin-left:auto;font-size:10.5px;font-weight:700;color:var(--sage);background:var(--sage-soft);padding:1px 8px;border-radius:999px;flex:none}
+  .qsg .sg-row.broad{background:var(--sage-soft)}
+  .qsg .sg-row.broad:hover,.qsg .sg-row.broad.on{background:#D8ECE2}
+  .qsg .sg-row.broad .fld{color:var(--sage)}
+  .qsg .sg-note{padding:6px 14px 10px;font-size:12px;color:var(--muted)}
+  .qsg .sg-divide{border-top:1px dashed var(--line);margin:4px 0}
   .filter-row{display:flex;align-items:center;gap:10px;margin-top:13px;flex-wrap:wrap}
   .filter-row.tags-row{margin-top:11px;padding-top:11px;border-top:1px solid var(--line-soft)}
   .fl-group{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -689,7 +706,11 @@
           <div class="search" id="searchBar">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
             <span id="qChips" style="display:contents" role="group" aria-label="Search terms"></span>
-            <input id="q" type="text" placeholder="Search roles, companies, or keywords… try title:director" aria-label="Search" autocomplete="off" spellcheck="false" />
+            <input id="q" type="text" placeholder="Search roles, companies, or keywords… try title:director" aria-label="Search" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-controls="qSuggest" aria-autocomplete="list" />
+            <!-- suggestion dropdown: fields on focus → values(+counts) after a
+                 field: prefix → "did you mean" for bare words. See the
+                 suggest module in the chip-search script below. -->
+            <div class="qsg" id="qSuggest" role="listbox" aria-label="Search suggestions" hidden></div>
           </div>
 
           <div class="filter-row">
@@ -1663,26 +1684,267 @@ function editChip(i){
   qInput.focus();
   try{ qInput.setSelectionRange(qInput.value.length, qInput.value.length); }catch(e){}
 }
+/* salary: is PROMOTE-ONLY — a typed salary term always becomes the real
+   salary-range filter (state.salLow/High), never a text token. Accepts
+   "150-250", "150+", "150", "150k", "150000". Returns true when promoted. */
+function promoteSalaryValue(val){
+  function norm(n){ n=+n; if(n>=1000) n=Math.round(n/1000); n=Math.round(n/5)*5; return Math.max(80, Math.min(300, n)); }
+  var s=String(val).replace(/[$kK,\s]/g,"");
+  var m=s.match(/^(\d+)[-–](\d+)$/);
+  var lo, hi;
+  if(m){ lo=norm(m[1]); hi=norm(m[2]); }
+  else { m=s.match(/^(\d+)\+?$/); if(!m) return false; lo=norm(m[1]); hi=300; }
+  if(lo>hi){ var t=lo; lo=hi; hi=t; }
+  state.salLow=lo; state.salHigh=hi;
+  return true;
+}
 /* Enter/Tab: commit the current input into chip(s) — one chip per parsed term.
    state.q's VALUE doesn't change on commit (same terms, chips are display),
-   so filtering stays continuous through the gesture. */
+   so filtering stays continuous through the gesture. Salary terms promote to
+   the range control instead of chipping (see promoteSalaryValue above). */
 function commitDraft(rerender){
-  var raws=parseQuery(qInput.value).map(function(t){ return t.raw; });
-  if(!raws.length) return;   // mid-type ("title:", "-", bare quotes) — nothing committable yet, keep typing
-  qCommitted=qCommitted.concat(raws);
+  var toks=parseQuery(qInput.value);
+  if(!toks.length) return;   // mid-type ("title:", "-", bare quotes) — nothing committable yet, keep typing
+  var promoted=false;
+  toks.forEach(function(t){
+    if(t.field==="__sal"){
+      var body=t.neg?t.raw.slice(1):t.raw;
+      var val=body.slice(body.indexOf(":")+1);
+      if(!t.neg && promoteSalaryValue(val)) promoted=true;
+      else toast("Salary works as a range — try salary:150-250 or salary:150+", "info");
+      return;  // never a text token either way
+    }
+    qCommitted.push(commitTermRaw(t));
+  });
   qInput.value="";
-  syncStateQ(); renderSearchChips();
+  syncStateQ();
+  if(promoted) applyControls(); else renderSearchChips();
   if(rerender!==false) render();
+  updateSuggest();
 }
-qInput.addEventListener("input", function(){ syncStateQ(); render(); });
+/* hook: phase-3 facet promotion rewrites this to return null for promoted
+   facet values; until then every non-salary term commits as its raw chip */
+function commitTermRaw(t){ return t.raw; }
+
+/* ============ suggestion dropdown ============
+   Opens on focus: all fields with plain-English hints + an "…or just type"
+   row; narrows to matching fields as a prefix is typed; after "field:" lists
+   that field's real VALUES with live counts from the loaded jobs; a bare word
+   matching a known filter value gets a "Did you mean" row. Keyboard: ↑/↓ to
+   move, Enter to take the highlighted row (no highlight = free-form commit,
+   so plain typing always works), Esc closes. */
+var sgEl=document.getElementById("qSuggest");
+var sgActs=[];    // action per rendered .sg-row, in DOM order
+var sgActive=-1;
+var sgOpen=false;
+
+var SG_FIELDS=[
+  {name:"title",    key:"title",  hint:"the job title"},
+  {name:"company",  key:"company",hint:"the employer"},
+  {name:"level",    key:"level",  hint:"seniority"},
+  {name:"location", key:"loc",    hint:"city or remote"},
+  {name:"category", key:"cat",    hint:"where it sits in your pipeline"},
+  {name:"salary",   key:"__sal",  hint:"pay range"},
+  {name:"source",   key:"source", hint:"the job board"}
+];
+function sgDistinct(key){
+  var seen={}, out=[];
+  (window.JOBS||[]).forEach(function(j){ var v=j[key]; if(v && !seen[v]){ seen[v]=1; out.push(v); } });
+  return out;
+}
+function sgCountEq(key,val){ var t=String(val).toLowerCase(), n=0; (window.JOBS||[]).forEach(function(j){ if(String(j[key]==null?"":j[key]).toLowerCase()===t) n++; }); return n; }
+function sgCountSub(key,val){ var t=String(val).toLowerCase(), n=0; (window.JOBS||[]).forEach(function(j){ if(String(j[key]==null?"":j[key]).toLowerCase().indexOf(t)!==-1) n++; }); return n; }
+function sgCountLocKey(k){ var n=0; (window.JOBS||[]).forEach(function(j){ if(j.locKey===k) n++; }); return n; }
+function maybeQuote(v){ v=String(v).replace(/["“”]/g,""); return /\s/.test(v) ? '"'+v+'"' : v; }
+
+/* what is the user mid-typing? */
+function draftInfo(){
+  var v=qInput.value;
+  var neg=v.length>1 && v.charAt(0)==="-";
+  var body=neg?v.slice(1):v;
+  var ci=body.indexOf(":");
+  if(ci>0){
+    var pre=body.slice(0,ci).trim().toLowerCase();
+    if(Q_FIELDS.hasOwnProperty(pre)){
+      var f=Q_FIELDS[pre], fname=(f==="func")?"function":null;
+      SG_FIELDS.forEach(function(x){ if(x.key===f) fname=x.name; });
+      return {mode:"value", field:f, fname:fname||pre, val:body.slice(ci+1).replace(/^["“”]|["“”]$/g,""), neg:neg};
+    }
+    return {mode:"colon"};   // unknown prefix — literal term, no field suggestions
+  }
+  if(!body.trim()) return {mode:"empty", neg:neg};
+  return {mode:"prefix", text:body.trim(), neg:neg};
+}
+
+function setDraft(s){ qInput.value=s; qInput.focus(); syncStateQ(); render(); updateSuggest(); }
+function addFieldTextChip(fname, val, neg){
+  qCommitted.push((neg?"-":"")+fname+":"+maybeQuote(val));
+  qInput.value="";
+  syncStateQ(); renderSearchChips(); render(); updateSuggest();
+  qInput.focus();
+}
+function promoteSalaryDraft(val){
+  if(!promoteSalaryValue(val)) return;
+  qInput.value="";
+  syncStateQ(); applyControls(); render(); updateSuggest();
+  qInput.focus();
+}
+
+/* bare word ↔ known filter values (levels, categories, location buckets,
+   sources; companies once 3+ chars) */
+function didYouMean(text){
+  var t=String(text).toLowerCase(); if(t.length<2) return [];
+  var out=[];
+  function push(fname,key,val,facet,cnt){ if(out.length<4) out.push({fname:fname,key:key,val:val,facet:facet,cnt:cnt}); }
+  (window.LEVELS||LEVELS).forEach(function(v){ if(String(v).toLowerCase().indexOf(t)===0) push("level","level",v,true,sgCountEq("level",v)); });
+  (window.CATS||CATS).forEach(function(v){ if(String(v).toLowerCase().indexOf(t)===0) push("category","cat",v,true,sgCountEq("cat",v)); });
+  Object.keys(LOC_LABEL).forEach(function(k){ if(LOC_LABEL[k].toLowerCase().indexOf(t)===0 || k.indexOf(t)===0) push("location","loc",LOC_LABEL[k],true,sgCountLocKey(k)); });
+  sgDistinct("source").forEach(function(v){ if(String(v).toLowerCase().indexOf(t)===0) push("source","source",v,false,sgCountEq("source",v)); });
+  if(t.length>=3) sgDistinct("company").forEach(function(v){ if(String(v).toLowerCase().indexOf(t)===0) push("company","company",v,false,sgCountEq("company",v)); });
+  return out;
+}
+
+function sgRows(){
+  var d=draftInfo(), rows=[];
+  function fieldRow(f){
+    rows.push({t:"row", html:'<span class="fld">'+f.name+':</span><span class="hint">'+f.hint+'</span>',
+      act:function(){ setDraft((d.neg?"-":"")+f.name+":"); }});
+  }
+  function broadRow(label, kbd, act){
+    rows.push({t:"row", cls:"broad", html:'<span class="fld">'+esc(label)+'</span>'+(kbd?'<span class="kbd">'+kbd+'</span>':''), act:act});
+  }
+  if(d.mode==="empty"){
+    rows.push({t:"hd", html:"Search by field"});
+    SG_FIELDS.forEach(fieldRow);
+    rows.push({t:"div"});
+    rows.push({t:"row", cls:"broad",
+      html:'<span class="fld">…or just type</span><span class="hint">to search everything</span><span class="kbd">type</span>',
+      act:function(){ qInput.focus(); }});
+  }
+  else if(d.mode==="prefix"){
+    var m=SG_FIELDS.filter(function(f){ return f.name.indexOf(d.text.toLowerCase())===0; });
+    if(m.length){ rows.push({t:"hd", html:"Matching fields"}); m.forEach(fieldRow); rows.push({t:"div"}); }
+    broadRow('Search everything for “'+d.text+'”', "↵", function(){ commitDraft(); });
+    var dym=didYouMean(d.text);
+    if(dym.length){
+      rows.push({t:"div"});
+      rows.push({t:"hd", html:"Did you mean"});
+      dym.forEach(function(s){
+        rows.push({t:"row",
+          html:'<span class="fld">'+s.fname+':</span> '+esc(s.val)+'<span class="cnt">'+s.cnt+'</span>',
+          act:function(){ addFieldTextChip(s.fname, s.val, false); }});
+      });
+    }
+  }
+  else if(d.mode==="value"){
+    var f=d.field, val=d.val.trim();
+    if(f==="__sal"){
+      rows.push({t:"hd", html:"salary: — pick a range"});
+      var s=val.replace(/[$kK,\s]/g,"");
+      if(/^\d+([-–]\d+)?\+?$/.test(s)){
+        var lbl=/[-–]/.test(s) ? ("$"+s.replace(/[-–]/,"K – $")+"K") : ("$"+s.replace(/\+$/,"")+"K+");
+        rows.push({t:"row", html:'<span class="fld">'+esc(lbl)+'</span><span class="hint">set the salary range filter</span><span class="pin">filter</span>',
+          act:function(){ promoteSalaryDraft(val); }});
+      } else {
+        [["120+","$120K+"],["150+","$150K+"],["200+","$200K+"],["120-180","$120K – $180K"]].forEach(function(p){
+          rows.push({t:"row", html:'<span class="fld">'+p[1]+'</span><span class="pin">filter</span>', act:function(){ promoteSalaryDraft(p[0]); }});
+        });
+      }
+      rows.push({t:"note", html:"Salary is always a range filter — never a text match. Try 150-250 or 150+."});
+    }
+    else if(f==="loc"){
+      rows.push({t:"hd", html:"location: — pick a value"});
+      Object.keys(LOC_LABEL).forEach(function(k){
+        var lbl=LOC_LABEL[k];
+        if(val && lbl.toLowerCase().indexOf(val.toLowerCase())===-1 && k.indexOf(val.toLowerCase())===-1) return;
+        rows.push({t:"row", html:esc(lbl)+'<span class="cnt">'+sgCountLocKey(k)+'</span>',
+          act:function(){ addFieldTextChip("location", lbl, d.neg); }});
+      });
+      if(val) rows.push({t:"row", html:'location contains “'+esc(val)+'”<span class="cnt">'+sgCountSub("loc",val)+'</span>',
+        act:function(){ addFieldTextChip("location", val, d.neg); }});
+    }
+    else if(f==="title"){
+      rows.push({t:"hd", html:"title: — type part of a title"});
+      if(val) rows.push({t:"row", html:'title contains “'+esc(val)+'”<span class="cnt">'+sgCountSub("title",val)+'</span><span class="kbd">↵</span>',
+        act:function(){ commitDraft(); }});
+      else rows.push({t:"note", html:"e.g. title:director, title:\"finance director\" — quotes keep a phrase together."});
+    }
+    else { // company / level / cat / func / source — real values from the loaded jobs
+      var fname=d.fname;
+      rows.push({t:"hd", html:esc(fname)+": — pick a value"});
+      var vals=sgDistinct(f).filter(function(v){ return !val || String(v).toLowerCase().indexOf(val.toLowerCase())!==-1; }).slice(0,8);
+      vals.forEach(function(v){
+        rows.push({t:"row", html:esc(v)+'<span class="cnt">'+sgCountEq(f,v)+'</span>',
+          act:function(){ addFieldTextChip(fname, v, d.neg); }});
+      });
+      if(val && (f==="company"||f==="source")) rows.push({t:"row", html:esc(fname)+' contains “'+esc(val)+'”<span class="cnt">'+sgCountSub(f,val)+'</span>',
+        act:function(){ addFieldTextChip(fname, val, d.neg); }});
+      if(!vals.length && !val) rows.push({t:"note", html:"No values loaded yet."});
+    }
+  }
+  /* mode "colon" (unknown prefix): stays a literal term — no suggestions */
+  return rows;
+}
+
+function updateSuggest(){
+  if(!sgOpen){ sgEl.hidden=true; qInput.setAttribute("aria-expanded","false"); return; }
+  var rows=sgRows();
+  if(!rows.length){ sgEl.hidden=true; qInput.setAttribute("aria-expanded","false"); sgActs=[]; sgActive=-1; return; }
+  sgActs=[]; sgActive=-1;
+  var html="", ri=0;
+  rows.forEach(function(r){
+    if(r.t==="hd"){ html+='<div class="sg-hd">'+r.html+'</div>'; return; }
+    if(r.t==="div"){ html+='<div class="sg-divide"></div>'; return; }
+    if(r.t==="note"){ html+='<div class="sg-note">'+r.html+'</div>'; return; }
+    html+='<button type="button" class="sg-row'+(r.cls?" "+r.cls:"")+'" id="sgOpt'+ri+'" role="option" data-i="'+ri+'">'+r.html+'</button>';
+    sgActs.push(r.act); ri++;
+  });
+  sgEl.innerHTML=html;
+  sgEl.hidden=false;
+  qInput.setAttribute("aria-expanded","true");
+  sgEl.querySelectorAll(".sg-row").forEach(function(b){
+    b.addEventListener("mousedown", function(e){
+      e.preventDefault();               // keep focus in the input
+      var act=sgActs[+b.getAttribute("data-i")];
+      if(act) act();
+    });
+  });
+}
+function sgMove(dir){
+  if(!sgActs.length) return;
+  sgActive=((sgActive+1+dir+(sgActs.length+1))%(sgActs.length+1))-1;   // cycles through -1 (none) too
+  var rowsEls=sgEl.querySelectorAll(".sg-row");
+  rowsEls.forEach(function(el,i){ el.classList.toggle("on", i===sgActive); });
+  qInput.setAttribute("aria-activedescendant", sgActive>=0 ? "sgOpt"+sgActive : "");
+  if(sgActive>=0 && rowsEls[sgActive] && rowsEls[sgActive].scrollIntoView) rowsEls[sgActive].scrollIntoView({block:"nearest"});
+}
+function openSuggest(){ sgOpen=true; updateSuggest(); }
+function closeSuggest(){ sgOpen=false; sgEl.hidden=true; sgActive=-1; qInput.setAttribute("aria-expanded","false"); }
+
+qInput.addEventListener("input", function(){ syncStateQ(); render(); sgOpen=true; updateSuggest(); });
+qInput.addEventListener("focus", openSuggest);
+qInput.addEventListener("click", openSuggest);   // reopen after Esc without leaving the field
+document.addEventListener("mousedown", function(e){
+  // a row's own action can re-render the menu mid-mousedown, DETACHING the
+  // clicked row before this bubbled handler runs — a detached target was
+  // inside the widget, so only close for attached targets truly outside it
+  if(sgOpen && e.target && document.contains(e.target) && !document.getElementById("searchBar").contains(e.target)) closeSuggest();
+});
 qInput.addEventListener("keydown", function(e){
+  if(sgOpen){
+    if(e.key==="ArrowDown"){ e.preventDefault(); sgMove(1); return; }
+    if(e.key==="ArrowUp"){ e.preventDefault(); sgMove(-1); return; }
+    if(e.key==="Escape"){ e.preventDefault(); closeSuggest(); return; }
+    if(e.key==="Enter" && sgActive>=0 && sgActs[sgActive]){ e.preventDefault(); sgActs[sgActive](); return; }
+    if(e.key==="Tab" && sgActive>=0 && sgActs[sgActive]){ e.preventDefault(); sgActs[sgActive](); return; }
+  }
   if(e.key==="Enter" && qInput.value.trim()){ e.preventDefault(); commitDraft(); return; }
   if(e.key==="Tab" && qInput.value.trim()){ e.preventDefault(); commitDraft(); return; }
   if(e.key==="Backspace" && !qInput.value && qCommitted.length){
     // pop the last chip back into the input as editable text
     e.preventDefault();
     qInput.value=qCommitted.pop();
-    syncStateQ(); renderSearchChips(); render();
+    syncStateQ(); renderSearchChips(); render(); updateSuggest();
     return;
   }
 });
