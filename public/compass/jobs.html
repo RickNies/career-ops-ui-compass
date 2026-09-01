@@ -780,11 +780,21 @@
           </div>
 
           <div class="filter-row">
-            <div class="fl-group">
-              <span class="fl-label">Work type</span>
-              <button class="chip" data-work="Remote" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5h18v11H3z"/><path d="M8 20h8"/></svg>Remote</button>
-              <button class="chip" data-work="Hybrid" type="button">Hybrid</button>
-              <button class="chip" data-work="On-site" type="button">On-site</button>
+            <!-- Work type: compact multi-select picker (same .ms pattern as
+                 location/category/etc). Checkboxes drive the SAME state.works
+                 array as the old Remote/Hybrid/On-site chips did, so selected
+                 work types still surface as facet chips in the search bar. -->
+            <div class="ms" id="workMs">
+              <button class="ms-trigger" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="workPanel">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M3 5h18v11H3z"/><path d="M8 20h8"/></svg>
+                <span id="workLabel">Work type</span>
+                <svg class="cv" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+              </button>
+              <div class="ms-menu" id="workPanel" role="group" aria-label="Filter by work type" hidden>
+                <label><input type="checkbox" class="work-cb" value="Remote">Remote</label>
+                <label><input type="checkbox" class="work-cb" value="Hybrid">Hybrid</label>
+                <label><input type="checkbox" class="work-cb" value="On-site">On-site</label>
+              </div>
             </div>
 
             <div class="ms" id="locMs">
@@ -1631,10 +1641,6 @@ document.getElementById("sort").addEventListener("change", function(e){ state.so
 document.getElementById("salUnknown").addEventListener("change", function(e){ state.showUnknown=e.target.checked; render(); });
 document.getElementById("newOnly").addEventListener("change", function(e){ state.newOnly=e.target.checked; render(); });
 
-document.querySelectorAll(".chip[data-work]").forEach(function(chip){
-  chip.addEventListener("click", function(){ toggleIn(state.works, chip.getAttribute("data-work")); applyControls(); render(); });
-});
-
 function wireCb(sel, arr, labelId, oneLabel, allLabel){
   document.querySelectorAll(sel).forEach(function(cb){
     cb.addEventListener("change", function(){
@@ -1649,6 +1655,7 @@ function updateMsLabel(labelId, arr, oneLabel, allLabel){
   if(labelId==="locLabel") el.textContent = arr.length===0?allLabel:(arr.length===1?(LOC_LABEL[arr[0]]||arr[0]):arr.length+" locations");
   else el.textContent = arr.length===0?allLabel:(arr.length===1?arr[0]:arr.length+" selected");
 }
+wireCb(".work-cb", state.works, "workLabel", "", "Work type");
 wireCb(".loc-cb", state.locs, "locLabel", "", "All locations");
 wireCb(".cat-cb", state.cats, "catLabel", "", "Category");
 wireCb(".func-cb", state.funcs, "funcLabel", "", "Function");
@@ -1668,11 +1675,12 @@ function applyControls(){
   salLow.value=state.salLow; salHigh.value=state.salHigh; paintSlider();
   document.getElementById("salUnknown").checked=state.showUnknown;
   document.getElementById("newOnly").checked=state.newOnly;
-  document.querySelectorAll(".chip[data-work]").forEach(function(c){ c.classList.toggle("on", state.works.indexOf(c.getAttribute("data-work"))>=0); });
+  document.querySelectorAll(".work-cb").forEach(function(cb){ cb.checked=state.works.indexOf(cb.value)>=0; });
   document.querySelectorAll(".loc-cb").forEach(function(cb){ cb.checked=state.locs.indexOf(cb.value)>=0; });
   document.querySelectorAll(".cat-cb").forEach(function(cb){ cb.checked=state.cats.indexOf(cb.value)>=0; });
   document.querySelectorAll(".func-cb").forEach(function(cb){ cb.checked=state.funcs.indexOf(cb.value)>=0; });
   document.querySelectorAll(".lvl-cb").forEach(function(cb){ cb.checked=state.levels.indexOf(cb.value)>=0; });
+  updateMsLabel("workLabel", state.works, "", "Work type");
   updateMsLabel("locLabel", state.locs, "", "All locations");
   updateMsLabel("catLabel", state.cats, "", "Category");
   updateMsLabel("funcLabel", state.funcs, "", "Function");
@@ -1684,7 +1692,7 @@ function applyControls(){
 }
 
 /* activate the accessible dropdown controller on every filter popover */
-["locMs","salMs","catMs","funcMs","lvlMs"].forEach(function(id){ Pop.init(document.getElementById(id)); });
+["workMs","locMs","salMs","catMs","funcMs","lvlMs"].forEach(function(id){ Pop.init(document.getElementById(id)); });
 
 /* ============ chip search bar (custom search UI over parseQuery) ============
    state.q REMAINS the one canonical search STRING — chips are purely a render
