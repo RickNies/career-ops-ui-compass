@@ -367,26 +367,31 @@
   }
 
   .rv-grid{display:grid;grid-template-columns:1fr;grid-template-areas:"left" "right";gap:24px}
-  /* ---- fit-to-viewport stage: .rv-left NEVER scrolls — the fit ring, meta,
-     both match sections and the vote/Apply actions must all be visible with
-     no internal scrollbar. --rv-avail is computed+kept in sync by
-     syncStageHeight() in the review script (measures #rvCard's top + the
-     live top-chrome height on every render/resize/filter-toggle, since
-     expanding the filter bar changes it too) and used as a hard max-height
-     backstop with overflow:hidden (clip, never scroll) — but the real fit
-     comes from the content itself: cardMarkup() caps "what lines up well"/
-     "worth a closer look" to a few lines each, and the CSS below keeps
-     spacing tight, so in practice the content sits comfortably under
-     --rv-avail and nothing is ever clipped. The JD panel (right column)
-     keeps the ONLY scroll — it shares the same --rv-avail bound at ≥880px
-     so both columns align to one row height. */
-  .rv-left{grid-area:left;min-width:0;max-height:var(--rv-avail, calc(100vh - 260px));overflow:hidden;padding-right:2px}
+  /* ---- fit-to-viewport stage: .rv-left is a flex COLUMN under the
+     --rv-avail bound (computed+kept in sync by syncStageHeight() in the
+     review script — measures #rvCard's top + the live top-chrome height on
+     every render/resize/filter-toggle). The summary content (fit ring, meta,
+     both match sections) lives in .rv-left-scroll, which flexes and — only
+     if a short viewport truly can't fit it — scrolls; the vote/Apply
+     actions and the reason prompt sit BELOW it as flex:none siblings, so
+     they are PINNED and can never be clipped or pushed out of reach.
+     cardMarkup() still caps both match sections to a few items and each
+     item clamps to 2 lines (.rv-clamp), so in practice nothing scrolls.
+     The JD panel (right column) keeps its own scroll — it shares the same
+     --rv-avail bound at ≥880px so both columns align to one row height. */
+  .rv-left{grid-area:left;min-width:0;max-height:var(--rv-avail, calc(100vh - 260px));overflow:hidden;padding-right:2px;display:flex;flex-direction:column;min-height:0}
+  .rv-left-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden}
+  .rv-actions{flex:none}
+  .rv-reasons{flex:none}
+  /* each fit line clamps to 2 wrapped lines (the clamp lives on an inner
+     span so the ul's outdented ::before bullets aren't clipped) */
+  .rv-clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .rv-right{grid-area:right;min-width:0}
   .rv-card-head{display:flex;gap:14px;align-items:flex-start}
   .rv-card-head .fit{width:70px}
   .rv-card-head .fit .ring{width:60px;height:60px;font-size:21px}
   .rv-headtext{flex:1;min-width:0}
-  .rv-title{font-size:20px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .rv-title{font-size:clamp(16px,1vw + 11px,20px);display:flex;align-items:center;gap:9px;flex-wrap:wrap}
   .rv-company{color:var(--ink-soft);font-weight:600;font-size:14.5px;margin-top:2px}
   .rv-meta{color:var(--muted);font-size:13px;margin-top:5px;display:flex;gap:12px;flex-wrap:wrap}
   .rv-badge{font-size:11px;font-weight:700;border-radius:999px;padding:3px 10px}
@@ -395,7 +400,7 @@
   .rv-details{display:flex;flex-wrap:wrap;gap:5px 16px;margin-top:5px;font-size:12px;color:var(--muted)}
   .rv-details b{color:var(--ink-soft);font-weight:600;margin-right:4px}
   .rv-subhead{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;color:var(--muted);margin:10px 0 4px}
-  .rv-highlights{margin:0;padding:0 0 0 18px;color:var(--ink-soft);font-size:13.5px;line-height:1.45}
+  .rv-highlights{margin:0;padding:0 0 0 18px;color:var(--ink-soft);font-size:clamp(12px,.35vw + 11px,13.5px);line-height:1.45}
   .rv-highlights li{margin-bottom:3px}
   .rv-highlights li:last-child{margin-bottom:0}
   /* fit sections restyle — sage for "what lines up well", terra/amber for
@@ -426,7 +431,7 @@
      so both columns align to the same row height. */
   .rv-jd-panel{border:1px solid var(--line-soft);border-radius:14px;background:var(--surface-2);padding:16px 18px;display:flex;flex-direction:column;min-height:160px;max-height:clamp(220px,42vh,440px)}
   .rv-jd-panel-head{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;color:var(--muted);margin-bottom:10px;flex:none}
-  .rv-jd-body{font-size:13.5px;line-height:1.6;color:var(--ink-soft);flex:1 1 auto;min-height:0;overflow:auto}
+  .rv-jd-body{font-size:clamp(12px,.35vw + 11px,13.5px);line-height:1.6;color:var(--ink-soft);flex:1 1 auto;min-height:0;overflow:auto}
   .rv-jd-body h3{font-size:14px;margin:10px 0 4px}
   .rv-jd-body ul,.rv-jd-body ol{margin:4px 0 8px;padding-left:20px}
   .rv-jd-loading,.rv-jd-thin{color:var(--muted)}
@@ -505,8 +510,11 @@
     .rv-filters-body{width:88vw}
   }
   @media(min-width:880px){
-    .rv-card{max-width:1100px;padding:24px 36px}
-    .rv-grid{grid-template-columns:minmax(320px,420px) 1fr;grid-template-areas:"left right";gap:36px;align-items:start}
+    /* fluid card width/padding/column split — grows smoothly from the
+       880px switch point instead of jumping straight to the full 1100px
+       two-column spread */
+    .rv-card{max-width:min(1100px,96vw);padding:clamp(20px,1vw + 12px,24px) clamp(22px,2.4vw + 2px,36px)}
+    .rv-grid{grid-template-columns:clamp(300px,34vw,420px) 1fr;grid-template-areas:"left right";gap:clamp(22px,2.4vw,36px);align-items:start}
     .rv-carousel{max-width:1440px;gap:20px}
     .rv-peek{width:140px;padding:22px 16px}
     .rv-peek .fit .ring{width:44px;height:44px;font-size:16px}
@@ -516,6 +524,28 @@
     /* side-by-side columns now — share the same fit-to-viewport bound as
        .rv-left so left/right align to one row height. */
     .rv-jd-panel{max-height:var(--rv-avail, calc(100vh - 260px))}
+  }
+
+  /* ---- compact density for short laptop viewports: tighter chrome,
+     smaller ring/buttons, so the pinned actions keep comfortable room ---- */
+  @media(max-height:760px){
+    .rv-top{padding:10px 22px 0}
+    .rv-topbar{margin-top:6px}
+    .rv-exit{width:40px;height:40px}
+    .rv-exit svg{width:17px;height:17px}
+    .rv-body{padding:10px 22px 12px}
+    .rv-card{padding:16px 22px}
+    .rv-card-head{gap:11px}
+    .rv-card-head .fit{width:56px}
+    .rv-card-head .fit .ring{width:46px;height:46px;font-size:16px}
+    .rv-subhead{margin:7px 0 3px}
+    .rv-highlights li{margin-bottom:2px}
+    .rv-actions{margin-top:10px;gap:14px}
+    .vbtn.rv-big{width:52px;height:52px}
+    .vbtn.rv-big svg{width:21px;height:21px}
+    .rv-apply{padding:9px 15px}
+    .rv-reasons{margin-top:8px}
+    .rv-jd-panel{padding:12px 14px}
   }
 
   @media(max-width:920px){
@@ -1550,10 +1580,11 @@ if(location.hash==="#add") openModal();
   var WORK_TYPES = ['Remote', 'Hybrid', 'On-site'];
   var filtersWired = false;
 
-  // .rv-left has no internal scroll (see CSS) — cap "what lines up well" /
-  // "worth a closer look" to a handful of lines each so, combined with the
-  // tighter spacing in the CSS, the fit ring + both sections + the vote/
-  // Apply actions always fit above the fold with no scrollbar.
+  // Cap "what lines up well" / "worth a closer look" to a handful of items
+  // each (each item also clamps to 2 wrapped lines — .rv-clamp in the CSS)
+  // so the fit ring + both sections normally fit with no scrollbar; on very
+  // short viewports .rv-left-scroll scrolls while the vote/Apply actions
+  // stay pinned below it, always visible (see .rv-left in the CSS).
   var RV_LINES_UP_MAX = 3;
   var RV_CLOSER_LOOK_MAX = 2;
 
@@ -1829,20 +1860,23 @@ if(location.hash==="#add") openModal();
     var badOn  = rv && rv.verdict==='bad'  ? ' on rv-voted' : '';
     var UNDO_ICON = '<span class="rv-undo-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></span>';
     var reqm = normalizeReqMatches(j);
-    // .rv-left never scrolls (see CSS), so both match sections are capped to
-    // only as many lines as comfortably fit alongside the fit ring/meta and
-    // the vote/Apply actions below — RV_LINES_UP_MAX/RV_CLOSER_LOOK_MAX,
-    // defined above.
+    // Both match sections are capped to a few items (RV_LINES_UP_MAX/
+    // RV_CLOSER_LOOK_MAX, defined above) and each item clamps to 2 wrapped
+    // lines (.rv-clamp). They live in .rv-left-scroll — a flexing content
+    // region that can scroll on very short viewports — while the vote/Apply
+    // actions + reason prompt below stay OUTSIDE it, pinned at the bottom
+    // of .rv-left, so there is always a visible way to advance.
     var linesUp = (reqm ? reqm.met : highlightsFor(j)).slice(0, RV_LINES_UP_MAX);
     var closerLook = (reqm ? reqm.gap : gapsFor(j)).slice(0, RV_CLOSER_LOOK_MAX);
     var closerLookHtml = closerLook.length ? (
       '<div class="rv-subhead rv-subhead-bad">Worth a closer look</div>'+
-      '<ul class="rv-highlights rv-closer-look">'+closerLook.map(function(s){ return '<li>'+emphasize(s)+'</li>'; }).join('')+'</ul>'
+      '<ul class="rv-highlights rv-closer-look">'+closerLook.map(function(s){ return '<li><span class="rv-clamp">'+emphasize(s)+'</span></li>'; }).join('')+'</ul>'
     ) : '';
     return ''+
     '<div class="rv-card" id="rvCard">'+
       '<div class="rv-grid">'+
         '<div class="rv-left">'+
+          '<div class="rv-left-scroll">'+
           '<div class="rv-card-head">'+
             '<div class="fit '+fi.cls+'"><div class="ring">'+fi.fit+'</div><div class="lbl">'+fi.lbl+'</div></div>'+
             '<div class="rv-headtext">'+
@@ -1853,8 +1887,9 @@ if(location.hash==="#add") openModal();
             '</div>'+
           '</div>'+
           '<div class="rv-subhead rv-subhead-good">What lines up well</div>'+
-          '<ul class="rv-highlights rv-lines-up">'+linesUp.map(function(s){ return '<li>'+emphasize(s)+'</li>'; }).join('')+'</ul>'+
+          '<ul class="rv-highlights rv-lines-up">'+linesUp.map(function(s){ return '<li><span class="rv-clamp">'+emphasize(s)+'</span></li>'; }).join('')+'</ul>'+
           closerLookHtml+
+          '</div>'+
           '<div class="rv-actions">'+
             '<button class="vbtn bad rv-big'+badOn+'" id="rvPass" type="button" aria-label="Pass on this role"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg>'+UNDO_ICON+'</button>'+
             '<button class="btn btn--outline rv-apply" id="rvApply" type="button">Apply<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>'+
