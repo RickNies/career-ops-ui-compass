@@ -848,10 +848,14 @@
                 <option value="posted">Sort: Newest (posted)</option>
                 <option value="salary">Sort: Salary</option>
               </select>
-              <!-- compact ↑↓ direction toggle: default = today's order for the
-                   chosen sort; pressed (.up) = reversed. Persisted as
-                   state.sortDir. See the sort-direction block in the script. -->
-              <button class="dirbtn" id="sortDir" type="button" aria-label="Flip sort direction" aria-pressed="false" title="Flip sort direction">
+              <!-- compact ↑↓ direction toggle: default (desc) = the intuitive
+                   order for the chosen sort (newest / best fit / highest pay
+                   on top); pressed (.up) = reversed. Persisted as
+                   state.sortDir. data-tip/aria-label are kept in plain words
+                   for the CURRENT sort+direction by syncSortDir() (sort-
+                   direction block in the script); rendered by the shared
+                   CompassTip component in js/wire.js off data-tip. -->
+              <button class="dirbtn" id="sortDir" type="button" aria-label="Best fit first" aria-pressed="false" data-tip="Best fit first">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
               </button>
             </div>
@@ -2230,13 +2234,36 @@ function syncSearchFromState(){
    wrapped render after any out-of-band paint while reversed. */
 if(state.sortDir!=="asc") state.sortDir="desc";
 var dirBtn=document.getElementById("sortDir");
+/* plain-words description of the CURRENT sort+direction — desc is always the
+   intuitive "on top" order (newest / best fit / highest pay first); asc is the
+   reverse. Shown as the button's tooltip (data-tip → CompassTip) + aria-label. */
+function sortDirWords(){
+  var asc=state.sortDir==="asc", s=state.sort;
+  if(s==="salary") return asc?"Lowest pay first":"Highest pay first";
+  if(s==="best")   return asc?"Lowest fit first":"Best fit first";
+  return asc?"Oldest first":"Newest first";   /* found / posted / legacy "new" */
+}
 function syncSortDir(){
   if(!dirBtn) return;
   var up=state.sortDir==="asc";
   dirBtn.classList.toggle("up", up);
   dirBtn.setAttribute("aria-pressed", up?"true":"false");
-  dirBtn.title=up?"Reversed order — click to restore":"Flip sort direction";
+  var words=sortDirWords();
+  dirBtn.setAttribute("aria-label", words);
+  dirBtn.setAttribute("data-tip", words);
+  dirBtn.removeAttribute("title");   /* CompassTip owns the tooltip — no native double-up */
+  /* if the CompassTip bubble is open FOR THIS BUTTON (click while hovering),
+     refresh its text in place so the visible tip flips with the order */
+  var bub=document.getElementById("compassTipBubble");
+  if(bub && !bub.hidden && dirBtn.getAttribute("aria-describedby")==="compassTipBubble") bub.textContent=words;
 }
+syncSortDir();
+/* keep the wording fresh when the SORT changes (same #sort the feed listens
+   to — separate listener, the original handler stays untouched), and re-check
+   just before the tooltip can show (covers state.sort changed out-of-band,
+   e.g. review-mode's rvSort or wire.js's posted→best fallback) */
+document.getElementById("sort").addEventListener("change", syncSortDir);
+if(dirBtn){ dirBtn.addEventListener("mouseenter", syncSortDir); dirBtn.addEventListener("focus", syncSortDir); }
 var __sortWrap={ base:null, stamp:0 };
 function __invertingRender(){
   var impl=__sortWrap.base || null;
