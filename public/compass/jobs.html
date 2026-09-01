@@ -1366,26 +1366,15 @@ function renderRail(){
 
 /* ============ active filters bar ============ */
 function renderActiveFilters(){
+  /* ONE unified bar: every active filter (typed chips + clicked facets +
+     salary range + hidden-unknown) now renders as a chip IN the search bar —
+     see renderSearchChips/facetChips above. The old Active row stays in the
+     DOM only as a hidden mount so nothing referencing #activeFilters breaks;
+     removal/clear-all still run through the same removeFilter()/
+     clearAllFilters() paths every other control uses. */
   var bar=document.getElementById("activeFilters");
-  renderSearchChips();   // the search bar shows q chips + loc/cat/func/level facet chips — keep it live on every render
-  var pills=[];
-  /* no q pill (the chip bar IS the query display) and no loc/cat/func/level
-     pills (those facets now render as dark chips IN the search bar) —
-     rendering the same filter twice was the duplication to avoid */
-  state.works.forEach(function(v){ pills.push({k:"work", v:v, label:v}); });
-  if(state.salLow>80 || state.salHigh<300) pills.push({k:"sal", v:"", label:"$"+state.salLow+"K–$"+state.salHigh+"K"+(state.salHigh>=300?"+":"")});
-  if(!state.showUnknown) pills.push({k:"unknown", v:"", label:"Hiding no-salary roles"});
-
-  if(!pills.length){ bar.style.display="none"; bar.innerHTML=""; return; }
-  bar.style.display="flex";
-  bar.innerHTML='<span class="af-label">Active</span>'+pills.map(function(p){
-    return '<span class="afilter">'+esc(p.label)+'<button type="button" data-k="'+p.k+'" data-v="'+esc(p.v)+'" aria-label="Remove filter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6 6 18M6 6l12 12"/></svg></button></span>';
-  }).join("")+'<button class="clear-all" type="button" id="clearAll">Clear all</button>';
-
-  bar.querySelectorAll(".afilter button").forEach(function(b){
-    b.onclick=function(){ removeFilter(b.getAttribute("data-k"), b.getAttribute("data-v")); };
-  });
-  document.getElementById("clearAll").onclick=clearAllFilters;
+  bar.style.display="none"; bar.innerHTML="";
+  renderSearchChips();
 }
 /* NOTE: the facet arrays are mutated IN PLACE (splice/length=0), never
    replaced — wireCb()'s checkbox closures (and wire.js's re-wiring) capture
@@ -1671,20 +1660,25 @@ function facetChipHTML(k, v, prefix, label){
     '<span class="fld">'+esc(prefix)+'</span><span class="val">'+esc(label)+'</span></span>'+
     '<button type="button" class="x" data-k="'+k+'" data-v="'+esc(v)+'" aria-label="Remove filter '+esc(lbl)+'">×</button></span>';
 }
-function facetChipsHTML(){
+function facetChips(){
   var out=[];
+  state.works.forEach(function(v){ out.push(facetChipHTML("work", v, "work:", v)); });
   state.locs.forEach(function(v){ out.push(facetChipHTML("loc", v, "location:", LOC_LABEL[v]||v)); });
   state.cats.forEach(function(v){ out.push(facetChipHTML("cat", v, "category:", v)); });
   state.funcs.forEach(function(v){ out.push(facetChipHTML("func", v, "function:", v)); });
   state.levels.forEach(function(v){ out.push(facetChipHTML("level", v, "level:", v)); });
-  return out.join("");
+  if(state.salLow>80 || state.salHigh<300) out.push(facetChipHTML("sal", "", "salary:", "$"+state.salLow+"K–$"+state.salHigh+"K"+(state.salHigh>=300?"+":"")));
+  if(!state.showUnknown) out.push(facetChipHTML("unknown", "", "salary:", "hiding no-salary roles"));
+  return out;
 }
 /* signature guard: renderSearchChips runs on every render (via
    renderActiveFilters) — skip the DOM write when nothing changed so typing in
    #q never churns sibling nodes */
 var __chipSig=null;
 function renderSearchChips(){
-  var html=facetChipsHTML()+qCommitted.map(textChipHTML).join("");
+  var fc=facetChips();
+  var html=fc.join("")+qCommitted.map(textChipHTML).join("");
+  if(fc.length+qCommitted.length>=2) html+='<button type="button" class="qclear" data-clear-all aria-label="Clear all search terms and filters">Clear all</button>';
   if(html===__chipSig) return;
   __chipSig=html;
   qChipsWrap.innerHTML=html;
@@ -1697,6 +1691,8 @@ function renderSearchChips(){
   qChipsWrap.querySelectorAll(".x[data-k]").forEach(function(b){
     b.onclick=function(e){ e.stopPropagation(); removeFilter(b.getAttribute("data-k"), b.getAttribute("data-v")); };
   });
+  var ca=qChipsWrap.querySelector("[data-clear-all]");
+  if(ca) ca.onclick=function(e){ e.stopPropagation(); clearAllFilters(); };
 }
 function removeChip(i){
   qCommitted.splice(i,1);
