@@ -538,6 +538,7 @@
   .rv-jd-head{flex:none;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 22px 9px;font-size:11.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line-soft)}
   .rv-jd-head a{color:var(--gold-deep);font-size:12px;text-transform:none;letter-spacing:0;font-weight:600;text-decoration:none}
   .rv-jd-head a:hover{text-decoration:underline}
+  .rv-jd-links{display:inline-flex;align-items:center;gap:14px;min-width:0;white-space:nowrap}
   .rv-jd-body{flex:1 1 auto;min-height:0;padding:16px 24px 22px;font-size:15px;line-height:1.72;color:var(--ink-soft)}
   .rv-jd-body > *{max-width:72ch}
   .rv-jd-body h3,.rv-jd-body h4,.rv-jd-body h5{font-family:var(--serif);font-size:16.5px;font-weight:600;color:var(--ink);margin:22px 0 8px;letter-spacing:-.01em}
@@ -2792,7 +2793,14 @@ if(location.hash==="#add") openModal();
           '</div>'+
         '</div>'+
         '<div class="rv-right">'+
-          '<div class="rv-jd-head">Full posting'+(j.url ? '<a href="'+rvEsc(j.url)+'" target="_blank" rel="noopener">Open original ↗</a>' : '')+'</div>'+
+          '<div class="rv-jd-head">Full posting<span class="rv-jd-links">'+
+            // "Open in tailoring mode" reuses the exact deep-link the job-detail
+            // page uses (window.jobHref → documents.html?job=<slug>#tailor, slug
+            // resolved via /api/tracker in wireDocs) so tailoring opens pre-loaded
+            // with this job. New tab keeps the review queue/session intact.
+            '<a href="'+rvEsc((window.jobHref ? window.jobHref('documents.html', j) : 'documents.html')+'#tailor')+'" target="_blank" rel="noopener" title="Tailor your résumé for this job — opens in a new tab">✎ Open in tailoring mode</a>'+
+            (j.url ? '<a href="'+rvEsc(j.url)+'" target="_blank" rel="noopener">Open original ↗</a>' : '')+
+          '</span></div>'+
           '<div class="rv-jd-body" id="rvJdBody"><p class="rv-jd-loading">Loading the full posting…</p></div>'+
         '</div>'+
       '</div>'+
