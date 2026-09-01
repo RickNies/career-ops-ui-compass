@@ -1034,6 +1034,12 @@ var DEF={q:"", works:[], locs:[], cats:[], funcs:[], levels:[], salLow:80, salHi
 function loadFilters(){
   var s=Object.assign({}, DEF);
   try{ var saved=JSON.parse(localStorage.getItem(FKEY)||"null"); if(saved) s=Object.assign(s, saved); }catch(e){}
+  // q is the canonical search STRING; parsed tokens are always DERIVED from it
+  // (see parseQuery below) and must never be trusted from storage. Coerce any
+  // bad/drifted saved value back to a string so matches() can never crash.
+  if(Array.isArray(s.q)) s.q = s.q.join(" ");
+  s.q = (s.q==null) ? "" : String(s.q);
+  delete s.tokens; delete s.qTokens; // scrub stale derived caches if any ever leaked into storage
   // query params (from job-detail tag links) override + take priority
   var p=new URLSearchParams(location.search);
   if(p.get("cat"))  s.cats  = [p.get("cat")];
@@ -1106,11 +1112,94 @@ function cardHTML(j){
 /* applied/in-pipeline jobs live in My Jobs, not the Jobs feed — independent of the ✓/✗ review state */
 function isApplied(j){ return /appl|interview|phone|screen|offer|hired|reject|respond/i.test(String(j.status||'')); }
 
+/* ============ query parser (single source of truth for search syntax) ============
+   parseQuery(str) → tokens. Syntax (case-insensitive, substring semantics):
+     director                    bare term → matches the broad all-field haystack
+     title:director              field-scoped (title, company, level, location,
+                                 category, source; salary reserved — see below)
+     title:"finance director"    quotes make a phrase (spaces kept as one substring)
+     title:"vp & fin | director" & = AND, | = OR within ONE value (| binds looser)
+     -recruiter  -title:contract leading minus negates a term
+   Terms are ANDed. UNKNOWN field prefixes (a stray colon in a title, a pasted
+   URL) fall back to a plain literal term — search must never error or silently
+   change meaning. Tokens are DERIVED from the canonical string state.q on
+   demand (memoized per distinct string) and are NEVER stored on state — state
+   is persisted whole by saveFilters() and a stored token cache would come back
+   stale. */
+var Q_QUOTE_RE=/["“”]/;
+var Q_FIELDS={ title:"title", t:"title",
+               company:"company", co:"company", c:"company",
+               location:"loc", loc:"loc", l:"loc",
+               level:"level",
+               category:"cat", cat:"cat",
+               func:"func", "function":"func", fn:"func",
+               source:"source", via:"source",
+               salary:"__sal", sal:"__sal" }; // salary: reserved — parsed but a no-op until range promotion ships
+function splitTerms(str){
+  var terms=[], cur="", inQ=false, i, ch;
+  for(i=0;i<str.length;i++){
+    ch=str.charAt(i);
+    if(Q_QUOTE_RE.test(ch)){ inQ=!inQ; cur+=ch; continue; }
+    if(!inQ && /\s/.test(ch)){ if(cur) terms.push(cur); cur=""; continue; }
+    cur+=ch;
+  }
+  if(cur) terms.push(cur);
+  return terms;
+}
+function parseValue(v){
+  // strip quote chars (they only protect whitespace), then | (OR) over & (AND)
+  var s=String(v).replace(/["“”]/g,"");
+  var groups=[];
+  s.split("|").forEach(function(seg){
+    var g=seg.split("&").map(function(w){ return w.trim().toLowerCase(); }).filter(Boolean);
+    if(g.length) groups.push(g);
+  });
+  return groups;
+}
+function parseTerm(raw){
+  var neg=false, body=raw;
+  if(body.length>1 && body.charAt(0)==="-"){ neg=true; body=body.slice(1); }
+  var field=null, val=body, ci=-1, inQ=false, i, ch;
+  for(i=0;i<body.length;i++){ // first colon OUTSIDE quotes
+    ch=body.charAt(i);
+    if(Q_QUOTE_RE.test(ch)) inQ=!inQ;
+    else if(ch===":" && !inQ){ ci=i; break; }
+  }
+  if(ci>0){
+    var pre=body.slice(0,ci).trim().toLowerCase();
+    if(Q_FIELDS.hasOwnProperty(pre)){ field=Q_FIELDS[pre]; val=body.slice(ci+1); }
+    /* unknown prefix ("Sr. Manager: FP&A", "https://…") → keep the WHOLE body
+       as a literal bare term, colon included — never scope, never error */
+  }
+  return { raw:raw, neg:neg, field:field, groups:parseValue(val) };
+}
+function parseQuery(str){
+  return splitTerms(String(str==null?"":str)).map(parseTerm)
+    .filter(function(t){ return t.groups.length; }); // drop empties ("-", 'title:' mid-type, bare quotes)
+}
+/* memoized: matches() runs 2× over the full list per render, per keystroke —
+   parse once per distinct query string, never per job */
+var __qTokCache={ q:null, toks:[] };
+function queryTokens(q){
+  if(__qTokCache.q!==q){ __qTokCache.q=q; __qTokCache.toks=parseQuery(q); }
+  return __qTokCache.toks;
+}
+function tokenMatches(t, j){
+  if(t.field==="__sal") return true; // salary: text token is harmless until the UI pass promotes it to the range control
+  var hay = t.field
+    ? String(j[t.field]==null ? "" : j[t.field]).toLowerCase()
+    : (j.title+" "+j.company+" "+j.cat+" "+j.func+" "+j.level+" "+j.loc).toLowerCase(); // same broad haystack as always
+  var hit = t.groups.some(function(g){
+    return g.every(function(w){ return hay.indexOf(w)!==-1; });
+  });
+  return t.neg ? !hit : hit;
+}
+
 function matches(j){
   if(isApplied(j)) return false;
   if(state.q){
-    var hay=(j.title+" "+j.company+" "+j.cat+" "+j.func+" "+j.level+" "+j.loc).toLowerCase();
-    if(hay.indexOf(state.q.toLowerCase())===-1) return false;
+    var toks=queryTokens(state.q);
+    for(var qi=0;qi<toks.length;qi++){ if(!tokenMatches(toks[qi], j)) return false; }
   }
   if(state.works.length && state.works.indexOf(j.work)===-1) return false;
   if(state.locs.length && state.locs.indexOf(j.locKey)===-1) return false;
