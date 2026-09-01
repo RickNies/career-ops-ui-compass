@@ -174,6 +174,14 @@
   .qsg .sg-row.broad .fld{color:var(--sage)}
   .qsg .sg-note{padding:6px 14px 10px;font-size:12px;color:var(--muted)}
   .qsg .sg-divide{border-top:1px dashed var(--line);margin:4px 0}
+
+  /* ---- sort direction ↑↓ toggle (next to the sort select) ---- */
+  .dirbtn{display:inline-flex;align-items:center;justify-content:center;width:33px;height:33px;flex:none;
+    color:var(--gold-deep);background:var(--gold-soft);border:1px solid #E7D3A8;border-radius:999px;cursor:pointer;padding:0}
+  .dirbtn:hover{filter:brightness(.96)}
+  .dirbtn svg{width:15px;height:15px;transition:transform .2s ease}
+  .dirbtn.up svg{transform:rotate(180deg)}
+  @media(prefers-reduced-motion:reduce){ .dirbtn svg{transition:none} }
   .filter-row{display:flex;align-items:center;gap:10px;margin-top:13px;flex-wrap:wrap}
   .filter-row.tags-row{margin-top:11px;padding-top:11px;border-top:1px solid var(--line-soft)}
   .fl-group{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -764,6 +772,12 @@
                 <option value="posted">Sort: Newest (posted)</option>
                 <option value="salary">Sort: Salary</option>
               </select>
+              <!-- compact ↑↓ direction toggle: default = today's order for the
+                   chosen sort; pressed (.up) = reversed. Persisted as
+                   state.sortDir. See the sort-direction block in the script. -->
+              <button class="dirbtn" id="sortDir" type="button" aria-label="Flip sort direction" aria-pressed="false" title="Flip sort direction">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
+              </button>
             </div>
           </div>
 
@@ -1593,6 +1607,7 @@ var segTabs = initTabs(document.querySelector(".seg"), {
 function applyControls(){
   syncSearchFromState();   /* chips + inline #q re-derived from canonical state.q (chip bar block below) */
   document.getElementById("sort").value=(state.sort==="new"?"found":state.sort);
+  syncSortDir();           /* ↑↓ direction toggle reflects state.sortDir (sort-direction block below) */
   salLow.value=state.salLow; salHigh.value=state.salHigh; paintSlider();
   document.getElementById("salUnknown").checked=state.showUnknown;
   document.getElementById("newOnly").checked=state.newOnly;
@@ -2020,6 +2035,81 @@ function syncSearchFromState(){
   }
   renderSearchChips();
 }
+
+/* ============ sort direction ↑↓ toggle ============
+   state.sortDir: "desc" (default — today's order for every sort) | "asc"
+   (reversed). Persisted with the rest of state by saveFilters().
+   HOW IT REVERSES WITHOUT TOUCHING render()/wire.js: window.render is
+   wrapped; when reversed, the wrapper installs a ONE-SHOT
+   Array.prototype.sort patch that negates the first comparator used during
+   that render pass — which is exactly the feed ordering in both the base
+   render() and wire.js's compassRender (each sorts the matched rows first,
+   before any rail sorting) — then restores immediately. wire.js's few
+   internal direct compassRender() calls (fit slider, saved-only, low-fit,
+   Load more) bypass the wrapper, so a #list MutationObserver re-runs the
+   wrapped render after any out-of-band paint while reversed. */
+if(state.sortDir!=="asc") state.sortDir="desc";
+var dirBtn=document.getElementById("sortDir");
+function syncSortDir(){
+  if(!dirBtn) return;
+  var up=state.sortDir==="asc";
+  dirBtn.classList.toggle("up", up);
+  dirBtn.setAttribute("aria-pressed", up?"true":"false");
+  dirBtn.title=up?"Reversed order — click to restore":"Flip sort direction";
+}
+var __sortWrap={ base:null, stamp:0 };
+function __invertingRender(){
+  var impl=__sortWrap.base || null;
+  __sortWrap.stamp=Date.now();
+  if(!impl){ return; }
+  if(state.sortDir!=="asc"){ impl(); return; }
+  var origSort=Array.prototype.sort, used=false;
+  Array.prototype.sort=function(cmp){
+    if(!used && typeof cmp==="function"){
+      used=true; Array.prototype.sort=origSort;
+      return origSort.call(this, function(a,b){ return -cmp(a,b); });
+    }
+    return origSort.call(this, cmp);
+  };
+  try{ impl(); } finally { Array.prototype.sort=origSort; __sortWrap.stamp=Date.now(); }
+}
+function __installSortWrap(){
+  if(window.render!==__invertingRender){
+    var hadBase=!!__sortWrap.base, changed=__sortWrap.base!==window.render;
+    __sortWrap.base=window.render;
+    window.render=__invertingRender;
+    // wire.js swapped its live compassRender in (and already painted,
+    // unwrapped) — repaint reversed right away rather than waiting on the
+    // observer, whose own-paint window can swallow a fast cold-load paint
+    if(hadBase && changed && state.sortDir==="asc") __invertingRender();
+  }
+}
+__installSortWrap();
+/* wire.js replaces window.render with compassRender once the tracker data
+   lands (async) — re-capture it under the wrapper when that happens */
+var __swTries=0;
+var __swIv=setInterval(function(){
+  __installSortWrap();
+  if(++__swTries>=240) clearInterval(__swIv);   // covers a slow first load (~60s), then stops
+},250);
+if(dirBtn) dirBtn.addEventListener("click", function(){
+  state.sortDir = state.sortDir==="asc" ? "desc" : "asc";
+  syncSortDir();
+  __installSortWrap();
+  window.render();   // persists via the render path's own saveFilters()
+});
+(function(){
+  var list=document.getElementById("list");
+  if(!list || !window.MutationObserver) return;
+  var scheduled=false;
+  new MutationObserver(function(){
+    if(state.sortDir!=="asc") return;
+    if(Date.now()-__sortWrap.stamp<80) return;   // our own wrapped paint — already inverted
+    if(scheduled) return;
+    scheduled=true;
+    setTimeout(function(){ scheduled=false; __installSortWrap(); __invertingRender(); }, 0);
+  }).observe(list, {childList:true});
+})();
 
 /* ============ reviewed rail collapse ============ */
 /* Per-group (Liked/Passed) collapse — same persistence pattern as the
