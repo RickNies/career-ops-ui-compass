@@ -487,6 +487,11 @@
   .rv-end-check{width:64px;height:64px;border-radius:999px;background:var(--sage-soft);color:var(--sage);font-size:28px;font-weight:700;display:grid;place-items:center;margin:0 auto 16px}
   .rv-end h2{font-size:22px;margin-bottom:6px}
   .rv-end p{color:var(--muted);font-size:14px;margin-bottom:20px}
+  /* session tally + actions row on the "all caught up" screen */
+  .rv-end-tally{color:var(--ink-soft);font-size:14.5px;margin:-6px 0 18px}
+  .rv-end-tally b:first-child{color:var(--sage)}
+  .rv-end-tally b:last-of-type{color:var(--terra)}
+  .rv-end-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
   /* "adjust your filters to see more" prompt under the end-of-queue CTA —
      opens the SAME filter panel now nested in the top row (see renderEnd()
      in the review script) rather than sending them back to the feed. */
@@ -1599,6 +1604,7 @@ if(location.hash==="#add") openModal();
   var queue = [];      // filtered/sorted snapshot — recomputed live on any filter change
   var cursor = 0;
   var isOpen = false;
+  var sessionVotes = {}; // job id → 'good'|'bad', THIS session only — feeds the end-screen tally
 
   /* ============================================================================
    * Live filter bar — reads/writes the SAME window.state the feed's own filter
@@ -1965,28 +1971,52 @@ if(location.hash==="#add") openModal();
     fillEl.style.width = total ? ((Math.min(cursor,total)/total*100) + '%') : '0%';
   }
 
-  // Full JD now loads automatically as soon as the card renders (right-hand
-  // panel) instead of behind a "Read full JD" expander — reuses the same
-  // jGet/jdToHtml wire.js exposes for the job-detail preview.
-  function loadJd(j){
-    var jdBody = document.getElementById('rvJdBody');
-    if (!jdBody) return;
-    if (j._jdHtml){ jdBody.innerHTML = j._jdHtml; return; }
-    if (!j.url){ jdBody.innerHTML = '<p class="rv-jd-thin">No posting URL on this row.</p>'; return; }
-    if (typeof window.jGet !== 'function' || typeof window.jdToHtml !== 'function'){
-      jdBody.innerHTML = '<p class="rv-jd-thin">Full JD unavailable in this view.</p>'; return;
-    }
-    jdBody.innerHTML = '<p class="rv-jd-loading">Fetching the live posting…</p>';
-    window.jGet('/api/pipeline/preview?url='+encodeURIComponent(j.url)).then(function(prev){
+  // Full JD loads automatically as soon as the card renders (right-hand
+  // panel) — reuses the same jGet/jdToHtml wire.js exposes for the
+  // job-detail preview, with the result cached on the job row (j._jdHtml).
+  // fetchJdHtml() is shared by loadJd() (current card) and prefetchJd()
+  // (next card, warmed while this one is read — see renderCurrent) so
+  // advancing almost never shows the "Fetching…" flash.
+  function jdLinkHtml(j){
+    return j.url ? '<p style="margin-top:10px"><a class="btn btn--outline btn--sm" href="'+rvEsc(j.url)+'" target="_blank" rel="noopener">Open original posting ↗</a></p>' : '';
+  }
+  function fetchJdHtml(j){
+    if (j._jdFetch) return j._jdFetch; // de-dupes prefetch vs. render
+    j._jdFetch = window.jGet('/api/pipeline/preview?url='+encodeURIComponent(j.url)).then(function(prev){
       var txt = (prev && prev.text) || '';
       var html;
       if (txt && txt.length > 20 && !/^\(/.test(txt)) html = window.jdToHtml(txt.slice(0,8000));
       else html = '<p>'+rvEsc(j.why||'')+'</p><p class="rv-jd-thin">Live preview was thin (JS-rendered board).</p>';
       j._jdHtml = html;
-      jdBody.innerHTML = html + '<p style="margin-top:10px"><a class="btn btn--outline btn--sm" href="'+rvEsc(j.url)+'" target="_blank" rel="noopener">Open original posting ↗</a></p>';
-    }).catch(function(){
-      jdBody.innerHTML = '<p class="rv-jd-thin">Could not fetch the live posting.</p>';
+      return html;
     });
+    j._jdFetch.catch(function(){ j._jdFetch = null; }); // allow a retry after a failure
+    return j._jdFetch;
+  }
+  function loadJd(j){
+    var jdBody = document.getElementById('rvJdBody');
+    if (!jdBody) return;
+    if (j._jdHtml){ jdBody.innerHTML = j._jdHtml + jdLinkHtml(j); return; }
+    if (!j.url){ jdBody.innerHTML = '<p class="rv-jd-thin">No posting URL on this row.</p>'; return; }
+    if (typeof window.jGet !== 'function' || typeof window.jdToHtml !== 'function'){
+      jdBody.innerHTML = '<p class="rv-jd-thin">Full JD unavailable in this view.</p>'; return;
+    }
+    jdBody.innerHTML = '<p class="rv-jd-loading">Fetching the live posting…</p>';
+    fetchJdHtml(j).then(function(html){
+      // only paint if this card is still the one on screen
+      var el = document.getElementById('rvJdBody');
+      if (el && queue[cursor] === j) el.innerHTML = html + jdLinkHtml(j);
+    }).catch(function(){
+      var el = document.getElementById('rvJdBody');
+      if (el && queue[cursor] === j) el.innerHTML = '<p class="rv-jd-thin">Could not fetch the live posting.</p>';
+    });
+  }
+  // Warm the NEXT card's JD into the same cache while the current one is
+  // being read — fire-and-forget, never touches the visible panel.
+  function prefetchJd(j){
+    if (!j || j._jdHtml || !j.url) return;
+    if (typeof window.jGet !== 'function' || typeof window.jdToHtml !== 'function') return;
+    fetchJdHtml(j).catch(function(){ /* best-effort */ });
   }
 
   // Brief "why?" prompt after EITHER Like or Pass — the verdict is already
@@ -2161,6 +2191,7 @@ if(location.hash==="#add") openModal();
 
     function choose(verdict){
       window.saveReview(j.id, verdict);
+      sessionVotes[j.id] = verdict;
       setVoted(verdict);
       showReasons(j, verdict);
       syncStageHeight();
@@ -2168,6 +2199,7 @@ if(location.hash==="#add") openModal();
 
     function undo(){
       if (typeof window.clearReview === 'function') window.clearReview(j.id);
+      delete sessionVotes[j.id];
       setVoted(null);
       if (reasonsWrap){ reasonsWrap.hidden = true; reasonsWrap.innerHTML = ''; }
       syncStageHeight();
@@ -2193,11 +2225,28 @@ if(location.hash==="#add") openModal();
   }
 
   function renderEnd(){
+    // Session tally — this session's Likes/Passes only (sessionVotes, kept
+    // in sync by choose()/undo() in wireCard), not all-time totals.
+    var liked = 0, passed = 0;
+    Object.keys(sessionVotes).forEach(function(k){
+      if (sessionVotes[k] === 'good') liked++;
+      else if (sessionVotes[k] === 'bad') passed++;
+    });
+    var tallyHtml = (liked || passed)
+      ? '<p class="rv-end-tally"><b>'+liked+' liked</b> · <b>'+passed+' passed</b> this session</p>'
+      : '';
+    var seeLikedHtml = liked
+      ? '<button class="btn btn--outline" id="rvSeeLiked" type="button">See your liked jobs</button>'
+      : '';
     bodyEl.innerHTML = '<div class="rv-end">'+
       '<div class="rv-end-check">✓</div>'+
       '<h2>You’re all caught up</h2>'+
       '<p>You’ve reviewed every job in this queue.</p>'+
-      '<button class="btn btn--primary" id="rvBackToFeed" type="button">Back to feed</button>'+
+      tallyHtml+
+      '<div class="rv-end-actions">'+
+        '<button class="btn btn--primary" id="rvBackToFeed" type="button">Back to feed</button>'+
+        seeLikedHtml+
+      '</div>'+
       '<div class="rv-end-adjust">'+
         '<p>That’s everything matching your current filters — adjust your filters to see more jobs.</p>'+
         '<button class="btn btn--outline btn--sm" id="rvEndAdjustFilters" type="button">Adjust filters</button>'+
@@ -2207,6 +2256,14 @@ if(location.hash==="#add") openModal();
     countEl.textContent = queue.length + ' of ' + queue.length;
     var back = document.getElementById('rvBackToFeed');
     if (back) back.onclick = closeReviewMode;
+    // "See your liked jobs" — exit to the feed with its EXISTING Reviewed
+    // tab selected (reuses the feed's own tab click handler; nothing new).
+    var seeLiked = document.getElementById('rvSeeLiked');
+    if (seeLiked) seeLiked.onclick = function(){
+      closeReviewMode();
+      var revTab = document.querySelector('.seg [data-rev="reviewed"]');
+      if (revTab) revTab.click();
+    };
     // Opens the SAME filter panel now nested in the top row (see
     // wireFilterBar()) right here, so filters can be loosened without
     // leaving this end screen.
@@ -2307,6 +2364,7 @@ if(location.hash==="#add") openModal();
     centerEl.innerHTML = cardMarkup(j);
     wireCard(j);
     loadJd(j);
+    prefetchJd(queue[cursor+1] || null); // warm the next JD — no "Fetching…" flash on advance
     renderPeek(prevEl, queue[cursor-1] || null);
     renderPeek(nextEl, queue[cursor+1] || null);
     // back-step control: reachable whenever a previous card exists
@@ -2394,6 +2452,7 @@ if(location.hash==="#add") openModal();
     seedFilterBar();
     queue = sortQueue(window.JOBS.filter(window.matches));
     cursor = 0;
+    sessionVotes = {}; // fresh tally per session
     isOpen = true;
     overlay.classList.add('open');
     overlay.setAttribute('aria-hidden','false');
@@ -2436,9 +2495,42 @@ if(location.hash==="#add") openModal();
   }
   launchBtn.addEventListener('click', launchReview);
   if (exitBtn) exitBtn.addEventListener('click', closeReviewMode);
+  // ---- keyboard loop: ← = Pass, → = Like, 1–9 = pick the Nth reason chip,
+  // U = undo (current card's confirmed verdict, else step back a card),
+  // Backspace = back a card, Esc = exit. Keys are ignored while typing in
+  // the filter panel's inputs, and while the "did you apply?" dialog is
+  // open (its own earlier keydown handler stops Escape's propagation).
   document.addEventListener('keydown', function(e){
     if (!isOpen) return;
-    if (e.key === 'Escape'){ e.preventDefault(); closeReviewMode(); }
+    if (e.key === 'Escape'){ e.preventDefault(); closeReviewMode(); return; }
+    var a = document.activeElement;
+    var tag = a ? a.tagName : '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (a && a.isContentEditable)) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (applyModal && applyModal.classList.contains('open')) return;
+    var reasonsWrap = document.getElementById('rvReasons');
+    var reasonsShowing = !!(reasonsWrap && !reasonsWrap.hidden);
+    if (e.key >= '1' && e.key <= '9'){
+      if (!reasonsShowing) return;
+      var chips = reasonsWrap.querySelectorAll('.rv-reason-chip');
+      var chip = chips[+e.key - 1];
+      if (chip){ e.preventDefault(); chip.click(); }
+      return;
+    }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight'){
+      if (reasonsShowing) return; // verdict already cast — pick a reason (1–9) or Skip
+      var btn = document.getElementById(e.key === 'ArrowLeft' ? 'rvPass' : 'rvLike');
+      if (btn && !btn.disabled && !btn.classList.contains('rv-voted')){ e.preventDefault(); btn.click(); }
+      return;
+    }
+    if (e.key === 'u' || e.key === 'U'){
+      e.preventDefault();
+      var voted = document.querySelector('#rvCard .vbtn.rv-voted');
+      if (voted) voted.click(); // undo this card's confirmed verdict
+      else goBack();            // nothing to undo here — step back a card
+      return;
+    }
+    if (e.key === 'Backspace'){ e.preventDefault(); goBack(); return; }
   });
   window.addEventListener('resize', function(){ if (isOpen) syncStageHeight(); });
 })();
